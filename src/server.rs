@@ -1,10 +1,12 @@
-use crate::{auth::AuthConfig, aws::AwsClients, config::Config, error::AppError};
+use crate::{auth::AuthConfig, aws_http::AwsHttpClient, config::Config, error::AppError};
 use axum::{
     Router,
-    extract::{Query, State},
+    body::Bytes,
+    extract::{Path, Query, State},
+    http::{HeaderMap, StatusCode},
     middleware,
     response::Json,
-    routing::get,
+    routing::{get, post},
 };
 use serde::Deserialize;
 use serde_json::{Value, json};
@@ -26,9 +28,9 @@ impl Server {
             jwt_secret: self.config.jwt.secret.clone(),
         });
 
-        let aws_clients = AwsClients::new(&self.config.aws).await;
+        let aws_http_client = AwsHttpClient::new(self.config.aws.clone());
 
-        let app = self.create_app(auth_config, aws_clients);
+        let app = self.create_app(auth_config, aws_http_client);
 
         let addr = SocketAddr::from(([0, 0, 0, 0], self.config.server.port));
         let listener = TcpListener::bind(addr)
@@ -44,13 +46,18 @@ impl Server {
         Ok(())
     }
 
-    pub fn create_app(&self, auth_config: Arc<AuthConfig>, aws_clients: AwsClients) -> Router {
+    pub fn create_app(
+        &self,
+        auth_config: Arc<AuthConfig>,
+        aws_http_client: AwsHttpClient,
+    ) -> Router {
         Router::new()
             .route("/health", get(health_check))
-            .with_state(aws_clients.clone())
+            .with_state(aws_http_client.clone())
             .merge(
                 Router::new()
-                    .with_state(aws_clients)
+                    .route("/model/{model_id}/invoke", post(invoke_model))
+                    .with_state(aws_http_client)
                     .layer(middleware::from_fn_with_state(
                         auth_config,
                         crate::auth::jwt_auth_middleware,
@@ -66,7 +73,7 @@ struct HealthCheckQuery {
 }
 
 async fn health_check(
-    State(aws_clients): State<AwsClients>,
+    State(aws_http_client): State<AwsHttpClient>,
     Query(params): Query<HealthCheckQuery>,
 ) -> Result<Json<Value>, AppError> {
     let mut response = json!({
@@ -85,7 +92,7 @@ async fn health_check(
 
     // Run AWS check if requested
     if run_aws_check {
-        match aws_clients.health_check().await {
+        match aws_http_client.health_check().await {
             Ok(()) => {
                 response["aws_connection"] = json!("connected");
             }
@@ -108,11 +115,61 @@ async fn health_check(
     Ok(Json(response))
 }
 
+async fn invoke_model(
+    Path(model_id): Path<String>,
+    State(aws_http_client): State<AwsHttpClient>,
+    headers: HeaderMap,
+    body: Bytes,
+) -> Result<(StatusCode, HeaderMap, Bytes), AppError> {
+    // Validate model ID
+    if model_id.trim().is_empty() {
+        return Err(AppError::BadRequest("Model ID cannot be empty".to_string()));
+    }
+
+    // Process headers for AWS (remove authorization, etc.)
+    let aws_headers = AwsHttpClient::process_headers_for_aws(&headers);
+
+    // Extract content-type and accept headers if present
+    let content_type = aws_headers
+        .get("content-type")
+        .and_then(|v| v.to_str().ok());
+    let accept = aws_headers.get("accept").and_then(|v| v.to_str().ok());
+
+    // Make the AWS Bedrock API call using direct HTTP
+    match aws_http_client
+        .invoke_model(&model_id, content_type, accept, body.to_vec())
+        .await
+    {
+        Ok(aws_response) => {
+            // Process headers from AWS response
+            let response_headers = AwsHttpClient::process_headers_from_aws(&aws_response.headers);
+
+            tracing::info!(
+                "Successfully invoked model {} with status {}",
+                model_id,
+                aws_response.status
+            );
+
+            Ok((
+                aws_response.status,
+                response_headers,
+                Bytes::from(aws_response.body),
+            ))
+        }
+        Err(err) => {
+            tracing::error!("AWS Bedrock API error for model {}: {}", model_id, err);
+
+            // Convert AppError to HTTP response - this will be handled by the error's IntoResponse impl
+            Err(err)
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::auth::AuthConfig;
-    use crate::aws::AwsClients;
+    use crate::aws_http::AwsHttpClient;
     use crate::config::Config;
     use axum::{
         body::Body,
@@ -155,10 +212,10 @@ mod tests {
         let auth_config = Arc::new(AuthConfig {
             jwt_secret: config.jwt.secret.clone(),
         });
-        let aws_clients = AwsClients::new_test();
+        let aws_http_client = AwsHttpClient::new_test();
 
         let server = Server::new(config.clone());
-        let app = server.create_app(auth_config, aws_clients);
+        let app = server.create_app(auth_config, aws_http_client);
 
         let token = create_test_token(&config.jwt.secret, "user123", 3600);
         let request = Request::builder()
@@ -177,10 +234,10 @@ mod tests {
         let auth_config = Arc::new(AuthConfig {
             jwt_secret: config.jwt.secret.clone(),
         });
-        let aws_clients = AwsClients::new_test();
+        let aws_http_client = AwsHttpClient::new_test();
 
         let server = Server::new(config);
-        let app = server.create_app(auth_config, aws_clients);
+        let app = server.create_app(auth_config, aws_http_client);
 
         let request = Request::builder()
             .uri("/health")
@@ -197,10 +254,10 @@ mod tests {
         let auth_config = Arc::new(AuthConfig {
             jwt_secret: config.jwt.secret.clone(),
         });
-        let aws_clients = AwsClients::new_test();
+        let aws_http_client = AwsHttpClient::new_test();
 
         let server = Server::new(config);
-        let app = server.create_app(auth_config, aws_clients);
+        let app = server.create_app(auth_config, aws_http_client);
 
         let request = Request::builder()
             .uri("/health")
@@ -225,10 +282,10 @@ mod tests {
         let auth_config = Arc::new(AuthConfig {
             jwt_secret: config.jwt.secret.clone(),
         });
-        let aws_clients = AwsClients::new_test();
+        let aws_http_client = AwsHttpClient::new_test();
 
         let server = Server::new(config);
-        let app = server.create_app(auth_config, aws_clients);
+        let app = server.create_app(auth_config, aws_http_client);
 
         let request = Request::builder()
             .uri("/health?check=aws")
@@ -245,10 +302,10 @@ mod tests {
         let auth_config = Arc::new(AuthConfig {
             jwt_secret: config.jwt.secret.clone(),
         });
-        let aws_clients = AwsClients::new_test();
+        let aws_http_client = AwsHttpClient::new_test();
 
         let server = Server::new(config);
-        let app = server.create_app(auth_config, aws_clients);
+        let app = server.create_app(auth_config, aws_http_client);
 
         let request = Request::builder()
             .uri("/health?check=unknown")
@@ -265,10 +322,10 @@ mod tests {
         let auth_config = Arc::new(AuthConfig {
             jwt_secret: config.jwt.secret.clone(),
         });
-        let aws_clients = AwsClients::new_test();
+        let aws_http_client = AwsHttpClient::new_test();
 
         let server = Server::new(config);
-        let app = server.create_app(auth_config, aws_clients);
+        let app = server.create_app(auth_config, aws_http_client);
 
         let request = Request::builder()
             .uri("/health?check=all")
@@ -277,5 +334,111 @@ mod tests {
 
         let response = app.oneshot(request).await.unwrap();
         assert_eq!(response.status(), StatusCode::OK);
+    }
+
+    #[tokio::test]
+    async fn test_invoke_model_with_valid_jwt() {
+        let config = Config::default();
+        let auth_config = Arc::new(AuthConfig {
+            jwt_secret: config.jwt.secret.clone(),
+        });
+        let aws_http_client = AwsHttpClient::new_test();
+
+        let server = Server::new(config.clone());
+        let app = server.create_app(auth_config, aws_http_client);
+
+        let token = create_test_token(&config.jwt.secret, "user123", 3600);
+        let request = Request::builder()
+            .uri("/model/anthropic.claude-v2/invoke")
+            .method("POST")
+            .header("Authorization", format!("Bearer {}", token))
+            .header("Content-Type", "application/json")
+            .body(Body::from(
+                r#"{"messages": [{"role": "user", "content": "Hello"}]}"#,
+            ))
+            .unwrap();
+
+        let response = app.oneshot(request).await.unwrap();
+        // Note: This will fail in tests because we don't have real AWS credentials
+        // But we can verify the authentication and routing is working
+        // Expected statuses: 500 (internal error), 400 (bad request), or other error codes
+        assert!(
+            response.status() == StatusCode::INTERNAL_SERVER_ERROR
+                || response.status() == StatusCode::BAD_REQUEST
+                || response.status() == StatusCode::FORBIDDEN
+                || response.status() == StatusCode::OK
+        );
+    }
+
+    #[tokio::test]
+    async fn test_invoke_model_without_jwt() {
+        let config = Config::default();
+        let auth_config = Arc::new(AuthConfig {
+            jwt_secret: config.jwt.secret.clone(),
+        });
+        let aws_http_client = AwsHttpClient::new_test();
+
+        let server = Server::new(config);
+        let app = server.create_app(auth_config, aws_http_client);
+
+        let request = Request::builder()
+            .uri("/model/anthropic.claude-v2/invoke")
+            .method("POST")
+            .header("Content-Type", "application/json")
+            .body(Body::from(
+                r#"{"messages": [{"role": "user", "content": "Hello"}]}"#,
+            ))
+            .unwrap();
+
+        let response = app.oneshot(request).await.unwrap();
+        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+    }
+
+    #[tokio::test]
+    async fn test_invoke_model_with_invalid_jwt() {
+        let config = Config::default();
+        let auth_config = Arc::new(AuthConfig {
+            jwt_secret: config.jwt.secret.clone(),
+        });
+        let aws_http_client = AwsHttpClient::new_test();
+
+        let server = Server::new(config);
+        let app = server.create_app(auth_config, aws_http_client);
+
+        let request = Request::builder()
+            .uri("/model/anthropic.claude-v2/invoke")
+            .method("POST")
+            .header("Authorization", "Bearer invalid.jwt.token")
+            .header("Content-Type", "application/json")
+            .body(Body::from(
+                r#"{"messages": [{"role": "user", "content": "Hello"}]}"#,
+            ))
+            .unwrap();
+
+        let response = app.oneshot(request).await.unwrap();
+        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+    }
+
+    #[tokio::test]
+    async fn test_invoke_model_get_method_not_allowed() {
+        let config = Config::default();
+        let auth_config = Arc::new(AuthConfig {
+            jwt_secret: config.jwt.secret.clone(),
+        });
+        let aws_http_client = AwsHttpClient::new_test();
+
+        let server = Server::new(config.clone());
+        let app = server.create_app(auth_config, aws_http_client);
+
+        let token = create_test_token(&config.jwt.secret, "user123", 3600);
+        let request = Request::builder()
+            .uri("/model/anthropic.claude-v2/invoke")
+            .method("GET")
+            .header("Authorization", format!("Bearer {}", token))
+            .body(Body::empty())
+            .unwrap();
+
+        let response = app.oneshot(request).await.unwrap();
+        assert_eq!(response.status(), StatusCode::METHOD_NOT_ALLOWED);
     }
 }

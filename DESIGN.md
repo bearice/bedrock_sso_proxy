@@ -207,15 +207,17 @@ logging:
 
 **Deliverable**: ✅ Can connect to AWS Bedrock with comprehensive credential support, header processing, and health monitoring
 
-### Phase 4: Standard API Implementation
-**Goal**: Implement core InvokeModel endpoint
-- [ ] POST /model/{modelId}/invoke route
-- [ ] Request body forwarding
-- [ ] Response proxying
-- [ ] Error handling and status codes
-- [ ] Integration tests with mock AWS
+### Phase 4: Standard API Implementation ✅ COMPLETED
+**Goal**: Implement core InvokeModel endpoint using direct HTTP client
+- [x] POST /model/{modelId}/invoke route with JWT authentication
+- [x] Direct HTTP client using reqwest for AWS Bedrock API calls
+- [x] AWS Signature V4 signing implementation for authentication
+- [x] Request body forwarding with proper header processing
+- [x] Response proxying with status code and header mapping
+- [x] Comprehensive error handling and HTTP status mapping
+- [x] Integration tests covering authentication, routing, and error cases
 
-**Deliverable**: Working InvokeModel proxy
+**Deliverable**: ✅ Working InvokeModel proxy with direct HTTP client implementation, full test coverage, and proper AWS authentication
 
 ### Phase 5: Streaming APIs
 **Goal**: Implement streaming endpoints

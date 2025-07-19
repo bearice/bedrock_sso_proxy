@@ -1,5 +1,5 @@
 pub mod auth;
-pub mod aws;
+pub mod aws_http;
 pub mod config;
 pub mod error;
 pub mod server;

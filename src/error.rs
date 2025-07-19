@@ -4,97 +4,79 @@ use axum::{
     response::{IntoResponse, Response},
 };
 use serde_json::json;
-use std::fmt;
+use thiserror::Error;
 
-#[derive(Debug)]
+#[derive(Debug, Error)]
 pub enum AppError {
-    Config(config::ConfigError),
-    Jwt(jsonwebtoken::errors::Error),
-    Aws(aws_sdk_bedrockruntime::Error),
+    #[error("Configuration error: {0}")]
+    Config(#[from] config::ConfigError),
+
+    #[error("JWT authentication error: {0}")]
+    Jwt(#[from] jsonwebtoken::errors::Error),
+
+    #[error("Internal server error: {0}")]
     Internal(String),
+
+    #[error("Unauthorized: {0}")]
     Unauthorized(String),
+
+    #[error("Bad request: {0}")]
+    BadRequest(String),
+
+    #[error("AWS service error: {0}")]
+    Aws(String),
+
+    #[error("HTTP request error: {0}")]
+    Http(#[from] reqwest::Error),
+
+    #[error("URL parsing error: {0}")]
+    UrlParse(#[from] url::ParseError),
+
+    #[error("HTTP header error: {0}")]
+    HttpHeader(#[from] axum::http::header::InvalidHeaderValue),
+
+    #[error("JSON serialization error: {0}")]
+    Json(#[from] serde_json::Error),
+
+    #[error("HTTP status code error: {0}")]
+    InvalidStatusCode(#[from] axum::http::status::InvalidStatusCode),
+
+    #[error("Header value error: {0}")]
+    ToStrError(#[from] axum::http::header::ToStrError),
+
+    #[error("AWS signing error: {0}")]
+    AwsSigning(#[from] aws_sigv4::http_request::SigningError),
+
+    #[error("AWS signing params error: {0}")]
+    AwsSigningParams(#[from] aws_sigv4::sign::v4::signing_params::BuildError),
 }
 
-impl fmt::Display for AppError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl AppError {
+    fn status_code(&self) -> StatusCode {
         match self {
-            AppError::Config(err) => write!(f, "Configuration error: {}", err),
-            AppError::Jwt(err) => write!(f, "JWT error: {}", err),
-            AppError::Aws(err) => write!(f, "AWS error: {}", err),
-            AppError::Internal(msg) => write!(f, "Internal error: {}", msg),
-            AppError::Unauthorized(msg) => write!(f, "Unauthorized: {}", msg),
+            AppError::Jwt(_) | AppError::Unauthorized(_) => StatusCode::UNAUTHORIZED,
+            AppError::BadRequest(_)
+            | AppError::UrlParse(_)
+            | AppError::HttpHeader(_)
+            | AppError::Json(_)
+            | AppError::ToStrError(_) => StatusCode::BAD_REQUEST,
+            AppError::Http(_) | AppError::Aws(_) => StatusCode::BAD_GATEWAY,
+            _ => StatusCode::INTERNAL_SERVER_ERROR,
         }
-    }
-}
-
-impl From<config::ConfigError> for AppError {
-    fn from(err: config::ConfigError) -> Self {
-        AppError::Config(err)
-    }
-}
-
-impl From<jsonwebtoken::errors::Error> for AppError {
-    fn from(err: jsonwebtoken::errors::Error) -> Self {
-        AppError::Jwt(err)
-    }
-}
-
-impl From<aws_sdk_bedrockruntime::Error> for AppError {
-    fn from(err: aws_sdk_bedrockruntime::Error) -> Self {
-        AppError::Aws(err)
     }
 }
 
 impl IntoResponse for AppError {
     fn into_response(self) -> Response {
-        let (status, error_message) = match self {
-            AppError::Config(_) => (StatusCode::INTERNAL_SERVER_ERROR, "Configuration error"),
-            AppError::Jwt(_) => (StatusCode::UNAUTHORIZED, "Authentication failed"),
-            AppError::Aws(ref err) => Self::map_aws_error(err),
-            AppError::Internal(_) => (StatusCode::INTERNAL_SERVER_ERROR, "Internal server error"),
-            AppError::Unauthorized(_) => (StatusCode::UNAUTHORIZED, "Authentication failed"),
-        };
+        let status = self.status_code();
+        let message = self.to_string();
 
         let body = Json(json!({
-            "error": error_message,
-            "message": self.to_string()
+            "error": status.canonical_reason().unwrap_or("Unknown error"),
+            "message": message
         }));
 
         (status, body).into_response()
-    }
-}
-
-impl AppError {
-    /// Map AWS SDK errors to appropriate HTTP status codes and messages
-    fn map_aws_error(err: &aws_sdk_bedrockruntime::Error) -> (StatusCode, &'static str) {
-        match err {
-            aws_sdk_bedrockruntime::Error::AccessDeniedException(_) => {
-                (StatusCode::FORBIDDEN, "Access denied")
-            }
-            aws_sdk_bedrockruntime::Error::ModelNotReadyException(_) => {
-                (StatusCode::SERVICE_UNAVAILABLE, "Model not ready")
-            }
-            aws_sdk_bedrockruntime::Error::ModelTimeoutException(_) => {
-                (StatusCode::REQUEST_TIMEOUT, "Model timeout")
-            }
-            aws_sdk_bedrockruntime::Error::ResourceNotFoundException(_) => {
-                (StatusCode::NOT_FOUND, "Resource not found")
-            }
-            aws_sdk_bedrockruntime::Error::ServiceQuotaExceededException(_) => {
-                (StatusCode::TOO_MANY_REQUESTS, "Service quota exceeded")
-            }
-            aws_sdk_bedrockruntime::Error::ThrottlingException(_) => {
-                (StatusCode::TOO_MANY_REQUESTS, "Request throttled")
-            }
-            aws_sdk_bedrockruntime::Error::ValidationException(_) => {
-                (StatusCode::BAD_REQUEST, "Validation error")
-            }
-            aws_sdk_bedrockruntime::Error::InternalServerException(_) => (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "AWS internal server error",
-            ),
-            _ => (StatusCode::BAD_GATEWAY, "AWS service error"),
-        }
     }
 }
 
@@ -110,13 +92,19 @@ mod tests {
         assert!(config_err.to_string().contains("Configuration error"));
 
         let jwt_err = AppError::Jwt(JwtError::from(ErrorKind::InvalidToken));
-        assert!(jwt_err.to_string().contains("JWT error"));
+        assert!(jwt_err.to_string().contains("JWT authentication error"));
 
         let internal_err = AppError::Internal("test message".to_string());
-        assert_eq!(internal_err.to_string(), "Internal error: test message");
+        assert_eq!(
+            internal_err.to_string(),
+            "Internal server error: test message"
+        );
 
         let unauthorized_err = AppError::Unauthorized("access denied".to_string());
         assert_eq!(unauthorized_err.to_string(), "Unauthorized: access denied");
+
+        let bad_request_err = AppError::BadRequest("invalid input".to_string());
+        assert_eq!(bad_request_err.to_string(), "Bad request: invalid input");
     }
 
     #[test]
