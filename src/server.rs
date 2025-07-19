@@ -1,5 +1,12 @@
 use crate::{auth::AuthConfig, aws::AwsClients, config::Config, error::AppError};
-use axum::{Router, extract::State, middleware, response::Json, routing::get};
+use axum::{
+    Router,
+    extract::{Query, State},
+    middleware,
+    response::Json,
+    routing::get,
+};
+use serde::Deserialize;
 use serde_json::{Value, json};
 use std::{net::SocketAddr, sync::Arc};
 use tokio::net::TcpListener;
@@ -19,7 +26,7 @@ impl Server {
             jwt_secret: self.config.jwt.secret.clone(),
         });
 
-        let aws_clients = AwsClients::new(&self.config.aws.region).await;
+        let aws_clients = AwsClients::new(&self.config.aws).await;
 
         let app = self.create_app(auth_config, aws_clients);
 
@@ -52,12 +59,53 @@ impl Server {
     }
 }
 
-async fn health_check(State(_aws_clients): State<AwsClients>) -> Result<Json<Value>, AppError> {
-    Ok(Json(json!({
+#[derive(Debug, Deserialize)]
+struct HealthCheckQuery {
+    #[serde(default)]
+    check: Option<String>,
+}
+
+async fn health_check(
+    State(aws_clients): State<AwsClients>,
+    Query(params): Query<HealthCheckQuery>,
+) -> Result<Json<Value>, AppError> {
+    let mut response = json!({
         "status": "healthy",
         "service": "bedrock-sso-proxy",
         "version": env!("CARGO_PKG_VERSION")
-    })))
+    });
+
+    // Determine which checks to run
+    let run_aws_check = match params.check.as_deref() {
+        Some("aws") => true,
+        Some("all") => true,
+        Some(_) => false, // Unknown check type
+        None => false,    // No specific check requested
+    };
+
+    // Run AWS check if requested
+    if run_aws_check {
+        match aws_clients.health_check().await {
+            Ok(()) => {
+                response["aws_connection"] = json!("connected");
+            }
+            Err(err) => {
+                tracing::warn!("AWS health check failed: {}", err);
+                response["status"] = json!("degraded");
+                response["aws_connection"] = json!("failed");
+                response["error"] = json!(err.to_string());
+            }
+        }
+    } else if params.check.is_some() {
+        // Check was requested but not recognized or bypassed
+        let check_type = params.check.as_ref().unwrap();
+        if check_type != "all" {
+            response["error"] = json!(format!("Unknown check type: {}", check_type));
+        }
+        response["aws_connection"] = json!("skipped");
+    }
+
+    Ok(Json(response))
 }
 
 #[cfg(test)]
@@ -169,5 +217,65 @@ mod tests {
         let config = Config::default();
         let server = Server::new(config.clone());
         assert_eq!(server.config.server.port, config.server.port);
+    }
+
+    #[tokio::test]
+    async fn test_health_check_with_aws_query() {
+        let config = Config::default();
+        let auth_config = Arc::new(AuthConfig {
+            jwt_secret: config.jwt.secret.clone(),
+        });
+        let aws_clients = AwsClients::new_test();
+
+        let server = Server::new(config);
+        let app = server.create_app(auth_config, aws_clients);
+
+        let request = Request::builder()
+            .uri("/health?check=aws")
+            .body(Body::empty())
+            .unwrap();
+
+        let response = app.oneshot(request).await.unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+    }
+
+    #[tokio::test]
+    async fn test_health_check_with_unknown_query() {
+        let config = Config::default();
+        let auth_config = Arc::new(AuthConfig {
+            jwt_secret: config.jwt.secret.clone(),
+        });
+        let aws_clients = AwsClients::new_test();
+
+        let server = Server::new(config);
+        let app = server.create_app(auth_config, aws_clients);
+
+        let request = Request::builder()
+            .uri("/health?check=unknown")
+            .body(Body::empty())
+            .unwrap();
+
+        let response = app.oneshot(request).await.unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+    }
+
+    #[tokio::test]
+    async fn test_health_check_with_all_query() {
+        let config = Config::default();
+        let auth_config = Arc::new(AuthConfig {
+            jwt_secret: config.jwt.secret.clone(),
+        });
+        let aws_clients = AwsClients::new_test();
+
+        let server = Server::new(config);
+        let app = server.create_app(auth_config, aws_clients);
+
+        let request = Request::builder()
+            .uri("/health?check=all")
+            .body(Body::empty())
+            .unwrap();
+
+        let response = app.oneshot(request).await.unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
     }
 }

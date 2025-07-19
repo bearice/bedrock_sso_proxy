@@ -670,6 +670,7 @@ name = "bedrock_sso_proxy"
 version = "0.1.0"
 dependencies = [
  "aws-config",
+ "aws-credential-types",
  "aws-sdk-bedrockruntime",
  "axum",
  "axum-test",

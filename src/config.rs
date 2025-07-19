@@ -24,6 +24,9 @@ pub struct JwtConfig {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AwsConfig {
     pub region: String,
+    pub access_key_id: Option<String>,
+    pub secret_access_key: Option<String>,
+    pub profile: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -43,6 +46,9 @@ impl Default for Config {
             },
             aws: AwsConfig {
                 region: "us-east-1".to_string(),
+                access_key_id: None,
+                secret_access_key: None,
+                profile: None,
             },
             logging: LoggingConfig {
                 level: "info".to_string(),

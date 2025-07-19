@@ -50,7 +50,7 @@ impl IntoResponse for AppError {
         let (status, error_message) = match self {
             AppError::Config(_) => (StatusCode::INTERNAL_SERVER_ERROR, "Configuration error"),
             AppError::Jwt(_) => (StatusCode::UNAUTHORIZED, "Authentication failed"),
-            AppError::Aws(_) => (StatusCode::BAD_GATEWAY, "AWS service error"),
+            AppError::Aws(ref err) => Self::map_aws_error(err),
             AppError::Internal(_) => (StatusCode::INTERNAL_SERVER_ERROR, "Internal server error"),
             AppError::Unauthorized(_) => (StatusCode::UNAUTHORIZED, "Authentication failed"),
         };
@@ -61,6 +61,40 @@ impl IntoResponse for AppError {
         }));
 
         (status, body).into_response()
+    }
+}
+
+impl AppError {
+    /// Map AWS SDK errors to appropriate HTTP status codes and messages
+    fn map_aws_error(err: &aws_sdk_bedrockruntime::Error) -> (StatusCode, &'static str) {
+        match err {
+            aws_sdk_bedrockruntime::Error::AccessDeniedException(_) => {
+                (StatusCode::FORBIDDEN, "Access denied")
+            }
+            aws_sdk_bedrockruntime::Error::ModelNotReadyException(_) => {
+                (StatusCode::SERVICE_UNAVAILABLE, "Model not ready")
+            }
+            aws_sdk_bedrockruntime::Error::ModelTimeoutException(_) => {
+                (StatusCode::REQUEST_TIMEOUT, "Model timeout")
+            }
+            aws_sdk_bedrockruntime::Error::ResourceNotFoundException(_) => {
+                (StatusCode::NOT_FOUND, "Resource not found")
+            }
+            aws_sdk_bedrockruntime::Error::ServiceQuotaExceededException(_) => {
+                (StatusCode::TOO_MANY_REQUESTS, "Service quota exceeded")
+            }
+            aws_sdk_bedrockruntime::Error::ThrottlingException(_) => {
+                (StatusCode::TOO_MANY_REQUESTS, "Request throttled")
+            }
+            aws_sdk_bedrockruntime::Error::ValidationException(_) => {
+                (StatusCode::BAD_REQUEST, "Validation error")
+            }
+            aws_sdk_bedrockruntime::Error::InternalServerException(_) => (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "AWS internal server error",
+            ),
+            _ => (StatusCode::BAD_GATEWAY, "AWS service error"),
+        }
     }
 }
 
