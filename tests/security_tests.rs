@@ -4,7 +4,7 @@ use axum::{
 };
 use base64::Engine;
 use bedrock_sso_proxy::{Config, Server, auth::AuthConfig, aws_http::AwsHttpClient};
-use jsonwebtoken::{EncodingKey, Header, encode};
+use jsonwebtoken::{Algorithm, EncodingKey, Header, encode};
 use serde::{Deserialize, Serialize};
 use std::{
     sync::Arc,
@@ -45,6 +45,7 @@ async fn test_security_sql_injection_attempts() {
     let config = Config::default();
     let auth_config = Arc::new(AuthConfig {
         jwt_secret: config.jwt.secret.clone(),
+        jwt_algorithm: Algorithm::HS256,
     });
     let aws_http_client = AwsHttpClient::new_test();
 
@@ -95,6 +96,7 @@ async fn test_security_xss_attempts() {
     let config = Config::default();
     let auth_config = Arc::new(AuthConfig {
         jwt_secret: config.jwt.secret.clone(),
+        jwt_algorithm: Algorithm::HS256,
     });
     let aws_http_client = AwsHttpClient::new_test();
 
@@ -137,6 +139,7 @@ async fn test_security_oversized_requests() {
     let config = Config::default();
     let auth_config = Arc::new(AuthConfig {
         jwt_secret: config.jwt.secret.clone(),
+        jwt_algorithm: Algorithm::HS256,
     });
     let aws_http_client = AwsHttpClient::new_test();
 
@@ -178,6 +181,7 @@ async fn test_security_header_injection() {
     let config = Config::default();
     let auth_config = Arc::new(AuthConfig {
         jwt_secret: config.jwt.secret.clone(),
+        jwt_algorithm: Algorithm::HS256,
     });
     let aws_http_client = AwsHttpClient::new_test();
 
@@ -223,6 +227,7 @@ async fn test_security_invalid_content_types() {
     let config = Config::default();
     let auth_config = Arc::new(AuthConfig {
         jwt_secret: config.jwt.secret.clone(),
+        jwt_algorithm: Algorithm::HS256,
     });
     let aws_http_client = AwsHttpClient::new_test();
 
@@ -276,6 +281,7 @@ async fn test_security_path_traversal() {
     let config = Config::default();
     let auth_config = Arc::new(AuthConfig {
         jwt_secret: config.jwt.secret.clone(),
+        jwt_algorithm: Algorithm::HS256,
     });
     let aws_http_client = AwsHttpClient::new_test();
 
@@ -327,6 +333,7 @@ async fn test_security_malformed_json_bodies() {
     let config = Config::default();
     let auth_config = Arc::new(AuthConfig {
         jwt_secret: config.jwt.secret.clone(),
+        jwt_algorithm: Algorithm::HS256,
     });
     let aws_http_client = AwsHttpClient::new_test();
 
@@ -377,6 +384,7 @@ async fn test_security_http_method_tampering() {
     let config = Config::default();
     let auth_config = Arc::new(AuthConfig {
         jwt_secret: config.jwt.secret.clone(),
+        jwt_algorithm: Algorithm::HS256,
     });
     let aws_http_client = AwsHttpClient::new_test();
 
@@ -423,6 +431,7 @@ async fn test_security_jwt_algorithm_confusion() {
     let config = Config::default();
     let auth_config = Arc::new(AuthConfig {
         jwt_secret: config.jwt.secret.clone(),
+        jwt_algorithm: Algorithm::HS256,
     });
     let aws_http_client = AwsHttpClient::new_test();
 
@@ -528,6 +537,7 @@ async fn test_security_rate_limiting_simulation() {
     let config = Config::default();
     let auth_config = Arc::new(AuthConfig {
         jwt_secret: config.jwt.secret.clone(),
+        jwt_algorithm: Algorithm::HS256,
     });
     let aws_http_client = AwsHttpClient::new_test();
 

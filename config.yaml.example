@@ -17,6 +17,12 @@ jwt:
   # IMPORTANT: Use a strong, random secret in production!
   # Generate with: openssl rand -base64 32
   secret: "your-jwt-secret-change-this-in-production"
+  
+  # JWT algorithm to use for token validation
+  # Supported algorithms: HS256, HS384, HS512, RS256, RS384, RS512, PS256, PS384, PS512, ES256, ES384, EdDSA
+  # For asymmetric algorithms (RS*, PS*, ES*, EdDSA), provide the public key in PEM format or JWK format as the secret
+  # JWK example: {"kty":"RSA","alg":"RS256","n":"...","e":"AQAB"}
+  algorithm: "HS256"
 
 # AWS configuration
 aws:
@@ -43,6 +49,7 @@ logging:
 # BEDROCK_SERVER__HOST=127.0.0.1
 # BEDROCK_SERVER__PORT=8080
 # BEDROCK_JWT__SECRET=your-secret-here
+# BEDROCK_JWT__ALGORITHM=RS256
 # BEDROCK_AWS__REGION=us-west-2
 # BEDROCK_AWS__ACCESS_KEY_ID=your-access-key
 # BEDROCK_AWS__SECRET_ACCESS_KEY=your-secret-key

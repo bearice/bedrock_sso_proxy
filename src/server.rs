@@ -1,4 +1,9 @@
-use crate::{auth::AuthConfig, aws_http::AwsHttpClient, config::Config, error::AppError};
+use crate::{
+    auth::{AuthConfig, parse_algorithm},
+    aws_http::AwsHttpClient,
+    config::Config,
+    error::AppError,
+};
 use axum::{
     Router,
     body::Bytes,
@@ -25,8 +30,11 @@ impl Server {
     }
 
     pub async fn run(&self) -> Result<(), AppError> {
+        let jwt_algorithm = parse_algorithm(&self.config.jwt.algorithm)?;
+
         let auth_config = Arc::new(AuthConfig {
             jwt_secret: self.config.jwt.secret.clone(),
+            jwt_algorithm,
         });
 
         let aws_http_client = AwsHttpClient::new(self.config.aws.clone());
@@ -296,6 +304,7 @@ mod tests {
         let config = Config::default();
         let auth_config = Arc::new(AuthConfig {
             jwt_secret: config.jwt.secret.clone(),
+            jwt_algorithm: jsonwebtoken::Algorithm::HS256,
         });
         let aws_http_client = AwsHttpClient::new_test();
 
@@ -318,6 +327,7 @@ mod tests {
         let config = Config::default();
         let auth_config = Arc::new(AuthConfig {
             jwt_secret: config.jwt.secret.clone(),
+            jwt_algorithm: jsonwebtoken::Algorithm::HS256,
         });
         let aws_http_client = AwsHttpClient::new_test();
 
@@ -338,6 +348,7 @@ mod tests {
         let config = Config::default();
         let auth_config = Arc::new(AuthConfig {
             jwt_secret: config.jwt.secret.clone(),
+            jwt_algorithm: jsonwebtoken::Algorithm::HS256,
         });
         let aws_http_client = AwsHttpClient::new_test();
 
@@ -366,6 +377,7 @@ mod tests {
         let config = Config::default();
         let auth_config = Arc::new(AuthConfig {
             jwt_secret: config.jwt.secret.clone(),
+            jwt_algorithm: jsonwebtoken::Algorithm::HS256,
         });
         let aws_http_client = AwsHttpClient::new_test();
 
@@ -386,6 +398,7 @@ mod tests {
         let config = Config::default();
         let auth_config = Arc::new(AuthConfig {
             jwt_secret: config.jwt.secret.clone(),
+            jwt_algorithm: jsonwebtoken::Algorithm::HS256,
         });
         let aws_http_client = AwsHttpClient::new_test();
 
@@ -406,6 +419,7 @@ mod tests {
         let config = Config::default();
         let auth_config = Arc::new(AuthConfig {
             jwt_secret: config.jwt.secret.clone(),
+            jwt_algorithm: jsonwebtoken::Algorithm::HS256,
         });
         let aws_http_client = AwsHttpClient::new_test();
 
@@ -426,6 +440,7 @@ mod tests {
         let config = Config::default();
         let auth_config = Arc::new(AuthConfig {
             jwt_secret: config.jwt.secret.clone(),
+            jwt_algorithm: jsonwebtoken::Algorithm::HS256,
         });
         let aws_http_client = AwsHttpClient::new_test();
 
@@ -460,6 +475,7 @@ mod tests {
         let config = Config::default();
         let auth_config = Arc::new(AuthConfig {
             jwt_secret: config.jwt.secret.clone(),
+            jwt_algorithm: jsonwebtoken::Algorithm::HS256,
         });
         let aws_http_client = AwsHttpClient::new_test();
 
@@ -484,6 +500,7 @@ mod tests {
         let config = Config::default();
         let auth_config = Arc::new(AuthConfig {
             jwt_secret: config.jwt.secret.clone(),
+            jwt_algorithm: jsonwebtoken::Algorithm::HS256,
         });
         let aws_http_client = AwsHttpClient::new_test();
 
@@ -509,6 +526,7 @@ mod tests {
         let config = Config::default();
         let auth_config = Arc::new(AuthConfig {
             jwt_secret: config.jwt.secret.clone(),
+            jwt_algorithm: jsonwebtoken::Algorithm::HS256,
         });
         let aws_http_client = AwsHttpClient::new_test();
 
@@ -532,6 +550,7 @@ mod tests {
         let config = Config::default();
         let auth_config = Arc::new(AuthConfig {
             jwt_secret: config.jwt.secret.clone(),
+            jwt_algorithm: jsonwebtoken::Algorithm::HS256,
         });
         let aws_http_client = AwsHttpClient::new_test();
 
@@ -563,6 +582,7 @@ mod tests {
         let config = Config::default();
         let auth_config = Arc::new(AuthConfig {
             jwt_secret: config.jwt.secret.clone(),
+            jwt_algorithm: jsonwebtoken::Algorithm::HS256,
         });
         let aws_http_client = AwsHttpClient::new_test();
 
@@ -588,6 +608,7 @@ mod tests {
         let config = Config::default();
         let auth_config = Arc::new(AuthConfig {
             jwt_secret: config.jwt.secret.clone(),
+            jwt_algorithm: jsonwebtoken::Algorithm::HS256,
         });
         let aws_http_client = AwsHttpClient::new_test();
 
@@ -611,6 +632,7 @@ mod tests {
         let config = Config::default();
         let auth_config = Arc::new(AuthConfig {
             jwt_secret: config.jwt.secret.clone(),
+            jwt_algorithm: jsonwebtoken::Algorithm::HS256,
         });
         let aws_http_client = AwsHttpClient::new_test();
 
@@ -635,6 +657,7 @@ mod tests {
         let config = Config::default();
         let auth_config = Arc::new(AuthConfig {
             jwt_secret: config.jwt.secret.clone(),
+            jwt_algorithm: jsonwebtoken::Algorithm::HS256,
         });
         let aws_http_client = AwsHttpClient::new_test();
 
@@ -670,6 +693,7 @@ mod tests {
 
         let auth_config = Arc::new(AuthConfig {
             jwt_secret: config.jwt.secret.clone(),
+            jwt_algorithm: jsonwebtoken::Algorithm::HS256,
         });
         let aws_http_client = AwsHttpClient::new(config.aws.clone());
 
@@ -697,6 +721,7 @@ mod tests {
         let config = Config::default();
         let auth_config = Arc::new(AuthConfig {
             jwt_secret: config.jwt.secret.clone(),
+            jwt_algorithm: jsonwebtoken::Algorithm::HS256,
         });
         let aws_http_client = AwsHttpClient::new_test();
 
@@ -722,6 +747,7 @@ mod tests {
         let config = Config::default();
         let auth_config = Arc::new(AuthConfig {
             jwt_secret: config.jwt.secret.clone(),
+            jwt_algorithm: jsonwebtoken::Algorithm::HS256,
         });
         let aws_http_client = AwsHttpClient::new_test();
 
@@ -759,6 +785,7 @@ mod tests {
         let config = Config::default();
         let auth_config = Arc::new(AuthConfig {
             jwt_secret: config.jwt.secret.clone(),
+            jwt_algorithm: jsonwebtoken::Algorithm::HS256,
         });
         let aws_http_client = AwsHttpClient::new_test();
 

@@ -19,6 +19,12 @@ pub struct ServerConfig {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct JwtConfig {
     pub secret: String,
+    #[serde(default = "default_jwt_algorithm")]
+    pub algorithm: String,
+}
+
+fn default_jwt_algorithm() -> String {
+    "HS256".to_string()
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -43,6 +49,7 @@ impl Default for Config {
             },
             jwt: JwtConfig {
                 secret: "your-jwt-secret".to_string(),
+                algorithm: "HS256".to_string(),
             },
             aws: AwsConfig {
                 region: "us-east-1".to_string(),
@@ -105,6 +112,7 @@ mod tests {
         assert_eq!(config.server.host, "0.0.0.0");
         assert_eq!(config.server.port, 3000);
         assert_eq!(config.jwt.secret, "your-jwt-secret");
+        assert_eq!(config.jwt.algorithm, "HS256");
         assert_eq!(config.aws.region, "us-east-1");
         assert_eq!(config.logging.level, "info");
     }
@@ -145,6 +153,7 @@ logging:
         assert_eq!(config.server.host, "127.0.0.1");
         assert_eq!(config.server.port, 4000);
         assert_eq!(config.jwt.secret, "file-secret");
+        assert_eq!(config.jwt.algorithm, "HS256");
         assert_eq!(config.aws.region, "eu-west-1");
         assert_eq!(config.logging.level, "warn");
     }
@@ -169,6 +178,7 @@ jwt:
 
         assert_eq!(config.server.port, 4000);
         assert_eq!(config.jwt.secret, "file-secret");
+        assert_eq!(config.jwt.algorithm, "HS256");
     }
 
     #[test]
@@ -245,6 +255,29 @@ jwt:
         assert_eq!(config.jwt.secret, "partial-secret"); // From file
         assert_eq!(config.aws.region, "us-east-1"); // Default
         assert_eq!(config.logging.level, "info"); // Default
+    }
+
+    #[test]
+    fn test_config_with_algorithm() {
+        let yaml_content = r#"
+server:
+  host: "0.0.0.0"
+  port: 3000
+jwt:
+  secret: "test-secret"
+  algorithm: "RS256"
+aws:
+  region: "us-east-1"
+logging:
+  level: "info"
+"#;
+        let mut temp_file = NamedTempFile::with_suffix(".yaml").unwrap();
+        temp_file.write_all(yaml_content.as_bytes()).unwrap();
+
+        let config = Config::load_from_file(temp_file.path()).unwrap();
+
+        assert_eq!(config.jwt.secret, "test-secret");
+        assert_eq!(config.jwt.algorithm, "RS256");
     }
 
     #[test]

@@ -89,6 +89,7 @@ async fn test_integration_server_with_real_jwt() {
 
     let auth_config = Arc::new(AuthConfig {
         jwt_secret: config.jwt.secret.clone(),
+        jwt_algorithm: Algorithm::HS256,
     });
     let aws_http_client = AwsHttpClient::new_test();
 
@@ -118,6 +119,7 @@ async fn test_integration_invalid_signature() {
     let config = Config::default();
     let auth_config = Arc::new(AuthConfig {
         jwt_secret: config.jwt.secret.clone(),
+        jwt_algorithm: Algorithm::HS256,
     });
     let aws_http_client = AwsHttpClient::new_test();
 
@@ -146,6 +148,7 @@ async fn test_integration_token_with_custom_claims() {
 
     let auth_config = Arc::new(AuthConfig {
         jwt_secret: config.jwt.secret.clone(),
+        jwt_algorithm: Algorithm::HS256,
     });
     let aws_http_client = AwsHttpClient::new_test();
 
@@ -183,6 +186,7 @@ async fn test_integration_malformed_authorization_header() {
     let config = Config::default();
     let auth_config = Arc::new(AuthConfig {
         jwt_secret: config.jwt.secret.clone(),
+        jwt_algorithm: Algorithm::HS256,
     });
     let aws_http_client = AwsHttpClient::new_test();
 
@@ -218,6 +222,7 @@ async fn test_integration_concurrent_requests() {
     let config = Config::default();
     let auth_config = Arc::new(AuthConfig {
         jwt_secret: config.jwt.secret.clone(),
+        jwt_algorithm: Algorithm::HS256,
     });
     let aws_http_client = AwsHttpClient::new_test();
 
@@ -267,6 +272,7 @@ async fn test_integration_token_expiration_edge_cases() {
     let config = Config::default();
     let auth_config = Arc::new(AuthConfig {
         jwt_secret: config.jwt.secret.clone(),
+        jwt_algorithm: Algorithm::HS256,
     });
     let aws_http_client = AwsHttpClient::new_test();
 
