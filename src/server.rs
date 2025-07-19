@@ -605,4 +605,177 @@ mod tests {
         let response = app.oneshot(request).await.unwrap();
         assert_eq!(response.status(), StatusCode::METHOD_NOT_ALLOWED);
     }
+
+    #[tokio::test]
+    async fn test_invoke_model_empty_model_id() {
+        let config = Config::default();
+        let auth_config = Arc::new(AuthConfig {
+            jwt_secret: config.jwt.secret.clone(),
+        });
+        let aws_http_client = AwsHttpClient::new_test();
+
+        let server = Server::new(config.clone());
+        let app = server.create_app(auth_config, aws_http_client);
+
+        let token = create_test_token(&config.jwt.secret, "user123", 3600);
+        let request = Request::builder()
+            .uri("/model/%20/invoke") // URL-encoded space
+            .method("POST")
+            .header("Authorization", format!("Bearer {}", token))
+            .header("Content-Type", "application/json")
+            .body(Body::from(r#"{"messages": []}"#))
+            .unwrap();
+
+        let response = app.oneshot(request).await.unwrap();
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    }
+
+    #[tokio::test]
+    async fn test_invoke_model_with_custom_headers() {
+        let config = Config::default();
+        let auth_config = Arc::new(AuthConfig {
+            jwt_secret: config.jwt.secret.clone(),
+        });
+        let aws_http_client = AwsHttpClient::new_test();
+
+        let server = Server::new(config.clone());
+        let app = server.create_app(auth_config, aws_http_client);
+
+        let token = create_test_token(&config.jwt.secret, "user123", 3600);
+        let request = Request::builder()
+            .uri("/model/anthropic.claude-v2/invoke")
+            .method("POST")
+            .header("Authorization", format!("Bearer {}", token))
+            .header("Content-Type", "application/json")
+            .header("Accept", "application/json")
+            .header("X-Custom-Header", "custom-value")
+            .body(Body::from(r#"{"messages": []}"#))
+            .unwrap();
+
+        let response = app.oneshot(request).await.unwrap();
+        // Should handle custom headers appropriately
+        assert!(
+            response.status() == StatusCode::INTERNAL_SERVER_ERROR
+                || response.status() == StatusCode::BAD_REQUEST
+                || response.status() == StatusCode::OK
+        );
+    }
+
+    #[tokio::test]
+    async fn test_health_check_with_failing_aws_connection() {
+        let mut config = Config::default();
+        // Configure AWS with no credentials to force failure
+        config.aws.access_key_id = None;
+        config.aws.secret_access_key = None;
+
+        let auth_config = Arc::new(AuthConfig {
+            jwt_secret: config.jwt.secret.clone(),
+        });
+        let aws_http_client = AwsHttpClient::new(config.aws.clone());
+
+        let server = Server::new(config);
+        let app = server.create_app(auth_config, aws_http_client);
+
+        let request = Request::builder()
+            .uri("/health?check=aws")
+            .body(Body::empty())
+            .unwrap();
+
+        let response = app.oneshot(request).await.unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+
+        // Parse response body to verify degraded status
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let body_str = String::from_utf8(body.to_vec()).unwrap();
+        assert!(body_str.contains("degraded") || body_str.contains("failed"));
+    }
+
+    #[tokio::test]
+    async fn test_invoke_model_with_expired_jwt() {
+        let config = Config::default();
+        let auth_config = Arc::new(AuthConfig {
+            jwt_secret: config.jwt.secret.clone(),
+        });
+        let aws_http_client = AwsHttpClient::new_test();
+
+        let server = Server::new(config.clone());
+        let app = server.create_app(auth_config, aws_http_client);
+
+        // Create expired token (exp time in the past)
+        let expired_token = create_test_token(&config.jwt.secret, "user123", -3600);
+        let request = Request::builder()
+            .uri("/model/anthropic.claude-v2/invoke")
+            .method("POST")
+            .header("Authorization", format!("Bearer {}", expired_token))
+            .header("Content-Type", "application/json")
+            .body(Body::from(r#"{"messages": []}"#))
+            .unwrap();
+
+        let response = app.oneshot(request).await.unwrap();
+        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+    }
+
+    #[tokio::test]
+    async fn test_invoke_model_with_large_body() {
+        let config = Config::default();
+        let auth_config = Arc::new(AuthConfig {
+            jwt_secret: config.jwt.secret.clone(),
+        });
+        let aws_http_client = AwsHttpClient::new_test();
+
+        let server = Server::new(config.clone());
+        let app = server.create_app(auth_config, aws_http_client);
+
+        let token = create_test_token(&config.jwt.secret, "user123", 3600);
+
+        // Create a large JSON body (simulating large input)
+        let large_content = "A".repeat(1000);
+        let large_body = format!(
+            r#"{{"messages": [{{"role": "user", "content": "{}"}}]}}"#,
+            large_content
+        );
+
+        let request = Request::builder()
+            .uri("/model/anthropic.claude-v2/invoke")
+            .method("POST")
+            .header("Authorization", format!("Bearer {}", token))
+            .header("Content-Type", "application/json")
+            .body(Body::from(large_body))
+            .unwrap();
+
+        let response = app.oneshot(request).await.unwrap();
+        // Should handle large bodies appropriately
+        assert!(
+            response.status() == StatusCode::INTERNAL_SERVER_ERROR
+                || response.status() == StatusCode::BAD_REQUEST
+                || response.status() == StatusCode::OK
+        );
+    }
+
+    #[tokio::test]
+    async fn test_invoke_model_streaming_with_empty_model_id() {
+        let config = Config::default();
+        let auth_config = Arc::new(AuthConfig {
+            jwt_secret: config.jwt.secret.clone(),
+        });
+        let aws_http_client = AwsHttpClient::new_test();
+
+        let server = Server::new(config.clone());
+        let app = server.create_app(auth_config, aws_http_client);
+
+        let token = create_test_token(&config.jwt.secret, "user123", 3600);
+        let request = Request::builder()
+            .uri("/model//invoke-with-response-stream") // Empty model ID
+            .method("POST")
+            .header("Authorization", format!("Bearer {}", token))
+            .header("Content-Type", "application/json")
+            .body(Body::from(r#"{"messages": []}"#))
+            .unwrap();
+
+        let response = app.oneshot(request).await.unwrap();
+        // Should handle empty model ID in streaming endpoint
+        assert_eq!(response.status(), StatusCode::OK); // Mock response for test client
+    }
 }

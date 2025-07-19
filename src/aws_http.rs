@@ -52,7 +52,6 @@ impl AwsHttpClient {
     }
 
     /// Create a test client for unit tests
-    #[cfg(test)]
     pub fn new_test() -> Self {
         let config = AwsConfig {
             region: "us-east-1".to_string(),
@@ -441,5 +440,147 @@ mod tests {
         assert!(!processed.contains_key("server"));
         assert!(processed.contains_key("content-type"));
         assert!(processed.contains_key("x-custom-header"));
+    }
+
+    #[test]
+    fn test_convert_reqwest_headers() {
+        let client = AwsHttpClient::new_test();
+        let mut reqwest_headers = reqwest::header::HeaderMap::new();
+        reqwest_headers.insert("content-type", "application/json".parse().unwrap());
+        reqwest_headers.insert("x-custom", "value".parse().unwrap());
+
+        let converted = client.convert_reqwest_headers(&reqwest_headers);
+
+        assert_eq!(converted.len(), 2);
+        assert!(converted.contains_key("content-type"));
+        assert!(converted.contains_key("x-custom"));
+    }
+
+    #[tokio::test]
+    async fn test_invoke_model_with_test_client() {
+        let client = AwsHttpClient::new_test();
+
+        // This should fail because we're using test credentials with real signing
+        let result = client
+            .invoke_model(
+                "anthropic.claude-v2",
+                Some("application/json"),
+                Some("application/json"),
+                b"{\"messages\": []}".to_vec(),
+            )
+            .await;
+
+        // Should fail due to invalid credentials or network call
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_invoke_model_with_response_stream_mock() {
+        let client = AwsHttpClient::new_test();
+        let headers = HeaderMap::new();
+
+        let result = client
+            .invoke_model_with_response_stream(
+                "anthropic.claude-v2",
+                &headers,
+                Some("application/json"),
+                Some("text/event-stream"),
+                b"{\"messages\": []}".to_vec(),
+            )
+            .await;
+
+        // Should succeed with mock data for test client
+        assert!(result.is_ok());
+        let response = result.unwrap();
+        assert_eq!(response.status, StatusCode::OK);
+        assert_eq!(
+            response.headers.get("content-type").unwrap(),
+            "text/event-stream"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_sign_request_missing_credentials() {
+        let config = AwsConfig {
+            region: "us-east-1".to_string(),
+            access_key_id: None,
+            secret_access_key: Some("secret".to_string()),
+            profile: None,
+        };
+        let client = AwsHttpClient::new(config);
+
+        let request = AwsRequest {
+            method: "POST".to_string(),
+            url: "https://bedrock-runtime.us-east-1.amazonaws.com/model/test/invoke".to_string(),
+            headers: HeaderMap::new(),
+            body: Vec::new(),
+        };
+
+        let result = client.sign_request(&request).await;
+        assert!(result.is_err());
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("AWS access key not configured")
+        );
+    }
+
+    #[tokio::test]
+    async fn test_sign_request_missing_secret() {
+        let config = AwsConfig {
+            region: "us-east-1".to_string(),
+            access_key_id: Some("access_key".to_string()),
+            secret_access_key: None,
+            profile: None,
+        };
+        let client = AwsHttpClient::new(config);
+
+        let request = AwsRequest {
+            method: "POST".to_string(),
+            url: "https://bedrock-runtime.us-east-1.amazonaws.com/model/test/invoke".to_string(),
+            headers: HeaderMap::new(),
+            body: Vec::new(),
+        };
+
+        let result = client.sign_request(&request).await;
+        assert!(result.is_err());
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("AWS secret key not configured")
+        );
+    }
+
+    #[test]
+    fn test_process_headers_for_aws_content_length() {
+        let mut headers = HeaderMap::new();
+        headers.insert("authorization", HeaderValue::from_static("Bearer token"));
+        headers.insert("content-length", HeaderValue::from_static("100"));
+        headers.insert("content-type", HeaderValue::from_static("application/json"));
+
+        let processed = AwsHttpClient::process_headers_for_aws(&headers);
+
+        assert!(!processed.contains_key("authorization"));
+        assert!(!processed.contains_key("content-length"));
+        assert!(processed.contains_key("content-type"));
+    }
+
+    #[test]
+    fn test_process_headers_from_aws_date_filtering() {
+        let mut headers = HeaderMap::new();
+        headers.insert("content-type", HeaderValue::from_static("application/json"));
+        headers.insert(
+            "date",
+            HeaderValue::from_static("Thu, 01 Jan 1970 00:00:00 GMT"),
+        );
+        headers.insert("x-amz-id-2", HeaderValue::from_static("some-id"));
+
+        let processed = AwsHttpClient::process_headers_from_aws(&headers);
+
+        assert!(!processed.contains_key("date"));
+        assert!(!processed.contains_key("x-amz-id-2"));
+        assert!(processed.contains_key("content-type"));
     }
 }
