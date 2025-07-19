@@ -33,6 +33,7 @@ pub struct AwsConfig {
     pub access_key_id: Option<String>,
     pub secret_access_key: Option<String>,
     pub profile: Option<String>,
+    pub bearer_token: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -56,6 +57,7 @@ impl Default for Config {
                 access_key_id: None,
                 secret_access_key: None,
                 profile: None,
+                bearer_token: None,
             },
             logging: LoggingConfig {
                 level: "info".to_string(),
@@ -103,8 +105,43 @@ impl Config {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use serial_test::serial;
     use std::io::Write;
     use tempfile::NamedTempFile;
+
+    fn clean_env_vars() {
+        // Remove all environment variables that start with "BEDROCK_"
+        let bedrock_vars: Vec<String> = std::env::vars()
+            .filter_map(|(key, _)| {
+                if key.starts_with("BEDROCK_") {
+                    Some(key)
+                } else {
+                    None
+                }
+            })
+            .collect();
+        
+        for var in bedrock_vars {
+            unsafe {
+                std::env::remove_var(&var);
+            }
+        }
+    }
+
+    struct EnvGuard;
+
+    impl EnvGuard {
+        fn new() -> Self {
+            clean_env_vars();
+            EnvGuard
+        }
+    }
+
+    impl Drop for EnvGuard {
+        fn drop(&mut self) {
+            clean_env_vars();
+        }
+    }
 
     #[test]
     fn test_config_default() {
@@ -132,7 +169,10 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_config_load_from_yaml_file() {
+        let _guard = EnvGuard::new();
+
         let yaml_content = r#"
 server:
   host: "127.0.0.1"
@@ -182,15 +222,9 @@ jwt:
     }
 
     #[test]
+    #[serial]
     fn test_config_load_nonexistent_file() {
-        // Clean any environment variables that might interfere
-        unsafe {
-            std::env::remove_var("BEDROCK_SERVER__HOST");
-            std::env::remove_var("BEDROCK_SERVER__PORT");
-            std::env::remove_var("BEDROCK_JWT__SECRET");
-            std::env::remove_var("BEDROCK_AWS__REGION");
-            std::env::remove_var("BEDROCK_LOGGING__LEVEL");
-        }
+        let _guard = EnvGuard::new();
 
         let config = Config::load_from_file("nonexistent.yaml").unwrap();
 
@@ -199,7 +233,10 @@ jwt:
     }
 
     #[test]
+    #[serial]
     fn test_config_load_with_environment_variables() {
+        let _guard = EnvGuard::new();
+        
         unsafe {
             std::env::set_var("BEDROCK_SERVER__HOST", "127.0.0.1");
             std::env::set_var("BEDROCK_SERVER__PORT", "8080");
@@ -215,15 +252,6 @@ jwt:
         assert_eq!(config.jwt.secret, "env-secret");
         assert_eq!(config.aws.region, "eu-central-1");
         assert_eq!(config.logging.level, "debug");
-
-        // Clean up environment variables
-        unsafe {
-            std::env::remove_var("BEDROCK_SERVER__HOST");
-            std::env::remove_var("BEDROCK_SERVER__PORT");
-            std::env::remove_var("BEDROCK_JWT__SECRET");
-            std::env::remove_var("BEDROCK_AWS__REGION");
-            std::env::remove_var("BEDROCK_LOGGING__LEVEL");
-        }
     }
 
     #[test]
@@ -237,7 +265,10 @@ jwt:
     }
 
     #[test]
+    #[serial]
     fn test_config_load_with_partial_yaml() {
+        let _guard = EnvGuard::new();
+
         let yaml_content = r#"
 server:
   port: 5000
@@ -258,7 +289,10 @@ jwt:
     }
 
     #[test]
+    #[serial]
     fn test_config_with_algorithm() {
+        let _guard = EnvGuard::new();
+        
         let yaml_content = r#"
 server:
   host: "0.0.0.0"
@@ -281,7 +315,10 @@ logging:
     }
 
     #[test]
+    #[serial]
     fn test_aws_config_with_credentials() {
+        let _guard = EnvGuard::new();
+        
         let yaml_content = r#"
 server:
   host: "0.0.0.0"
@@ -311,5 +348,36 @@ logging:
             Some("wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY".to_string())
         );
         assert_eq!(config.aws.profile, Some("test-profile".to_string()));
+    }
+
+    #[test]
+    #[serial]
+    fn test_aws_config_with_bearer_token() {
+        let _guard = EnvGuard::new();
+
+        let yaml_content = r#"
+server:
+  host: "0.0.0.0"
+  port: 3000
+jwt:
+  secret: "test-secret"
+aws:
+  region: "us-west-2"
+  bearer_token: "ABSK-1234567890abcdef1234567890abcdef12345678"
+logging:
+  level: "info"
+"#;
+        let mut temp_file = NamedTempFile::with_suffix(".yaml").unwrap();
+        temp_file.write_all(yaml_content.as_bytes()).unwrap();
+
+        let config = Config::load_from_file(temp_file.path()).unwrap();
+
+        assert_eq!(config.aws.region, "us-west-2");
+        assert_eq!(config.aws.access_key_id, None);
+        assert_eq!(config.aws.secret_access_key, None);
+        assert_eq!(
+            config.aws.bearer_token,
+            Some("ABSK-1234567890abcdef1234567890abcdef12345678".to_string())
+        );
     }
 }

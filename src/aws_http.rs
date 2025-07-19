@@ -58,6 +58,7 @@ impl AwsHttpClient {
             access_key_id: Some("test_key".to_string()),
             secret_access_key: Some("test_secret".to_string()),
             profile: None,
+            bearer_token: None,
         };
         Self::new(config)
     }
@@ -96,14 +97,14 @@ impl AwsHttpClient {
             body: body.clone(),
         };
 
-        // Sign the request
-        let signed_headers = self.sign_request(&aws_request).await?;
+        // Authenticate the request (Bearer token or SigV4)
+        let authenticated_headers = self.authenticate_request(&aws_request).await?;
 
         // Make the HTTP request
         let mut request_builder = self.client.post(&url).body(body);
 
-        // Add all signed headers
-        for (name, value) in signed_headers.iter() {
+        // Add all authenticated headers
+        for (name, value) in authenticated_headers.iter() {
             request_builder = request_builder.header(name.as_str(), value);
         }
 
@@ -181,14 +182,14 @@ impl AwsHttpClient {
             body: body.clone(),
         };
 
-        // Sign the request
-        let signed_headers = self.sign_request(&aws_request).await?;
+        // Authenticate the request (Bearer token or SigV4)
+        let authenticated_headers = self.authenticate_request(&aws_request).await?;
 
         // Build HTTP request
         let mut request_builder = self.client.post(&url);
 
-        // Add all signed headers
-        for (name, value) in signed_headers.iter() {
+        // Add all authenticated headers
+        for (name, value) in authenticated_headers.iter() {
             request_builder = request_builder.header(name.as_str(), value);
         }
 
@@ -209,6 +210,29 @@ impl AwsHttpClient {
             headers: response_headers,
             stream,
         })
+    }
+
+    /// Authenticate AWS request using Bearer token or SigV4
+    async fn authenticate_request(&self, request: &AwsRequest) -> Result<HeaderMap, AppError> {
+        if let Some(bearer_token) = &self.config.bearer_token {
+            self.add_bearer_token(request, bearer_token).await
+        } else {
+            self.sign_request(request).await
+        }
+    }
+
+    /// Add Bearer token authentication to request
+    async fn add_bearer_token(
+        &self,
+        request: &AwsRequest,
+        bearer_token: &str,
+    ) -> Result<HeaderMap, AppError> {
+        let mut headers = request.headers.clone();
+        headers.insert(
+            "Authorization",
+            HeaderValue::from_str(&format!("Bearer {}", bearer_token))?,
+        );
+        Ok(headers)
     }
 
     /// Sign AWS request using aws-sigv4 library
@@ -308,13 +332,18 @@ impl AwsHttpClient {
 
     /// Health check for the AWS connection
     pub async fn health_check(&self) -> Result<(), AppError> {
-        // For HTTP client, we can just verify that we have credentials configured
-        if self.config.access_key_id.is_none() || self.config.secret_access_key.is_none() {
-            return Err(AppError::Internal(
-                "AWS credentials not configured".to_string(),
-            ));
+        // Check if we have either Bearer token or SigV4 credentials configured
+        if self.config.bearer_token.is_some() {
+            // Bearer token authentication is configured
+            Ok(())
+        } else if self.config.access_key_id.is_some() && self.config.secret_access_key.is_some() {
+            // SigV4 authentication is configured
+            Ok(())
+        } else {
+            Err(AppError::Internal(
+                "AWS authentication not configured (need either bearer_token or access_key_id/secret_access_key)".to_string(),
+            ))
         }
-        Ok(())
     }
 
     /// Process headers for forwarding to AWS, removing sensitive headers
@@ -367,6 +396,7 @@ mod tests {
             access_key_id: Some("test_key".to_string()),
             secret_access_key: Some("test_secret".to_string()),
             profile: None,
+            bearer_token: None,
         };
         let client = AwsHttpClient::new(config);
         assert_eq!(
@@ -398,6 +428,7 @@ mod tests {
             access_key_id: None,
             secret_access_key: None,
             profile: None,
+            bearer_token: None,
         };
         let client = AwsHttpClient::new(config);
         let result = client.health_check().await;
@@ -506,6 +537,7 @@ mod tests {
             access_key_id: None,
             secret_access_key: Some("secret".to_string()),
             profile: None,
+            bearer_token: None,
         };
         let client = AwsHttpClient::new(config);
 
@@ -533,6 +565,7 @@ mod tests {
             access_key_id: Some("access_key".to_string()),
             secret_access_key: None,
             profile: None,
+            bearer_token: None,
         };
         let client = AwsHttpClient::new(config);
 
@@ -582,5 +615,74 @@ mod tests {
         assert!(!processed.contains_key("date"));
         assert!(!processed.contains_key("x-amz-id-2"));
         assert!(processed.contains_key("content-type"));
+    }
+
+    #[tokio::test]
+    async fn test_health_check_with_bearer_token() {
+        let config = AwsConfig {
+            region: "us-east-1".to_string(),
+            access_key_id: None,
+            secret_access_key: None,
+            profile: None,
+            bearer_token: Some("ABSK-1234567890abcdef1234567890abcdef12345678".to_string()),
+        };
+        let client = AwsHttpClient::new(config);
+        let result = client.health_check().await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_health_check_without_any_credentials() {
+        let config = AwsConfig {
+            region: "us-east-1".to_string(),
+            access_key_id: None,
+            secret_access_key: None,
+            profile: None,
+            bearer_token: None,
+        };
+        let client = AwsHttpClient::new(config);
+        let result = client.health_check().await;
+        assert!(result.is_err());
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("AWS authentication not configured")
+        );
+    }
+
+    #[tokio::test]
+    async fn test_add_bearer_token() {
+        let config = AwsConfig {
+            region: "us-east-1".to_string(),
+            access_key_id: None,
+            secret_access_key: None,
+            profile: None,
+            bearer_token: Some("ABSK-1234567890abcdef1234567890abcdef12345678".to_string()),
+        };
+        let client = AwsHttpClient::new(config);
+
+        let mut headers = HeaderMap::new();
+        headers.insert("content-type", HeaderValue::from_static("application/json"));
+
+        let request = AwsRequest {
+            method: "POST".to_string(),
+            url: "https://bedrock-runtime.us-east-1.amazonaws.com/model/test/invoke".to_string(),
+            headers,
+            body: Vec::new(),
+        };
+
+        let result = client
+            .add_bearer_token(&request, "ABSK-1234567890abcdef1234567890abcdef12345678")
+            .await;
+        assert!(result.is_ok());
+
+        let authenticated_headers = result.unwrap();
+        assert!(authenticated_headers.contains_key("authorization"));
+        assert_eq!(
+            authenticated_headers.get("authorization").unwrap(),
+            "Bearer ABSK-1234567890abcdef1234567890abcdef12345678"
+        );
+        assert!(authenticated_headers.contains_key("content-type"));
     }
 }
