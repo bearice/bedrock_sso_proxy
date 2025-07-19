@@ -5,12 +5,13 @@ use axum::{
     extract::{Path, Query, State},
     http::{HeaderMap, StatusCode},
     middleware,
-    response::Json,
+    response::{IntoResponse, Json, Response, Sse},
     routing::{get, post},
 };
+use futures_util::StreamExt;
 use serde::Deserialize;
 use serde_json::{Value, json};
-use std::{net::SocketAddr, sync::Arc};
+use std::{net::SocketAddr, sync::Arc, time::Duration};
 use tokio::net::TcpListener;
 use tracing::info;
 
@@ -57,9 +58,13 @@ impl Server {
             .merge(
                 Router::new()
                     .route("/model/{model_id}/invoke", post(invoke_model))
-                    .with_state(aws_http_client)
+                    .route(
+                        "/model/{model_id}/invoke-with-response-stream",
+                        post(invoke_model_with_response_stream),
+                    )
+                    .with_state(aws_http_client.clone())
                     .layer(middleware::from_fn_with_state(
-                        auth_config,
+                        auth_config.clone(),
                         crate::auth::jwt_auth_middleware,
                     )),
             )
@@ -160,6 +165,86 @@ async fn invoke_model(
             tracing::error!("AWS Bedrock API error for model {}: {}", model_id, err);
 
             // Convert AppError to HTTP response - this will be handled by the error's IntoResponse impl
+            Err(err)
+        }
+    }
+}
+
+/// Handle streaming invoke model requests (Server-Sent Events)
+async fn invoke_model_with_response_stream(
+    Path(model_id): Path<String>,
+    State(aws_http_client): State<AwsHttpClient>,
+    headers: HeaderMap,
+    body: Bytes,
+) -> Result<Response, AppError> {
+    tracing::info!("Handling streaming invoke request for model: {}", model_id);
+
+    // Extract content type and accept headers
+    let content_type = headers.get("content-type").and_then(|v| v.to_str().ok());
+    let accept = headers.get("accept").and_then(|v| v.to_str().ok());
+
+    // Call AWS Bedrock streaming API
+    match aws_http_client
+        .invoke_model_with_response_stream(&model_id, &headers, content_type, accept, body.to_vec())
+        .await
+    {
+        Ok(aws_response) => {
+            tracing::info!(
+                "AWS Bedrock streaming response received for model: {}",
+                model_id
+            );
+
+            // Convert the stream to SSE format using try_stream to handle Result
+            let sse_stream = aws_response.stream.map(|chunk_result| {
+                match chunk_result {
+                    Ok(chunk) => {
+                        // Convert bytes to SSE event
+                        let data = String::from_utf8_lossy(&chunk);
+                        Ok(axum::response::sse::Event::default().data(&data))
+                    }
+                    Err(e) => {
+                        tracing::error!("Stream error: {}", e);
+                        // Convert reqwest error to a format that can be used in SSE
+                        Err(Box::new(e) as Box<dyn std::error::Error + Send + Sync>)
+                    }
+                }
+            });
+
+            // Create SSE response
+            let sse = Sse::new(sse_stream).keep_alive(
+                axum::response::sse::KeepAlive::new()
+                    .interval(Duration::from_secs(15))
+                    .text("keep-alive-text"),
+            );
+
+            // Build response with AWS headers
+            let mut response = sse.into_response();
+
+            // Add important headers from AWS response
+            for (name, value) in aws_response.headers.iter() {
+                if name != "content-length" && name != "transfer-encoding" {
+                    response.headers_mut().insert(name, value.clone());
+                }
+            }
+
+            // Ensure correct content type for SSE
+            response
+                .headers_mut()
+                .insert("content-type", "text/event-stream".parse().unwrap());
+            response
+                .headers_mut()
+                .insert("cache-control", "no-cache".parse().unwrap());
+
+            *response.status_mut() = aws_response.status;
+
+            Ok(response)
+        }
+        Err(err) => {
+            tracing::error!(
+                "AWS Bedrock streaming API error for model {}: {}",
+                model_id,
+                err
+            );
             Err(err)
         }
     }
@@ -433,6 +518,85 @@ mod tests {
         let token = create_test_token(&config.jwt.secret, "user123", 3600);
         let request = Request::builder()
             .uri("/model/anthropic.claude-v2/invoke")
+            .method("GET")
+            .header("Authorization", format!("Bearer {}", token))
+            .body(Body::empty())
+            .unwrap();
+
+        let response = app.oneshot(request).await.unwrap();
+        assert_eq!(response.status(), StatusCode::METHOD_NOT_ALLOWED);
+    }
+
+    #[tokio::test]
+    async fn test_invoke_model_with_response_stream_success() {
+        let config = Config::default();
+        let auth_config = Arc::new(AuthConfig {
+            jwt_secret: config.jwt.secret.clone(),
+        });
+        let aws_http_client = AwsHttpClient::new_test();
+
+        let server = Server::new(config.clone());
+        let app = server.create_app(auth_config, aws_http_client);
+
+        let token = create_test_token(&config.jwt.secret, "user123", 3600);
+        let request = Request::builder()
+            .uri("/model/anthropic.claude-v2/invoke-with-response-stream")
+            .method("POST")
+            .header("Authorization", format!("Bearer {}", token))
+            .header("Content-Type", "application/json")
+            .body(Body::from(
+                r#"{"messages": [{"role": "user", "content": "Hello"}]}"#,
+            ))
+            .unwrap();
+
+        let response = app.oneshot(request).await.unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        assert_eq!(
+            response.headers().get("content-type").unwrap(),
+            "text/event-stream"
+        );
+        assert_eq!(response.headers().get("cache-control").unwrap(), "no-cache");
+    }
+
+    #[tokio::test]
+    async fn test_invoke_model_with_response_stream_unauthorized() {
+        let config = Config::default();
+        let auth_config = Arc::new(AuthConfig {
+            jwt_secret: config.jwt.secret.clone(),
+        });
+        let aws_http_client = AwsHttpClient::new_test();
+
+        let server = Server::new(config);
+        let app = server.create_app(auth_config, aws_http_client);
+
+        let request = Request::builder()
+            .uri("/model/anthropic.claude-v2/invoke-with-response-stream")
+            .method("POST")
+            .header("Authorization", "Bearer invalid.jwt.token")
+            .header("Content-Type", "application/json")
+            .body(Body::from(
+                r#"{"messages": [{"role": "user", "content": "Hello"}]}"#,
+            ))
+            .unwrap();
+
+        let response = app.oneshot(request).await.unwrap();
+        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+    }
+
+    #[tokio::test]
+    async fn test_invoke_model_with_response_stream_get_method_not_allowed() {
+        let config = Config::default();
+        let auth_config = Arc::new(AuthConfig {
+            jwt_secret: config.jwt.secret.clone(),
+        });
+        let aws_http_client = AwsHttpClient::new_test();
+
+        let server = Server::new(config.clone());
+        let app = server.create_app(auth_config, aws_http_client);
+
+        let token = create_test_token(&config.jwt.secret, "user123", 3600);
+        let request = Request::builder()
+            .uri("/model/anthropic.claude-v2/invoke-with-response-stream")
             .method("GET")
             .header("Authorization", format!("Bearer {}", token))
             .body(Body::empty())
