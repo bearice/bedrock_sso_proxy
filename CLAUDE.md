@@ -96,7 +96,7 @@ Use `BEDROCK_` prefix with double underscores for nesting:
 - You should always follow design in DESIGN.md when coding
 - After each phase, do a commit and make it easy to review and rewind
 - When adding a dep, make sure it's the latest version
-- Before commit, use cargo clippy to check code and cargo fmt to format
+- Before commit, use cargo clippy to check code and cargo fmt to format, do not ignore warnings.
 - You should add tests for new code when a phase is finished
 
 ## Project Status
