@@ -1,0 +1,50 @@
+# Bedrock SSO Proxy Configuration Example
+# Copy this file to config.yaml and customize for your environment
+
+# Server configuration
+server:
+  # Host to bind the server to
+  # Use "0.0.0.0" to bind to all interfaces
+  # Use "127.0.0.1" to bind only to localhost
+  host: "0.0.0.0"
+  
+  # Port to listen on
+  port: 3000
+
+# JWT authentication configuration
+jwt:
+  # Secret key for JWT token validation
+  # IMPORTANT: Use a strong, random secret in production!
+  # Generate with: openssl rand -base64 32
+  secret: "your-jwt-secret-change-this-in-production"
+
+# AWS configuration
+aws:
+  # AWS region where your Bedrock models are available
+  region: "us-east-1"
+  
+  # Optional: AWS credentials (if not using IAM roles)
+  # It's recommended to use IAM roles or environment variables instead
+  # access_key_id: "AKIAIOSFODNN7EXAMPLE"
+  # secret_access_key: "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"
+  
+  # Optional: AWS profile name (alternative to access keys)
+  # profile: "bedrock-proxy"
+
+# Logging configuration
+logging:
+  # Log level: trace, debug, info, warn, error
+  level: "info"
+
+# Environment Variable Overrides:
+# You can override any configuration value using environment variables
+# with the BEDROCK_ prefix and double underscores for nesting:
+#
+# BEDROCK_SERVER__HOST=127.0.0.1
+# BEDROCK_SERVER__PORT=8080
+# BEDROCK_JWT__SECRET=your-secret-here
+# BEDROCK_AWS__REGION=us-west-2
+# BEDROCK_AWS__ACCESS_KEY_ID=your-access-key
+# BEDROCK_AWS__SECRET_ACCESS_KEY=your-secret-key
+# BEDROCK_AWS__PROFILE=your-profile
+# BEDROCK_LOGGING__LEVEL=debug

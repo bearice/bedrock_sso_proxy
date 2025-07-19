@@ -74,8 +74,18 @@ async fn test_security_sql_injection_attempts() {
         let response = app.clone().oneshot(request).await.unwrap();
         // Should not expose internal server errors for malicious model IDs
         // Expecting either 400 Bad Request or 500 Internal Server Error, but not exposing system details
-        assert_ne!(response.status(), StatusCode::OK, "Malicious model ID '{}' should not succeed", model_id);
-        assert_ne!(response.status(), StatusCode::UNAUTHORIZED, "Should not be an auth issue for model ID: {}", model_id);
+        assert_ne!(
+            response.status(),
+            StatusCode::OK,
+            "Malicious model ID '{}' should not succeed",
+            model_id
+        );
+        assert_ne!(
+            response.status(),
+            StatusCode::UNAUTHORIZED,
+            "Should not be an auth issue for model ID: {}",
+            model_id
+        );
     }
 }
 
@@ -115,7 +125,8 @@ async fn test_security_xss_attempts() {
             response.status() == StatusCode::OK
                 || response.status() == StatusCode::INTERNAL_SERVER_ERROR
                 || response.status() == StatusCode::BAD_REQUEST,
-            "Unexpected status {} for XSS payload", response.status()
+            "Unexpected status {} for XSS payload",
+            response.status()
         );
     }
 }
@@ -156,7 +167,8 @@ async fn test_security_oversized_requests() {
             || response.status() == StatusCode::BAD_REQUEST
             || response.status() == StatusCode::INTERNAL_SERVER_ERROR
             || response.status() == StatusCode::OK,
-        "Unexpected status {} for oversized request", response.status()
+        "Unexpected status {} for oversized request",
+        response.status()
     );
 }
 
@@ -198,7 +210,8 @@ async fn test_security_header_injection() {
                 response.status() == StatusCode::OK
                     || response.status() == StatusCode::BAD_REQUEST
                     || response.status() == StatusCode::INTERNAL_SERVER_ERROR,
-                "Unexpected status {} for header injection attempt", response.status()
+                "Unexpected status {} for header injection attempt",
+                response.status()
             );
         }
     }
@@ -244,7 +257,9 @@ async fn test_security_invalid_content_types() {
                         || response.status() == StatusCode::BAD_REQUEST
                         || response.status() == StatusCode::UNSUPPORTED_MEDIA_TYPE
                         || response.status() == StatusCode::INTERNAL_SERVER_ERROR,
-                    "Unexpected status {} for content type: {}", response.status(), content_type
+                    "Unexpected status {} for content type: {}",
+                    response.status(),
+                    content_type
                 );
             }
             Err(_) => {
@@ -288,13 +303,20 @@ async fn test_security_path_traversal() {
 
         let response = app.clone().oneshot(request).await.unwrap();
         // Path traversal attempts should not succeed or expose file system info
-        assert_ne!(response.status(), StatusCode::OK, "Path traversal '{}' should not succeed", path);
+        assert_ne!(
+            response.status(),
+            StatusCode::OK,
+            "Path traversal '{}' should not succeed",
+            path
+        );
         // Should get client error (400) or server error, but not expose filesystem
         assert!(
             response.status() == StatusCode::BAD_REQUEST
                 || response.status() == StatusCode::NOT_FOUND
                 || response.status() == StatusCode::INTERNAL_SERVER_ERROR,
-            "Unexpected status {} for path traversal: {}", response.status(), path
+            "Unexpected status {} for path traversal: {}",
+            response.status(),
+            path
         );
     }
 }
@@ -342,8 +364,9 @@ async fn test_security_malformed_json_bodies() {
             response.status() == StatusCode::BAD_REQUEST
                 || response.status() == StatusCode::UNPROCESSABLE_ENTITY
                 || response.status() == StatusCode::INTERNAL_SERVER_ERROR
-                || response.status() == StatusCode::OK,  // Some might be forwarded to AWS
-            "Unexpected status {} for malformed JSON", response.status()
+                || response.status() == StatusCode::OK, // Some might be forwarded to AWS
+            "Unexpected status {} for malformed JSON",
+            response.status()
         );
     }
 }

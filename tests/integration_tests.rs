@@ -318,13 +318,21 @@ async fn test_integration_token_expiration_edge_cases() {
         .unwrap();
 
     let response = app.oneshot(request).await.unwrap();
-    
+
     // Debug: Extract status and body
     let status = response.status();
-    let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+        .await
+        .unwrap();
     let body_str = String::from_utf8_lossy(&body);
     println!("Response status: {}, body: {}", status, body_str);
-    
+
     // Should fail with UNAUTHORIZED for expired token
-    assert_eq!(status, StatusCode::UNAUTHORIZED, "Expired JWT token should result in 401 Unauthorized, not {} - Body: {}", status, body_str);
+    assert_eq!(
+        status,
+        StatusCode::UNAUTHORIZED,
+        "Expired JWT token should result in 401 Unauthorized, not {} - Body: {}",
+        status,
+        body_str
+    );
 }

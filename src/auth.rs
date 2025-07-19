@@ -5,7 +5,7 @@ use axum::{
     middleware::Next,
     response::Response,
 };
-use jsonwebtoken::{DecodingKey, Validation, Algorithm, decode};
+use jsonwebtoken::{Algorithm, DecodingKey, Validation, decode};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
@@ -42,7 +42,7 @@ pub async fn jwt_auth_middleware(
     let mut validation = Validation::new(Algorithm::HS256);
     validation.validate_exp = true; // Ensure expiration validation is enabled
     validation.leeway = 0; // No leeway for expiration - expired tokens should be rejected immediately
-    
+
     let _claims = decode::<Claims>(
         token,
         &DecodingKey::from_secret(auth_config.jwt_secret.as_ref()),

@@ -3,6 +3,14 @@ name = "bedrock_sso_proxy"
 version = "0.1.0"
 edition = "2024"
 
+[[bin]]
+name = "bedrock_proxy"
+path = "src/main.rs"
+
+[[bin]]
+name = "bedrock_e2e_client"
+path = "src/bin/e2e_client.rs"
+
 [dependencies]
 axum = { version = "^0.8", features = ["ws"] }
 tokio = { version = "^1.0", features = ["full"] }
@@ -21,6 +29,7 @@ thiserror = "^2.0"
 tracing = "^0.1"
 tracing-subscriber = { version = "^0.3", features = ["env-filter"] }
 futures-util = "^0.3"
+tokio-stream = "^0.1"
 config = "^0.15"
 clap = { version = "^4.0", features = ["derive"] }
 
