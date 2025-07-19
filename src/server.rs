@@ -40,11 +40,15 @@ impl Server {
     pub fn create_app(&self, auth_config: Arc<AuthConfig>, aws_clients: AwsClients) -> Router {
         Router::new()
             .route("/health", get(health_check))
-            .with_state(aws_clients)
-            .layer(middleware::from_fn_with_state(
-                auth_config,
-                crate::auth::jwt_auth_middleware,
-            ))
+            .with_state(aws_clients.clone())
+            .merge(
+                Router::new()
+                    .with_state(aws_clients)
+                    .layer(middleware::from_fn_with_state(
+                        auth_config,
+                        crate::auth::jwt_auth_middleware,
+                    )),
+            )
     }
 }
 
@@ -136,7 +140,7 @@ mod tests {
             .unwrap();
 
         let response = app.oneshot(request).await.unwrap();
-        assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
+        assert_eq!(response.status(), StatusCode::OK);
     }
 
     #[tokio::test]
@@ -157,7 +161,7 @@ mod tests {
             .unwrap();
 
         let response = app.oneshot(request).await.unwrap();
-        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+        assert_eq!(response.status(), StatusCode::OK);
     }
 
     #[test]

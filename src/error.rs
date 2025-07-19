@@ -12,6 +12,7 @@ pub enum AppError {
     Jwt(jsonwebtoken::errors::Error),
     Aws(aws_sdk_bedrockruntime::Error),
     Internal(String),
+    Unauthorized(String),
 }
 
 impl fmt::Display for AppError {
@@ -21,6 +22,7 @@ impl fmt::Display for AppError {
             AppError::Jwt(err) => write!(f, "JWT error: {}", err),
             AppError::Aws(err) => write!(f, "AWS error: {}", err),
             AppError::Internal(msg) => write!(f, "Internal error: {}", msg),
+            AppError::Unauthorized(msg) => write!(f, "Unauthorized: {}", msg),
         }
     }
 }
@@ -50,6 +52,7 @@ impl IntoResponse for AppError {
             AppError::Jwt(_) => (StatusCode::UNAUTHORIZED, "Authentication failed"),
             AppError::Aws(_) => (StatusCode::BAD_GATEWAY, "AWS service error"),
             AppError::Internal(_) => (StatusCode::INTERNAL_SERVER_ERROR, "Internal server error"),
+            AppError::Unauthorized(_) => (StatusCode::UNAUTHORIZED, "Authentication failed"),
         };
 
         let body = Json(json!({
@@ -77,6 +80,9 @@ mod tests {
 
         let internal_err = AppError::Internal("test message".to_string());
         assert_eq!(internal_err.to_string(), "Internal error: test message");
+
+        let unauthorized_err = AppError::Unauthorized("access denied".to_string());
+        assert_eq!(unauthorized_err.to_string(), "Unauthorized: access denied");
     }
 
     #[test]
@@ -106,6 +112,10 @@ mod tests {
         let internal_err = AppError::Internal("test".to_string());
         let response = internal_err.into_response();
         assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
+
+        let unauthorized_err = AppError::Unauthorized("access denied".to_string());
+        let response = unauthorized_err.into_response();
+        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
     }
 
     #[test]

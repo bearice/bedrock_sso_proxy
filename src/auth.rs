@@ -29,10 +29,10 @@ pub async fn jwt_auth_middleware(
         .headers()
         .get(AUTHORIZATION)
         .and_then(|header| header.to_str().ok())
-        .ok_or_else(|| AppError::Internal("Missing Authorization header".to_string()))?;
+        .ok_or_else(|| AppError::Unauthorized("Missing Authorization header".to_string()))?;
 
     if !auth_header.starts_with("Bearer ") {
-        return Err(AppError::Internal(
+        return Err(AppError::Unauthorized(
             "Invalid Authorization format".to_string(),
         ));
     }
@@ -130,7 +130,7 @@ mod tests {
         let request = Request::builder().uri("/test").body(Body::empty()).unwrap();
 
         let response = app.oneshot(request).await.unwrap();
-        assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
+        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
     }
 
     #[tokio::test]
@@ -154,7 +154,7 @@ mod tests {
             .unwrap();
 
         let response = app.oneshot(request).await.unwrap();
-        assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
+        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
     }
 
     #[tokio::test]
