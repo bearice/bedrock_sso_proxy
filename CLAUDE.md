@@ -6,3 +6,8 @@
 - When adding a dep, make sure it's the latest version
 - Before commit, use cargo clippy to check code and cargo fmt to format
 - You should add tests for new code when a phase is finished
+
+## Project Workflow Notes
+
+- When clearing context between phases, summarize key changes and prepare notes for the next phase of development
+- Keep track of context clearing to ensure continuity and understanding of project progression
