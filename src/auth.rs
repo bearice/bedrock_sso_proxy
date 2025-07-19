@@ -49,3 +49,185 @@ pub async fn jwt_auth_middleware(
 
     Ok(next.run(request).await)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use axum::{
+        Router,
+        body::Body,
+        http::{Request, StatusCode},
+        middleware,
+        routing::get,
+    };
+    use jsonwebtoken::{EncodingKey, Header, encode};
+    use std::time::{SystemTime, UNIX_EPOCH};
+    use tower::ServiceExt;
+
+    async fn test_handler() -> &'static str {
+        "success"
+    }
+
+    fn create_test_token(secret: &str, sub: &str, exp_offset: i64) -> String {
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_secs() as i64;
+        let exp = (now + exp_offset) as usize;
+
+        let claims = Claims {
+            sub: sub.to_string(),
+            exp,
+        };
+
+        encode(
+            &Header::default(),
+            &claims,
+            &EncodingKey::from_secret(secret.as_ref()),
+        )
+        .unwrap()
+    }
+
+    #[tokio::test]
+    async fn test_jwt_auth_middleware_valid_token() {
+        let auth_config = Arc::new(AuthConfig {
+            jwt_secret: "test-secret".to_string(),
+        });
+
+        let app =
+            Router::new()
+                .route("/test", get(test_handler))
+                .layer(middleware::from_fn_with_state(
+                    auth_config.clone(),
+                    jwt_auth_middleware,
+                ));
+
+        let token = create_test_token("test-secret", "user123", 3600);
+        let request = Request::builder()
+            .uri("/test")
+            .header("Authorization", format!("Bearer {}", token))
+            .body(Body::empty())
+            .unwrap();
+
+        let response = app.oneshot(request).await.unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+    }
+
+    #[tokio::test]
+    async fn test_jwt_auth_middleware_missing_header() {
+        let auth_config = Arc::new(AuthConfig {
+            jwt_secret: "test-secret".to_string(),
+        });
+
+        let app =
+            Router::new()
+                .route("/test", get(test_handler))
+                .layer(middleware::from_fn_with_state(
+                    auth_config.clone(),
+                    jwt_auth_middleware,
+                ));
+
+        let request = Request::builder().uri("/test").body(Body::empty()).unwrap();
+
+        let response = app.oneshot(request).await.unwrap();
+        assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
+    }
+
+    #[tokio::test]
+    async fn test_jwt_auth_middleware_invalid_format() {
+        let auth_config = Arc::new(AuthConfig {
+            jwt_secret: "test-secret".to_string(),
+        });
+
+        let app =
+            Router::new()
+                .route("/test", get(test_handler))
+                .layer(middleware::from_fn_with_state(
+                    auth_config.clone(),
+                    jwt_auth_middleware,
+                ));
+
+        let request = Request::builder()
+            .uri("/test")
+            .header("Authorization", "Invalid token")
+            .body(Body::empty())
+            .unwrap();
+
+        let response = app.oneshot(request).await.unwrap();
+        assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
+    }
+
+    #[tokio::test]
+    async fn test_jwt_auth_middleware_invalid_token() {
+        let auth_config = Arc::new(AuthConfig {
+            jwt_secret: "test-secret".to_string(),
+        });
+
+        let app =
+            Router::new()
+                .route("/test", get(test_handler))
+                .layer(middleware::from_fn_with_state(
+                    auth_config.clone(),
+                    jwt_auth_middleware,
+                ));
+
+        let request = Request::builder()
+            .uri("/test")
+            .header("Authorization", "Bearer invalid.jwt.token")
+            .body(Body::empty())
+            .unwrap();
+
+        let response = app.oneshot(request).await.unwrap();
+        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+    }
+
+    #[tokio::test]
+    async fn test_jwt_auth_middleware_expired_token() {
+        let auth_config = Arc::new(AuthConfig {
+            jwt_secret: "test-secret".to_string(),
+        });
+
+        let app =
+            Router::new()
+                .route("/test", get(test_handler))
+                .layer(middleware::from_fn_with_state(
+                    auth_config.clone(),
+                    jwt_auth_middleware,
+                ));
+
+        let token = create_test_token("test-secret", "user123", -3600);
+        let request = Request::builder()
+            .uri("/test")
+            .header("Authorization", format!("Bearer {}", token))
+            .body(Body::empty())
+            .unwrap();
+
+        let response = app.oneshot(request).await.unwrap();
+        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+    }
+
+    #[tokio::test]
+    async fn test_jwt_auth_middleware_wrong_secret() {
+        let auth_config = Arc::new(AuthConfig {
+            jwt_secret: "correct-secret".to_string(),
+        });
+
+        let app =
+            Router::new()
+                .route("/test", get(test_handler))
+                .layer(middleware::from_fn_with_state(
+                    auth_config.clone(),
+                    jwt_auth_middleware,
+                ));
+
+        let token = create_test_token("wrong-secret", "user123", 3600);
+        let request = Request::builder()
+            .uri("/test")
+            .header("Authorization", format!("Bearer {}", token))
+            .body(Body::empty())
+            .unwrap();
+
+        let response = app.oneshot(request).await.unwrap();
+        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+    }
+}

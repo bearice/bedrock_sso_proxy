@@ -5,3 +5,4 @@
 - After each phase, do a commit and make it easy to review and rewind
 - When adding a dep, make sure it's the latest version
 - Before commit, use cargo clippy to check code and cargo fmt to format
+- You should add tests for new code when a phase is finished
