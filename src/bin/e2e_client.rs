@@ -56,6 +56,7 @@ struct Claims {
 #[derive(Debug, Deserialize)]
 struct BedrockResponse {
     #[serde(rename = "type")]
+    #[allow(dead_code)]
     response_type: Option<String>,
     completion: Option<String>,
     content: Option<Vec<ContentBlock>>,
@@ -64,6 +65,7 @@ struct BedrockResponse {
 #[derive(Debug, Deserialize)]
 struct ContentBlock {
     #[serde(rename = "type")]
+    #[allow(dead_code)]
     content_type: String,
     text: Option<String>,
 }

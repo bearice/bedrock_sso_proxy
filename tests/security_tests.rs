@@ -2,6 +2,7 @@ use axum::{
     body::Body,
     http::{Method, Request, StatusCode},
 };
+use base64::Engine;
 use bedrock_sso_proxy::{Config, Server, auth::AuthConfig, aws_http::AwsHttpClient};
 use jsonwebtoken::{EncodingKey, Header, encode};
 use serde::{Deserialize, Serialize};
@@ -64,7 +65,7 @@ async fn test_security_sql_injection_attempts() {
     for model_id in malicious_model_ids {
         let encoded_model_id = urlencoding::encode(model_id);
         let request = Request::builder()
-            .uri(&format!("/model/{}/invoke", encoded_model_id))
+            .uri(format!("/model/{}/invoke", encoded_model_id))
             .method("POST")
             .header("Authorization", format!("Bearer {}", token))
             .header("Content-Type", "application/json")
@@ -294,7 +295,7 @@ async fn test_security_path_traversal() {
 
     for path in path_traversal_attempts {
         let request = Request::builder()
-            .uri(&format!("/model/{}/invoke", path))
+            .uri(format!("/model/{}/invoke", path))
             .method("POST")
             .header("Authorization", format!("Bearer {}", token))
             .header("Content-Type", "application/json")
@@ -428,10 +429,6 @@ async fn test_security_jwt_algorithm_confusion() {
     let server = Server::new(config.clone());
     let app = server.create_app(auth_config, aws_http_client);
 
-    // Try to create a JWT with "none" algorithm (algorithm confusion attack)
-    let mut header = Header::default();
-    header.alg = jsonwebtoken::Algorithm::HS256; // This should be the only accepted algorithm
-
     let now = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .unwrap()
@@ -443,9 +440,67 @@ async fn test_security_jwt_algorithm_confusion() {
         malicious_field: Some("algorithm_confusion".to_string()),
     };
 
-    // Create token with correct algorithm (should work)
+    // Test 1: Create a manually crafted "none" algorithm token
+    // This simulates the classic algorithm confusion attack
+    let none_payload = format!(
+        r#"{{"alg":"none","typ":"JWT"}}.{}.{}"#,
+        base64::engine::general_purpose::URL_SAFE_NO_PAD
+            .encode(serde_json::to_string(&claims).unwrap()),
+        "" // No signature for "none" algorithm
+    );
+
+    let request = Request::builder()
+        .uri("/model/test-model/invoke")
+        .method("POST")
+        .header("Authorization", format!("Bearer {}", none_payload))
+        .header("Content-Type", "application/json")
+        .body(Body::from(r#"{"messages": []}"#))
+        .unwrap();
+
+    let response = app.clone().oneshot(request).await.unwrap();
+    // Should reject "none" algorithm tokens
+    assert_eq!(
+        response.status(),
+        StatusCode::UNAUTHORIZED,
+        "Server should reject 'none' algorithm tokens"
+    );
+
+    // Test 2: Try different algorithms that might be accepted by mistake
+    let malicious_algorithms = vec!["HS384", "HS512", "RS256", "ES256"];
+
+    for alg in malicious_algorithms {
+        // Create manually crafted header with different algorithm
+        let malicious_header = format!(r#"{{"alg":"{}","typ":"JWT"}}"#, alg);
+        let malicious_token = format!(
+            "{}.{}.invalid_signature",
+            base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(&malicious_header),
+            base64::engine::general_purpose::URL_SAFE_NO_PAD
+                .encode(serde_json::to_string(&claims).unwrap())
+        );
+
+        let request = Request::builder()
+            .uri("/model/test-model/invoke")
+            .method("POST")
+            .header("Authorization", format!("Bearer {}", malicious_token))
+            .header("Content-Type", "application/json")
+            .body(Body::from(r#"{"messages": []}"#))
+            .unwrap();
+
+        let response = app.clone().oneshot(request).await.unwrap();
+        // Should reject tokens with wrong algorithms
+        assert_eq!(
+            response.status(),
+            StatusCode::UNAUTHORIZED,
+            "Server should reject '{}' algorithm tokens",
+            alg
+        );
+    }
+
+    // Test 3: Verify that valid HS256 token still works (positive control)
+    let valid_header = Header::default(); // HS256 is the default algorithm
+
     let valid_token = encode(
-        &header,
+        &valid_header,
         &claims,
         &EncodingKey::from_secret(config.jwt.secret.as_ref()),
     )
@@ -460,8 +515,12 @@ async fn test_security_jwt_algorithm_confusion() {
         .unwrap();
 
     let response = app.oneshot(request).await.unwrap();
-    // Should accept valid HS256 token (may fail for other reasons)
-    assert_ne!(response.status(), StatusCode::UNAUTHORIZED);
+    // Valid HS256 token should not be rejected for auth reasons
+    assert_ne!(
+        response.status(),
+        StatusCode::UNAUTHORIZED,
+        "Valid HS256 token should be accepted"
+    );
 }
 
 #[tokio::test]
