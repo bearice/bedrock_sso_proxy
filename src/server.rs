@@ -6,17 +6,17 @@ use crate::{
 };
 use axum::{
     Router,
-    body::Bytes,
+    body::{Body, Bytes},
     extract::{Path, Query, State},
     http::{HeaderMap, StatusCode},
     middleware,
-    response::{IntoResponse, Json, Response, Sse},
+    response::{Json, Response},
     routing::{get, post},
 };
 use futures_util::StreamExt;
 use serde::Deserialize;
 use serde_json::{Value, json};
-use std::{net::SocketAddr, sync::Arc, time::Duration};
+use std::{net::SocketAddr, sync::Arc};
 use tokio::net::TcpListener;
 use tracing::info;
 
@@ -202,31 +202,22 @@ async fn invoke_model_with_response_stream(
                 model_id
             );
 
-            // Convert the stream to SSE format using try_stream to handle Result
-            let sse_stream = aws_response.stream.map(|chunk_result| {
-                match chunk_result {
-                    Ok(chunk) => {
-                        // Convert bytes to SSE event
-                        let data = String::from_utf8_lossy(&chunk);
-                        Ok(axum::response::sse::Event::default().data(&data))
-                    }
-                    Err(e) => {
-                        tracing::error!("Stream error: {}", e);
-                        // Convert reqwest error to a format that can be used in SSE
-                        Err(Box::new(e) as Box<dyn std::error::Error + Send + Sync>)
-                    }
-                }
+            // AWS Bedrock already returns properly formatted SSE data, so we'll stream it directly
+            let byte_stream = aws_response.stream.map(|chunk_result| {
+                chunk_result.map_err(|e| {
+                    tracing::error!("Stream error: {}", e);
+                    axum::Error::new(e)
+                })
             });
 
-            // Create SSE response
-            let sse = Sse::new(sse_stream).keep_alive(
-                axum::response::sse::KeepAlive::new()
-                    .interval(Duration::from_secs(15))
-                    .text("keep-alive-text"),
-            );
+            // Create a streaming body from the AWS response
+            let body = Body::from_stream(byte_stream);
 
             // Build response with AWS headers
-            let mut response = sse.into_response();
+            let mut response = Response::builder()
+                .status(aws_response.status)
+                .body(body)
+                .unwrap();
 
             // Add important headers from AWS response
             for (name, value) in aws_response.headers.iter() {

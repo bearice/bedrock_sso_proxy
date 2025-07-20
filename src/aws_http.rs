@@ -1,7 +1,7 @@
 use crate::config::AwsConfig;
 use crate::error::AppError;
 use aws_credential_types::Credentials;
-use aws_sigv4::http_request::{SignableBody, SignableRequest, sign};
+use aws_sigv4::http_request::{SignableBody, SignableRequest, SigningSettings, sign};
 use aws_sigv4::sign::v4;
 use aws_smithy_runtime_api::client::identity::Identity;
 use axum::http::{HeaderMap, HeaderValue, Method, Request, StatusCode};
@@ -277,6 +277,7 @@ impl AwsHttpClient {
             .region(&self.config.region)
             .name("bedrock")
             .time(SystemTime::now())
+            .settings(SigningSettings::default())
             .build()?
             .into();
 

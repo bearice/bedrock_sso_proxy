@@ -2,13 +2,14 @@
 name = "bedrock_sso_proxy"
 version = "0.1.0"
 edition = "2024"
+default-run = "bedrock_proxy"
 
 [[bin]]
 name = "bedrock_proxy"
 path = "src/main.rs"
 
 [[bin]]
-name = "bedrock_e2e_client"
+name = "e2e"
 path = "src/bin/e2e_client.rs"
 
 [dependencies]
@@ -32,6 +33,7 @@ futures-util = "^0.3"
 tokio-stream = "^0.1"
 config = "^0.15"
 clap = { version = "^4.0", features = ["derive"] }
+base64 = "^0.22"
 
 [dev-dependencies]
 tokio-test = "^0.4"
