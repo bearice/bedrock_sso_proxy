@@ -85,10 +85,13 @@ impl OAuthService {
         let provider = self.config.get_oauth_provider(provider_name)
             .ok_or_else(|| AppError::BadRequest(format!("Unknown OAuth provider: {}", provider_name)))?;
 
+        // Use the configured redirect URI if available, otherwise use the provided one
+        let actual_redirect_uri = provider.redirect_uri.as_deref().unwrap_or(redirect_uri);
+
         let client = self.create_oauth_client(&provider)?;
         
-        // Create CSRF state token
-        let state = self.cache.create_state(provider_name.to_string(), redirect_uri.to_string());
+        // Create CSRF state token - store the actual redirect URI being used
+        let state = self.cache.create_state(provider_name.to_string(), actual_redirect_uri.to_string());
         
         let (authorization_url, _csrf_token) = client
             .authorize_url(|| CsrfToken::new(state.clone()))
@@ -144,20 +147,14 @@ impl OAuthService {
         // Create composite user ID
         let composite_user_id = format!("{}:{}", request.provider, user_id);
 
-        // Create refresh token
-        let refresh_token = self.cache.create_refresh_token(
-            composite_user_id.clone(),
-            request.provider.clone(),
-        );
-
-        // Create OAuth JWT token
+        // Create OAuth JWT token (long-lived, no refresh token needed for Claude Code)
         let oauth_claims = OAuthClaims::new(
             composite_user_id,
             request.provider.clone(),
             email.to_string(),
             provider.scopes.clone(),
             self.config.jwt.access_token_ttl,
-            Some(refresh_token.clone()),
+            None, // No refresh token - JWT is long-lived
         );
 
         let access_token = self.jwt_service.create_oauth_token(&oauth_claims)?;
@@ -166,7 +163,7 @@ impl OAuthService {
             access_token,
             token_type: "Bearer".to_string(),
             expires_in: self.config.jwt.access_token_ttl,
-            refresh_token,
+            refresh_token: String::new(), // Empty - not used for Claude Code
             scope: provider.scopes.join(" "),
         })
     }
@@ -231,36 +228,27 @@ impl OAuthService {
         ProvidersResponse { providers }
     }
 
+    pub fn get_redirect_uri_for_state(&self, state: &str) -> Option<String> {
+        self.cache.get_state_data(state).map(|state_data| state_data.redirect_uri)
+    }
+
     pub async fn validate_token(&self, token: &str) -> Result<ValidationResponse, AppError> {
-        use crate::auth::cache::hash_token;
-        
-        let token_hash = hash_token(token);
-        
         // Check cache first
-        if let Some(cached) = self.cache.get_validation(&token_hash) {
+        if let Some(cached) = self.cache.get_validation(token) {
             return Ok(ValidationResponse {
                 valid: true,
-                sub: cached.user_id,
-                provider: cached.provider,
-                expires_at: cached.expires_at.timestamp(),
-                scopes: cached.scopes,
+                sub: cached.claims.sub,
+                provider: cached.claims.provider,
+                expires_at: cached.claims.exp as i64,
+                scopes: cached.claims.scopes,
             });
         }
 
         // Validate token with JWT service
         let claims = self.jwt_service.validate_oauth_token(token)?;
 
-        // Cache the validation result
-        let cached_validation = crate::auth::cache::CachedValidation {
-            user_id: claims.sub.clone(),
-            provider: claims.provider.clone(),
-            email: claims.email.clone(),
-            validated_at: chrono::Utc::now(),
-            expires_at: claims.expires_at(),
-            scopes: claims.scopes.clone(),
-        };
-
-        self.cache.set_validation(token_hash, cached_validation);
+        // Cache the validation result (claims are cloned into cache)
+        self.cache.set_validation(token, claims.clone());
 
         Ok(ValidationResponse {
             valid: true,

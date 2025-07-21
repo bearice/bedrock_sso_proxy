@@ -8,12 +8,8 @@ use uuid::Uuid;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct CachedValidation {
-    pub user_id: String,
-    pub provider: String,
-    pub email: String,
+    pub claims: crate::auth::jwt::OAuthClaims,
     pub validated_at: DateTime<Utc>,
-    pub expires_at: DateTime<Utc>,
-    pub scopes: Vec<String>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -69,29 +65,38 @@ impl OAuthCache {
         cache
     }
 
-    // Validation cache methods
-    pub fn get_validation(&self, token_hash: &str) -> Option<CachedValidation> {
-        self.validation_cache.get(token_hash).and_then(|entry| {
-            if entry.expires_at > Utc::now() {
+    // Validation cache methods with internal hashing
+    pub fn get_validation(&self, token: &str) -> Option<CachedValidation> {
+        let token_hash = hash_token(token);
+        self.validation_cache.get(&token_hash).and_then(|entry| {
+            if !entry.claims.is_expired() {
                 Some(entry.clone())
             } else {
                 // Entry expired, remove it
                 drop(entry);
-                self.validation_cache.remove(token_hash);
+                self.validation_cache.remove(&token_hash);
                 None
             }
         })
     }
 
-    pub fn set_validation(&self, token_hash: String, validation: CachedValidation) {
+    pub fn set_validation(&self, token: &str, claims: crate::auth::jwt::OAuthClaims) {
         if self.validation_cache.len() >= self.max_entries {
             self.cleanup_expired_validations();
         }
+        
+        let token_hash = hash_token(token);
+        let validation = CachedValidation {
+            claims,
+            validated_at: Utc::now(),
+        };
+        
         self.validation_cache.insert(token_hash, validation);
     }
 
-    pub fn remove_validation(&self, token_hash: &str) {
-        self.validation_cache.remove(token_hash);
+    pub fn remove_validation(&self, token: &str) {
+        let token_hash = hash_token(token);
+        self.validation_cache.remove(&token_hash);
     }
 
     // State cache methods
@@ -106,6 +111,16 @@ impl OAuthCache {
         };
         self.state_cache.insert(state.clone(), state_data);
         state
+    }
+
+    pub fn get_state_data(&self, state: &str) -> Option<StateData> {
+        self.state_cache.get(state).and_then(|state_data| {
+            if state_data.expires_at > Utc::now() {
+                Some(state_data.clone())
+            } else {
+                None
+            }
+        })
     }
 
     pub fn get_and_remove_state(&self, state: &str) -> Option<StateData> {
@@ -182,8 +197,7 @@ impl OAuthCache {
 
     // Cleanup methods
     fn cleanup_expired_validations(&self) {
-        let now = Utc::now();
-        self.validation_cache.retain(|_, validation| validation.expires_at > now);
+        self.validation_cache.retain(|_, validation| !validation.claims.is_expired());
     }
 
     #[allow(dead_code)]
@@ -209,7 +223,7 @@ impl OAuthCache {
                 interval.tick().await;
                 
                 let now = Utc::now();
-                validation_cache.retain(|_, validation| validation.expires_at > now);
+                validation_cache.retain(|_, validation| !validation.claims.is_expired());
                 state_cache.retain(|_, state| state.expires_at > now);
                 refresh_token_cache.retain(|_, token_data| token_data.expires_at > now);
             }
@@ -233,7 +247,7 @@ pub struct CacheStats {
     pub refresh_token_entries: usize,
 }
 
-pub fn hash_token(token: &str) -> String {
+fn hash_token(token: &str) -> String {
     let mut hasher = Sha256::new();
     hasher.update(token.as_bytes());
     format!("{:x}", hasher.finalize())
@@ -247,26 +261,25 @@ mod tests {
     async fn test_validation_cache() {
         let cache = OAuthCache::new(3600, 600, 86400, 1000);
         let token = "test_token";
-        let token_hash = hash_token(token);
         
-        let validation = CachedValidation {
-            user_id: "google:123".to_string(),
-            provider: "google".to_string(),
-            email: "test@example.com".to_string(),
-            validated_at: Utc::now(),
-            expires_at: Utc::now() + chrono::Duration::hours(1),
-            scopes: vec!["email".to_string()],
-        };
+        let claims = crate::auth::jwt::OAuthClaims::new(
+            "google:123".to_string(),
+            "google".to_string(),
+            "test@example.com".to_string(),
+            vec!["email".to_string()],
+            3600, // 1 hour
+            None,
+        );
 
         // Test set and get
-        cache.set_validation(token_hash.clone(), validation.clone());
-        let retrieved = cache.get_validation(&token_hash);
+        cache.set_validation(token, claims.clone());
+        let retrieved = cache.get_validation(token);
         assert!(retrieved.is_some());
-        assert_eq!(retrieved.unwrap().user_id, "google:123");
+        assert_eq!(retrieved.unwrap().claims.sub, "google:123");
 
         // Test remove
-        cache.remove_validation(&token_hash);
-        assert!(cache.get_validation(&token_hash).is_none());
+        cache.remove_validation(token);
+        assert!(cache.get_validation(token).is_none());
     }
 
     #[tokio::test]
@@ -335,26 +348,26 @@ mod tests {
     #[tokio::test]
     async fn test_expired_validation_cleanup() {
         let cache = OAuthCache::new(1, 600, 86400, 1000); // 1 second TTL
-        let token_hash = hash_token("test_token");
+        let token = "test_token";
         
-        let validation = CachedValidation {
-            user_id: "google:123".to_string(),
-            provider: "google".to_string(),
-            email: "test@example.com".to_string(),
-            validated_at: Utc::now(),
-            expires_at: Utc::now() + chrono::Duration::seconds(1),
-            scopes: vec!["email".to_string()],
-        };
+        let claims = crate::auth::jwt::OAuthClaims::new(
+            "google:123".to_string(),
+            "google".to_string(),
+            "test@example.com".to_string(),
+            vec!["email".to_string()],
+            1, // 1 second expiration
+            None,
+        );
 
-        cache.set_validation(token_hash.clone(), validation);
+        cache.set_validation(token, claims);
         
         // Should be available immediately
-        assert!(cache.get_validation(&token_hash).is_some());
+        assert!(cache.get_validation(token).is_some());
         
         // Wait for expiration
         tokio::time::sleep(Duration::from_secs(2)).await;
         
         // Should be removed due to expiration
-        assert!(cache.get_validation(&token_hash).is_none());
+        assert!(cache.get_validation(token).is_none());
     }
 }

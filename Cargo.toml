@@ -14,6 +14,7 @@ path = "src/bin/e2e_client.rs"
 
 [dependencies]
 axum = { version = "^0.8", features = ["ws"] }
+tower-http = { version = "^0.6", features = ["fs", "cors", "trace"] }
 tokio = { version = "^1.0", features = ["full"] }
 tokio-tungstenite = "^0.27"
 reqwest = { version = "^0.12", features = ["json", "stream"] }
@@ -41,6 +42,8 @@ uuid = { version = "^1.0", features = ["v4", "serde"] }
 dashmap = "^6.1"
 sha2 = "^0.10"
 async-trait = "^0.1"
+rust-embed = "^8.0"
+urlencoding = "^2.1"
 
 [dev-dependencies]
 tokio-test = "^0.4"

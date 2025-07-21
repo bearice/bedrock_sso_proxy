@@ -4,12 +4,14 @@ use crate::{
 };
 use axum::{
     extract::{Path, Query, State, Request},
-    response::{Html, Json},
+    response::{Json, Redirect},
     routing::{get, post},
     Router,
+    http::HeaderMap,
 };
 use serde::Deserialize;
 use std::sync::Arc;
+use url::Url;
 
 #[derive(Deserialize)]
 pub struct AuthorizeQuery {
@@ -19,21 +21,25 @@ pub struct AuthorizeQuery {
 
 pub fn create_auth_routes() -> Router<Arc<OAuthService>> {
     Router::new()
-        .route("/auth/authorize/{provider}", get(authorize_handler))
-        .route("/auth/token", post(token_handler))
-        .route("/auth/refresh", post(refresh_handler))
-        .route("/auth/providers", get(providers_handler))
-        .route("/auth/callback/{provider}", get(callback_handler))
-        .route("/auth/validate", get(validate_handler))
+        .route("/authorize/{provider}", get(authorize_handler))
+        .route("/token", post(token_handler))
+        .route("/refresh", post(refresh_handler))
+        .route("/providers", get(providers_handler))
+        .route("/callback/{provider}", get(callback_handler))
+        .route("/validate", get(validate_handler))
 }
 
 pub async fn authorize_handler(
     State(oauth_service): State<Arc<OAuthService>>,
     Path(provider): Path<String>,
     Query(params): Query<AuthorizeQuery>,
+    headers: HeaderMap,
 ) -> Result<Json<crate::auth::oauth::AuthorizeResponse>, AppError> {
     let redirect_uri = params.redirect_uri
-        .unwrap_or_else(|| "http://localhost:3000/auth/callback".to_string());
+        .unwrap_or_else(|| {
+            // Build redirect URI from request headers to avoid hardcoded URLs
+            build_redirect_uri_from_request(&headers, &provider)
+        });
 
     let response = oauth_service.get_authorization_url(&provider, &redirect_uri)?;
     Ok(Json(response))
@@ -66,16 +72,26 @@ pub async fn callback_handler(
     State(oauth_service): State<Arc<OAuthService>>,
     Path(provider): Path<String>,
     Query(params): Query<CallbackQuery>,
-) -> Result<Html<String>, AppError> {
+) -> Result<Redirect, AppError> {
+    // Handle OAuth errors first
+    if let Some(error) = params.error {
+        let error_description = params.error_description.unwrap_or_else(|| "OAuth authentication failed".to_string());
+        let error_url = build_callback_url(&[
+            ("error", &error),
+            ("error_description", &error_description),
+        ])?;
+        return Ok(Redirect::to(&error_url));
+    }
+
     let code = params.code
         .ok_or_else(|| AppError::BadRequest("Missing authorization code".to_string()))?;
     
     let state = params.state
         .ok_or_else(|| AppError::BadRequest("Missing state parameter".to_string()))?;
 
-    // For callback, we use a default redirect URI - in a real implementation,
-    // this should be configured or stored with the state
-    let redirect_uri = "http://localhost:3000/auth/callback".to_string();
+    // Get the redirect URI from the state data (stored when authorization URL was generated)
+    let redirect_uri = oauth_service.get_redirect_uri_for_state(&state)
+        .ok_or_else(|| AppError::BadRequest("Invalid or expired state parameter".to_string()))?;
 
     let token_request = TokenRequest {
         provider: provider.clone(),
@@ -86,12 +102,24 @@ pub async fn callback_handler(
 
     match oauth_service.exchange_code_for_token(token_request).await {
         Ok(token_response) => {
-            let html = generate_success_html(&provider, &token_response);
-            Ok(Html(html))
+            // Redirect to frontend callback page with success parameters
+            let success_url = build_callback_url(&[
+                ("success", "true"),
+                ("provider", &provider),
+                ("access_token", &token_response.access_token),
+                ("expires_in", &token_response.expires_in.to_string()),
+                ("scope", &token_response.scope),
+            ])?;
+            Ok(Redirect::to(&success_url))
         }
         Err(e) => {
-            let html = generate_error_html(&provider, &e.to_string());
-            Ok(Html(html))
+            // Redirect to frontend callback page with error parameters
+            let error_url = build_callback_url(&[
+                ("error", "token_exchange_failed"),
+                ("error_description", &e.to_string()),
+                ("provider", &provider),
+            ])?;
+            Ok(Redirect::to(&error_url))
         }
     }
 }
@@ -124,165 +152,139 @@ pub struct CallbackQuery {
     pub error_description: Option<String>,
 }
 
-fn generate_success_html(provider: &str, token_response: &crate::auth::oauth::TokenResponse) -> String {
-    let provider_display = match provider {
-        "google" => "Google",
-        "github" => "GitHub",
-        "microsoft" => "Microsoft",
-        "gitlab" => "GitLab",
-        "auth0" => "Auth0",
-        "okta" => "Okta",
-        _ => provider,
-    };
-
-    format!(r#"
-<!DOCTYPE html>
-<html>
-<head>
-    <title>Authentication Success</title>
-    <style>
-        body {{ font-family: Arial, sans-serif; margin: 40px; background-color: #f5f5f5; }}
-        .container {{ background: white; padding: 30px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); max-width: 800px; }}
-        .success {{ color: #28a745; }}
-        .token-box {{ background: #f8f9fa; padding: 15px; border-radius: 4px; border-left: 4px solid #007bff; margin: 15px 0; }}
-        .token-value {{ font-family: monospace; word-break: break-all; font-size: 12px; }}
-        .copy-btn {{ background: #007bff; color: white; border: none; padding: 5px 10px; border-radius: 3px; cursor: pointer; margin-left: 10px; }}
-        .setup-section {{ margin-top: 30px; padding: 20px; background: #e9f7ff; border-radius: 4px; }}
-        pre {{ background: #f1f1f1; padding: 15px; border-radius: 4px; overflow-x: auto; }}
-    </style>
-</head>
-<body>
-    <div class="container">
-        <h1 class="success">✅ Authentication Successful</h1>
-        <p><strong>Provider:</strong> {}</p>
-        
-        <div class="token-box">
-            <h3>Access Token</h3>
-            <div class="token-value" id="access-token">{}</div>
-            <button class="copy-btn" onclick="copyToClipboard('access-token')">Copy</button>
-        </div>
-        
-        <div class="token-box">
-            <h3>Refresh Token</h3>
-            <div class="token-value" id="refresh-token">{}</div>
-            <button class="copy-btn" onclick="copyToClipboard('refresh-token')">Copy</button>
-        </div>
-        
-        <div class="setup-section">
-            <h2>🔧 Claude Code Setup</h2>
-            <p>To use this token with Claude Code, choose one of the following methods:</p>
-            
-            <h3>Method 1: Environment Variables</h3>
-            <pre>export BEDROCK_TOKEN="{}"
-export BEDROCK_ENDPOINT="https://your-proxy-domain.com"</pre>
-            
-            <h3>Method 2: Claude Code Configuration</h3>
-            <pre>claude-code config set bedrock.token "{}"
-claude-code config set bedrock.endpoint "https://your-proxy-domain.com"</pre>
-            
-            <h3>Method 3: Config File (~/.claude/config.json)</h3>
-            <pre>{{
-  "bedrock": {{
-    "endpoint": "https://your-proxy-domain.com",
-    "token": "{}",
-    "refresh_token": "{}"
-  }}
-}}</pre>
-            
-            <h3>Testing Your Setup</h3>
-            <pre>curl -X POST "https://your-proxy-domain.com/model/anthropic.claude-3-sonnet-20240229-v1:0/invoke" \\
-  -H "Authorization: Bearer {}" \\
-  -H "Content-Type: application/json" \\
-  -d '{{
-    "anthropic_version": "bedrock-2023-05-31",
-    "max_tokens": 1000,
-    "messages": [{{"role": "user", "content": "Hello"}}]
-  }}'</pre>
-            
-            <p><strong>Token expires in:</strong> {} seconds ({} hours)</p>
-            <p><strong>Scopes:</strong> {}</p>
-        </div>
-    </div>
+/// Build a redirect URI from request headers, supporting reverse proxies and sub-paths
+fn build_redirect_uri_from_request(headers: &HeaderMap, provider: &str) -> String {
+    // 1. Determine the scheme (http/https)
+    let scheme = determine_scheme_from_headers(headers);
     
-    <script>
-        function copyToClipboard(elementId) {{
-            const element = document.getElementById(elementId);
-            const text = element.textContent;
-            
-            if (navigator.clipboard) {{
-                navigator.clipboard.writeText(text).then(() => {{
-                    alert('Token copied to clipboard!');
-                }});
-            }} else {{
-                // Fallback for older browsers
-                const textArea = document.createElement('textarea');
-                textArea.value = text;
-                document.body.appendChild(textArea);
-                textArea.select();
-                document.execCommand('copy');
-                document.body.removeChild(textArea);
-                alert('Token copied to clipboard!');
-            }}
-        }}
-    </script>
-</body>
-</html>
-"#, 
-        provider_display,
-        token_response.access_token,
-        token_response.refresh_token,
-        token_response.access_token,
-        token_response.access_token,
-        token_response.access_token,
-        token_response.refresh_token,
-        token_response.access_token,
-        token_response.expires_in,
-        token_response.expires_in / 3600,
-        token_response.scope
-    )
+    // 2. Get the host (with port if non-standard)
+    let host = determine_host_from_headers(headers);
+    
+    // 3. Determine the base path (for sub-path deployments)
+    let base_path = determine_base_path_from_headers(headers);
+    
+    // 4. Build the complete redirect URI
+    format!("{}://{}{}/auth/callback/{}", scheme, host, base_path, provider)
 }
 
-fn generate_error_html(provider: &str, error: &str) -> String {
-    let provider_display = match provider {
-        "google" => "Google",
-        "github" => "GitHub",
-        "microsoft" => "Microsoft",
-        "gitlab" => "GitLab",
-        "auth0" => "Auth0",
-        "okta" => "Okta",
-        _ => provider,
-    };
-
-    format!(r#"
-<!DOCTYPE html>
-<html>
-<head>
-    <title>Authentication Error</title>
-    <style>
-        body {{ font-family: Arial, sans-serif; margin: 40px; background-color: #f5f5f5; }}
-        .container {{ background: white; padding: 30px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); max-width: 600px; }}
-        .error {{ color: #dc3545; }}
-        .error-box {{ background: #f8d7da; padding: 15px; border-radius: 4px; border-left: 4px solid #dc3545; margin: 15px 0; }}
-        .retry-btn {{ background: #007bff; color: white; text-decoration: none; padding: 10px 20px; border-radius: 4px; display: inline-block; margin-top: 15px; }}
-    </style>
-</head>
-<body>
-    <div class="container">
-        <h1 class="error">❌ Authentication Failed</h1>
-        <p><strong>Provider:</strong> {}</p>
-        
-        <div class="error-box">
-            <h3>Error Details</h3>
-            <p>{}</p>
-        </div>
-        
-        <p>Please check your OAuth configuration and try again.</p>
-        <a href="javascript:history.back()" class="retry-btn">← Go Back</a>
-    </div>
-</body>
-</html>
-"#, provider_display, error)
+/// Determine the scheme from various proxy headers
+fn determine_scheme_from_headers(headers: &HeaderMap) -> &'static str {
+    // Check X-Forwarded-Proto (most common)
+    if let Some(proto) = headers.get("x-forwarded-proto").and_then(|h| h.to_str().ok()) {
+        if proto.contains("https") {
+            return "https";
+        }
+    }
+    
+    // Check X-Forwarded-SSL (Apache/nginx)
+    if headers.get("x-forwarded-ssl").is_some() {
+        return "https";
+    }
+    
+    // Check Front-End-Https (Microsoft IIS)
+    if let Some(fe_https) = headers.get("front-end-https").and_then(|h| h.to_str().ok()) {
+        if fe_https.eq_ignore_ascii_case("on") {
+            return "https";
+        }
+    }
+    
+    // Check X-Url-Scheme (some load balancers)
+    if let Some(scheme) = headers.get("x-url-scheme").and_then(|h| h.to_str().ok()) {
+        if scheme.eq_ignore_ascii_case("https") {
+            return "https";
+        }
+    }
+    
+    "http" // default to http for development
 }
+
+/// Determine the host from various headers, handling proxied requests
+fn determine_host_from_headers(headers: &HeaderMap) -> String {
+    // Check X-Forwarded-Host (most common for proxied requests)
+    if let Some(host) = headers.get("x-forwarded-host").and_then(|h| h.to_str().ok()) {
+        // Take the first host if there are multiple (comma-separated)
+        return host.split(',').next().unwrap().trim().to_string();
+    }
+    
+    // Check X-Original-Host (some proxies)
+    if let Some(host) = headers.get("x-original-host").and_then(|h| h.to_str().ok()) {
+        return host.to_string();
+    }
+    
+    // Fallback to standard Host header
+    headers
+        .get("host")
+        .and_then(|h| h.to_str().ok())
+        .unwrap_or("localhost:3000") // development fallback
+        .to_string()
+}
+
+/// Determine the base path for sub-path deployments
+fn determine_base_path_from_headers(headers: &HeaderMap) -> String {
+    // Check X-Forwarded-Prefix (nginx, Traefik)
+    if let Some(prefix) = headers.get("x-forwarded-prefix").and_then(|h| h.to_str().ok()) {
+        return ensure_leading_slash(prefix.trim_end_matches('/'));
+    }
+    
+    // Check X-Forwarded-Path (some load balancers)
+    if let Some(path) = headers.get("x-forwarded-path").and_then(|h| h.to_str().ok()) {
+        return ensure_leading_slash(path.trim_end_matches('/'));
+    }
+    
+    // Check X-Script-Name (WSGI-style)
+    if let Some(script_name) = headers.get("x-script-name").and_then(|h| h.to_str().ok()) {
+        return ensure_leading_slash(script_name.trim_end_matches('/'));
+    }
+    
+    // Check X-Original-URI and extract path prefix
+    if let Some(original_uri) = headers.get("x-original-uri").and_then(|h| h.to_str().ok()) {
+        if let Some(path_end) = original_uri.find("/auth/") {
+            let base_path = &original_uri[..path_end];
+            if !base_path.is_empty() {
+                return ensure_leading_slash(base_path);
+            }
+        }
+    }
+    
+    // No sub-path detected
+    String::new()
+}
+
+/// Ensure a path has a leading slash but no trailing slash
+fn ensure_leading_slash(path: &str) -> String {
+    if path.is_empty() {
+        String::new()
+    } else if path.starts_with('/') {
+        path.to_string()
+    } else {
+        format!("/{}", path)
+    }
+}
+
+/// Helper function to build callback URLs with proper query parameter encoding.
+/// 
+/// This is much safer than manual string formatting because:
+/// - Automatic URL encoding of special characters
+/// - Prevents injection attacks through malicious parameters  
+/// - Handles edge cases like empty values, special characters
+/// - More maintainable and readable than format! macros
+/// - Deployment path agnostic (returns relative URL)
+fn build_callback_url(params: &[(&str, &str)]) -> Result<String, AppError> {
+    // Use a temporary base URL just for query parameter building
+    let mut url = Url::parse("http://temp/callback")
+        .map_err(|e| AppError::Internal(format!("Failed to parse base URL: {}", e)))?;
+    
+    {
+        let mut query_pairs = url.query_pairs_mut();
+        for (key, value) in params {
+            query_pairs.append_pair(key, value);
+        }
+    }
+    
+    // Return just the relative path and query, no assumptions about deployment domain/path
+    Ok(format!("/callback?{}", url.query().unwrap_or("")))
+}
+
 
 #[cfg(test)]
 mod tests {
@@ -341,7 +343,7 @@ mod tests {
         let app = create_auth_routes().with_state(oauth_service);
 
         let request = Request::builder()
-            .uri("/auth/authorize/google")
+            .uri("/authorize/google")
             .body(Body::empty())
             .unwrap();
 
@@ -355,7 +357,7 @@ mod tests {
         let app = create_auth_routes().with_state(oauth_service);
 
         let request = Request::builder()
-            .uri("/auth/authorize/unknown")
+            .uri("/authorize/unknown")
             .body(Body::empty())
             .unwrap();
 
@@ -369,7 +371,7 @@ mod tests {
         let app = create_auth_routes().with_state(oauth_service);
 
         let request = Request::builder()
-            .uri("/auth/providers")
+            .uri("/providers")
             .body(Body::empty())
             .unwrap();
 
@@ -383,7 +385,7 @@ mod tests {
         let app = create_auth_routes().with_state(oauth_service);
 
         let request = Request::builder()
-            .uri("/auth/validate")
+            .uri("/validate")
             .body(Body::empty())
             .unwrap();
 
@@ -397,7 +399,7 @@ mod tests {
         let app = create_auth_routes().with_state(oauth_service);
 
         let request = Request::builder()
-            .uri("/auth/validate")
+            .uri("/validate")
             .header("authorization", "Invalid token")
             .body(Body::empty())
             .unwrap();
@@ -407,27 +409,101 @@ mod tests {
     }
 
     #[test]
-    fn test_generate_success_html() {
-        let token_response = crate::auth::oauth::TokenResponse {
-            access_token: "test_token".to_string(),
-            token_type: "Bearer".to_string(),
-            expires_in: 3600,
-            refresh_token: "refresh_token".to_string(),
-            scope: "email profile".to_string(),
-        };
+    fn test_build_callback_url() {
+        // Test success URL
+        let success_url = build_callback_url(&[
+            ("success", "true"),
+            ("provider", "google"),
+            ("access_token", "token123"),
+            ("expires_in", "3600"),
+            ("scope", "email profile"),
+        ]).unwrap();
+        
+        
+        assert!(success_url.starts_with("/callback?"));
+        assert!(success_url.contains("success=true"));
+        assert!(success_url.contains("provider=google"));
+        assert!(success_url.contains("access_token=token123"));
+        assert!(success_url.contains("expires_in=3600"));
+        // URL crate uses + for spaces in query parameters instead of %20
+        assert!(success_url.contains("scope=email+profile"));
 
-        let html = generate_success_html("google", &token_response);
-        assert!(html.contains("Google"));
-        assert!(html.contains("test_token"));
-        assert!(html.contains("refresh_token"));
-        assert!(html.contains("Claude Code Setup"));
+        // Test error URL with special characters
+        let error_url = build_callback_url(&[
+            ("error", "invalid_request"),
+            ("error_description", "Missing required parameter"),
+            ("provider", "github"),
+        ]).unwrap();
+        
+        assert!(error_url.starts_with("/callback?"));
+        assert!(error_url.contains("error=invalid_request"));
+        assert!(error_url.contains("error_description=Missing+required+parameter"));
+        assert!(error_url.contains("provider=github"));
     }
 
     #[test]
-    fn test_generate_error_html() {
-        let html = generate_error_html("google", "Invalid authorization code");
-        assert!(html.contains("Google"));
-        assert!(html.contains("Invalid authorization code"));
-        assert!(html.contains("Authentication Failed"));
+    fn test_build_redirect_uri_from_request() {
+        // Test basic HTTP with standard host
+        let mut headers = HeaderMap::new();
+        headers.insert("host", "example.com".parse().unwrap());
+        let uri = build_redirect_uri_from_request(&headers, "google");
+        assert_eq!(uri, "http://example.com/auth/callback/google");
+        
+        // Test HTTPS with x-forwarded-proto
+        headers.insert("x-forwarded-proto", "https".parse().unwrap());
+        let uri = build_redirect_uri_from_request(&headers, "github");
+        assert_eq!(uri, "https://example.com/auth/callback/github");
+        
+        // Test HTTPS with x-forwarded-ssl
+        headers.remove("x-forwarded-proto");
+        headers.insert("x-forwarded-ssl", "on".parse().unwrap());
+        let uri = build_redirect_uri_from_request(&headers, "microsoft");
+        assert_eq!(uri, "https://example.com/auth/callback/microsoft");
+        
+        // Test sub-path deployment with X-Forwarded-Prefix
+        headers.clear();
+        headers.insert("host", "api.example.com".parse().unwrap());
+        headers.insert("x-forwarded-proto", "https".parse().unwrap());
+        headers.insert("x-forwarded-prefix", "/my-app".parse().unwrap());
+        let uri = build_redirect_uri_from_request(&headers, "google");
+        assert_eq!(uri, "https://api.example.com/my-app/auth/callback/google");
+        
+        // Test X-Forwarded-Host with multiple hosts (should use first)
+        headers.clear();
+        headers.insert("x-forwarded-host", "api.example.com, internal.example.com".parse().unwrap());
+        headers.insert("x-forwarded-proto", "https".parse().unwrap());
+        let uri = build_redirect_uri_from_request(&headers, "github");
+        assert_eq!(uri, "https://api.example.com/auth/callback/github");
+        
+        // Test X-Original-URI path extraction
+        headers.clear();
+        headers.insert("host", "example.com".parse().unwrap());
+        headers.insert("x-original-uri", "/my-service/auth/authorize/google".parse().unwrap());
+        let uri = build_redirect_uri_from_request(&headers, "google");
+        assert_eq!(uri, "http://example.com/my-service/auth/callback/google");
+        
+        // Test multiple proxy headers (should prioritize correctly)
+        headers.clear();
+        headers.insert("host", "localhost:3000".parse().unwrap());
+        headers.insert("x-forwarded-host", "api.production.com".parse().unwrap());
+        headers.insert("x-forwarded-proto", "https".parse().unwrap());
+        headers.insert("x-forwarded-prefix", "/api/v1".parse().unwrap());
+        let uri = build_redirect_uri_from_request(&headers, "microsoft");
+        assert_eq!(uri, "https://api.production.com/api/v1/auth/callback/microsoft");
+        
+        // Test fallback when no headers
+        let empty_headers = HeaderMap::new();
+        let uri = build_redirect_uri_from_request(&empty_headers, "google");
+        assert_eq!(uri, "http://localhost:3000/auth/callback/google");
     }
+
+    #[test]
+    fn test_ensure_leading_slash() {
+        assert_eq!(ensure_leading_slash(""), "");
+        assert_eq!(ensure_leading_slash("api"), "/api");
+        assert_eq!(ensure_leading_slash("/api"), "/api");
+        assert_eq!(ensure_leading_slash("api/v1"), "/api/v1");
+        assert_eq!(ensure_leading_slash("/api/v1"), "/api/v1");
+    }
+
 }

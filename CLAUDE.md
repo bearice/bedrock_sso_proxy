@@ -131,3 +131,7 @@ Use `BEDROCK_` prefix with double underscores for nesting:
 
 - When clearing context between phases, summarize key changes and prepare notes for the next phase of development
 - Keep track of context clearing to ensure continuity and understanding of project progression
+
+## Development Workflow
+
+- If you need to run a test server, ask me to do it

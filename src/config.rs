@@ -13,6 +13,8 @@ pub struct Config {
     pub oauth: OAuthConfig,
     #[serde(default)]
     pub cache: CacheConfig,
+    #[serde(default)]
+    pub frontend: FrontendConfig,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -146,6 +148,21 @@ impl Default for CacheConfig {
     }
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FrontendConfig {
+    /// Path to serve frontend files from filesystem
+    /// If not specified, uses embedded assets
+    pub path: Option<String>,
+}
+
+impl Default for FrontendConfig {
+    fn default() -> Self {
+        Self {
+            path: None,
+        }
+    }
+}
+
 impl Default for Config {
     fn default() -> Self {
         Self {
@@ -169,6 +186,7 @@ impl Default for Config {
             logging: LoggingConfig::default(),
             oauth: OAuthConfig::default(),
             cache: CacheConfig::default(),
+            frontend: FrontendConfig::default(),
         }
     }
 }

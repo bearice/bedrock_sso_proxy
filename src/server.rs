@@ -9,7 +9,7 @@ use crate::{
     config::Config,
     error::AppError,
     health::HealthService,
-    routes::{create_auth_routes, create_bedrock_routes, create_protected_bedrock_routes},
+    routes::{create_auth_routes, create_bedrock_routes, create_protected_bedrock_routes, create_frontend_router},
 };
 use axum::{
     Router,
@@ -86,7 +86,7 @@ impl Server {
     ) -> Router {
         Router::new()
             // OAuth authentication routes (no auth required)
-            .merge(create_auth_routes().with_state(oauth_service))
+            .nest("/auth", create_auth_routes().with_state(oauth_service))
             // Health check (no auth required)
             .merge(create_bedrock_routes().with_state((aws_http_client.clone(), health_service)))
             // Protected Bedrock API routes
@@ -98,6 +98,8 @@ impl Server {
                         jwt_auth_middleware,
                     ))
             )
+            // Frontend routes (serve last to not conflict with API routes)
+            .fallback_service(create_frontend_router(self.config.frontend.clone()))
     }
 
 
@@ -131,7 +133,18 @@ impl Server {
         health_service.register(Arc::new(oauth_service.health_checker())).await;
         health_service.register(Arc::new(jwt_service.health_checker())).await;
 
-        self.create_oauth_app(auth_config, aws_http_client, oauth_service, health_service)
+        Router::new()
+            .nest("/auth", create_auth_routes().with_state(oauth_service))
+            .merge(create_bedrock_routes().with_state((aws_http_client.clone(), health_service)))
+            .merge(
+                create_protected_bedrock_routes()
+                    .with_state(aws_http_client)
+                    .layer(middleware::from_fn_with_state(
+                        auth_config,
+                        jwt_auth_middleware,
+                    ))
+            )
+            .fallback_service(create_frontend_router(self.config.frontend.clone()))
     }
 }
 
