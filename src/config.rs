@@ -1,13 +1,18 @@
 use config::{Config as ConfigBuilder, ConfigError, Environment, File};
 use serde::{Deserialize, Serialize};
-use std::path::Path;
+use std::{path::Path, collections::HashMap};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Config {
     pub server: ServerConfig,
     pub jwt: JwtConfig,
     pub aws: AwsConfig,
+    #[serde(default)]
     pub logging: LoggingConfig,
+    #[serde(default)]
+    pub oauth: OAuthConfig,
+    #[serde(default)]
+    pub cache: CacheConfig,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -21,10 +26,22 @@ pub struct JwtConfig {
     pub secret: String,
     #[serde(default = "default_jwt_algorithm")]
     pub algorithm: String,
+    #[serde(default = "default_access_token_ttl")]
+    pub access_token_ttl: u64,
+    #[serde(default = "default_refresh_token_ttl")]
+    pub refresh_token_ttl: u64,
 }
 
 fn default_jwt_algorithm() -> String {
     "HS256".to_string()
+}
+
+fn default_access_token_ttl() -> u64 {
+    2592000 // 30 days
+}
+
+fn default_refresh_token_ttl() -> u64 {
+    7776000 // 90 days
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -38,7 +55,95 @@ pub struct AwsConfig {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LoggingConfig {
+    #[serde(default = "default_log_level")]
     pub level: String,
+}
+
+impl Default for LoggingConfig {
+    fn default() -> Self {
+        Self {
+            level: default_log_level(),
+        }
+    }
+}
+
+fn default_log_level() -> String {
+    "info".to_string()
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct OAuthConfig {
+    #[serde(default)]
+    pub providers: HashMap<String, OAuthProvider>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct OAuthProvider {
+    pub client_id: String,
+    pub client_secret: String,
+    #[serde(default)]
+    pub redirect_uri: Option<String>,
+    #[serde(default)]
+    pub scopes: Vec<String>,
+    #[serde(default)]
+    pub authorization_url: Option<String>,
+    #[serde(default)]
+    pub token_url: Option<String>,
+    #[serde(default)]
+    pub user_info_url: Option<String>,
+    #[serde(default = "default_user_id_field")]
+    pub user_id_field: String,
+    #[serde(default = "default_email_field")]
+    pub email_field: String,
+    // For providers like Microsoft with tenant support
+    #[serde(default)]
+    pub tenant_id: Option<String>,
+    // For providers like GitLab with instance support
+    #[serde(default)]
+    pub instance_url: Option<String>,
+    // For providers like Auth0 with domain support
+    #[serde(default)]
+    pub domain: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CacheConfig {
+    #[serde(default = "default_validation_ttl")]
+    pub validation_ttl: u64,
+    #[serde(default = "default_max_entries")]
+    pub max_entries: usize,
+    #[serde(default = "default_cleanup_interval")]
+    pub cleanup_interval: u64,
+}
+
+fn default_user_id_field() -> String {
+    "id".to_string()
+}
+
+fn default_email_field() -> String {
+    "email".to_string()
+}
+
+fn default_validation_ttl() -> u64 {
+    86400 // 24 hours
+}
+
+fn default_max_entries() -> usize {
+    10000
+}
+
+fn default_cleanup_interval() -> u64 {
+    3600 // 1 hour
+}
+
+impl Default for CacheConfig {
+    fn default() -> Self {
+        Self {
+            validation_ttl: default_validation_ttl(),
+            max_entries: default_max_entries(),
+            cleanup_interval: default_cleanup_interval(),
+        }
+    }
 }
 
 impl Default for Config {
@@ -51,6 +156,8 @@ impl Default for Config {
             jwt: JwtConfig {
                 secret: "your-jwt-secret".to_string(),
                 algorithm: "HS256".to_string(),
+                access_token_ttl: default_access_token_ttl(),
+                refresh_token_ttl: default_refresh_token_ttl(),
             },
             aws: AwsConfig {
                 region: "us-east-1".to_string(),
@@ -59,9 +166,9 @@ impl Default for Config {
                 profile: None,
                 bearer_token: None,
             },
-            logging: LoggingConfig {
-                level: "info".to_string(),
-            },
+            logging: LoggingConfig::default(),
+            oauth: OAuthConfig::default(),
+            cache: CacheConfig::default(),
         }
     }
 }
@@ -99,6 +206,142 @@ impl Config {
         );
 
         builder.build()?.try_deserialize()
+    }
+
+    pub fn get_oauth_provider(&self, provider_name: &str) -> Option<OAuthProvider> {
+        self.oauth.providers.get(provider_name).map(|provider| {
+            let mut provider = provider.clone();
+            // Apply predefined provider defaults if URLs are not specified
+            apply_predefined_provider_defaults(provider_name, &mut provider);
+            provider
+        })
+    }
+
+    pub fn list_oauth_providers(&self) -> Vec<String> {
+        self.oauth.providers.keys().cloned().collect()
+    }
+}
+
+fn apply_predefined_provider_defaults(provider_name: &str, provider: &mut OAuthProvider) {
+    match provider_name {
+        "google" => apply_google_defaults(provider),
+        "github" => apply_github_defaults(provider),
+        "microsoft" => apply_microsoft_defaults(provider),
+        "gitlab" => apply_gitlab_defaults(provider),
+        "auth0" => apply_auth0_defaults(provider),
+        "okta" => apply_okta_defaults(provider),
+        _ => {} // Custom provider, no defaults to apply
+    }
+}
+
+fn apply_google_defaults(provider: &mut OAuthProvider) {
+    if provider.authorization_url.is_none() {
+        provider.authorization_url = Some("https://accounts.google.com/o/oauth2/v2/auth".to_string());
+    }
+    if provider.token_url.is_none() {
+        provider.token_url = Some("https://oauth2.googleapis.com/token".to_string());
+    }
+    if provider.user_info_url.is_none() {
+        provider.user_info_url = Some("https://www.googleapis.com/oauth2/v2/userinfo".to_string());
+    }
+    if provider.scopes.is_empty() {
+        provider.scopes = vec!["openid".to_string(), "email".to_string(), "profile".to_string()];
+    }
+    if provider.user_id_field == "id" { // default wasn't overridden
+        provider.user_id_field = "id".to_string();
+    }
+    if provider.email_field == "email" { // default wasn't overridden
+        provider.email_field = "email".to_string();
+    }
+}
+
+fn apply_github_defaults(provider: &mut OAuthProvider) {
+    if provider.authorization_url.is_none() {
+        provider.authorization_url = Some("https://github.com/login/oauth/authorize".to_string());
+    }
+    if provider.token_url.is_none() {
+        provider.token_url = Some("https://github.com/login/oauth/access_token".to_string());
+    }
+    if provider.user_info_url.is_none() {
+        provider.user_info_url = Some("https://api.github.com/user".to_string());
+    }
+    if provider.scopes.is_empty() {
+        provider.scopes = vec!["user:email".to_string()];
+    }
+}
+
+fn apply_microsoft_defaults(provider: &mut OAuthProvider) {
+    let tenant = provider.tenant_id.as_deref().unwrap_or("common");
+    if provider.authorization_url.is_none() {
+        provider.authorization_url = Some(format!("https://login.microsoftonline.com/{}/oauth2/v2.0/authorize", tenant));
+    }
+    if provider.token_url.is_none() {
+        provider.token_url = Some(format!("https://login.microsoftonline.com/{}/oauth2/v2.0/token", tenant));
+    }
+    if provider.user_info_url.is_none() {
+        provider.user_info_url = Some("https://graph.microsoft.com/v1.0/me".to_string());
+    }
+    if provider.scopes.is_empty() {
+        provider.scopes = vec!["openid".to_string(), "profile".to_string(), "email".to_string()];
+    }
+    if provider.email_field == "email" { // default wasn't overridden
+        provider.email_field = "mail".to_string();
+    }
+}
+
+fn apply_gitlab_defaults(provider: &mut OAuthProvider) {
+    let instance = provider.instance_url.as_deref().unwrap_or("https://gitlab.com");
+    if provider.authorization_url.is_none() {
+        provider.authorization_url = Some(format!("{}/oauth/authorize", instance));
+    }
+    if provider.token_url.is_none() {
+        provider.token_url = Some(format!("{}/oauth/token", instance));
+    }
+    if provider.user_info_url.is_none() {
+        provider.user_info_url = Some(format!("{}/api/v4/user", instance));
+    }
+    if provider.scopes.is_empty() {
+        provider.scopes = vec!["read_user".to_string()];
+    }
+}
+
+fn apply_auth0_defaults(provider: &mut OAuthProvider) {
+    if let Some(domain) = &provider.domain {
+        if provider.authorization_url.is_none() {
+            provider.authorization_url = Some(format!("https://{}/authorize", domain));
+        }
+        if provider.token_url.is_none() {
+            provider.token_url = Some(format!("https://{}/oauth/token", domain));
+        }
+        if provider.user_info_url.is_none() {
+            provider.user_info_url = Some(format!("https://{}/userinfo", domain));
+        }
+    }
+    if provider.scopes.is_empty() {
+        provider.scopes = vec!["openid".to_string(), "profile".to_string(), "email".to_string()];
+    }
+    if provider.user_id_field == "id" { // default wasn't overridden
+        provider.user_id_field = "sub".to_string();
+    }
+}
+
+fn apply_okta_defaults(provider: &mut OAuthProvider) {
+    if let Some(domain) = &provider.domain {
+        if provider.authorization_url.is_none() {
+            provider.authorization_url = Some(format!("https://{}/oauth2/default/v1/authorize", domain));
+        }
+        if provider.token_url.is_none() {
+            provider.token_url = Some(format!("https://{}/oauth2/default/v1/token", domain));
+        }
+        if provider.user_info_url.is_none() {
+            provider.user_info_url = Some(format!("https://{}/oauth2/default/v1/userinfo", domain));
+        }
+    }
+    if provider.scopes.is_empty() {
+        provider.scopes = vec!["openid".to_string(), "profile".to_string(), "email".to_string()];
+    }
+    if provider.user_id_field == "id" { // default wasn't overridden
+        provider.user_id_field = "sub".to_string();
     }
 }
 
@@ -151,6 +394,31 @@ mod tests {
         assert_eq!(config.jwt.secret, "your-jwt-secret");
         assert_eq!(config.jwt.algorithm, "HS256");
         assert_eq!(config.aws.region, "us-east-1");
+        assert_eq!(config.logging.level, "info");
+    }
+
+    #[test]
+    fn test_logging_config_default() {
+        let logging_config = LoggingConfig::default();
+        assert_eq!(logging_config.level, "info");
+    }
+
+    #[test]
+    fn test_config_with_partial_logging() {
+        let yaml_content = r#"
+server:
+  host: "localhost"
+  port: 3000
+jwt:
+  secret: "test-secret"
+aws:
+  region: "us-east-1"
+"#;
+        let mut temp_file = NamedTempFile::with_suffix(".yaml").unwrap();
+        temp_file.write_all(yaml_content.as_bytes()).unwrap();
+
+        let config = Config::load_from_file(temp_file.path()).unwrap();
+        // Should use default logging level when not specified
         assert_eq!(config.logging.level, "info");
     }
 

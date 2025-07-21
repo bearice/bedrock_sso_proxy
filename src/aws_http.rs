@@ -1,5 +1,6 @@
 use crate::config::AwsConfig;
 use crate::error::AppError;
+use crate::health::{HealthChecker, HealthCheckResult};
 use aws_credential_types::Credentials;
 use aws_sigv4::http_request::{SignableBody, SignableRequest, SigningSettings, sign};
 use aws_sigv4::sign::v4;
@@ -347,6 +348,64 @@ impl AwsHttpClient {
         }
     }
 
+    /// Create a health checker for this AWS client
+    pub fn health_checker(self) -> AwsHealthChecker {
+        AwsHealthChecker { client: self }
+    }
+}
+
+/// Health checker implementation for AWS Bedrock connection
+pub struct AwsHealthChecker {
+    client: AwsHttpClient,
+}
+
+#[async_trait::async_trait]
+impl HealthChecker for AwsHealthChecker {
+    fn name(&self) -> &str {
+        "aws_bedrock"
+    }
+
+    async fn check(&self) -> HealthCheckResult {
+        match self.client.health_check().await {
+            Ok(()) => {
+                let auth_type = if self.client.config.bearer_token.is_some() {
+                    "bearer_token"
+                } else if self.client.config.access_key_id.is_some() 
+                    && self.client.config.secret_access_key.is_some() {
+                    "sigv4"
+                } else {
+                    "unknown"
+                };
+
+                HealthCheckResult::healthy_with_details(serde_json::json!({
+                    "region": self.client.config.region,
+                    "authentication": auth_type,
+                    "endpoint": self.client.base_url
+                }))
+            }
+            Err(err) => {
+                HealthCheckResult::unhealthy_with_details(
+                    "AWS authentication not configured".to_string(),
+                    serde_json::json!({
+                        "error": err.to_string(),
+                        "region": self.client.config.region,
+                        "endpoint": self.client.base_url
+                    })
+                )
+            }
+        }
+    }
+
+    fn info(&self) -> Option<serde_json::Value> {
+        Some(serde_json::json!({
+            "service": "AWS Bedrock",
+            "region": self.client.config.region,
+            "endpoint": self.client.base_url
+        }))
+    }
+}
+
+impl AwsHttpClient {
     /// Process headers for forwarding to AWS, removing sensitive headers
     pub fn process_headers_for_aws(headers: &HeaderMap) -> HeaderMap {
         let mut forwarded_headers = HeaderMap::new();
@@ -492,7 +551,8 @@ mod tests {
     async fn test_invoke_model_with_test_client() {
         let client = AwsHttpClient::new_test();
 
-        // This should fail because we're using test credentials with real signing
+        // Test that we can create the client and make a call
+        // With test credentials, we expect to get a proper HTTP response (likely 403 Forbidden)
         let result = client
             .invoke_model(
                 "anthropic.claude-v2",
@@ -502,8 +562,16 @@ mod tests {
             )
             .await;
 
-        // Should fail due to invalid credentials or network call
-        assert!(result.is_err());
+        // Should succeed in making the HTTP call but get rejected by AWS
+        assert!(result.is_ok());
+        let response = result.unwrap();
+        
+        // With test credentials, AWS should return 403 Forbidden (deterministic)
+        assert_eq!(response.status, reqwest::StatusCode::FORBIDDEN);
+        assert!(!response.body.is_empty()); // Should have error response body
+        
+        // Verify client configuration
+        assert_eq!(client.get_host(), "bedrock-runtime.us-east-1.amazonaws.com");
     }
 
     #[tokio::test]
