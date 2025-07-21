@@ -84,13 +84,13 @@ impl OAuthCache {
         if self.validation_cache.len() >= self.max_entries {
             self.cleanup_expired_validations();
         }
-        
+
         let token_hash = hash_token(token);
         let validation = CachedValidation {
             claims,
             validated_at: Utc::now(),
         };
-        
+
         self.validation_cache.insert(token_hash, validation);
     }
 
@@ -163,9 +163,14 @@ impl OAuthCache {
         })
     }
 
-    pub fn rotate_refresh_token(&self, old_token: &str, user_id: String, provider: String) -> Option<String> {
+    pub fn rotate_refresh_token(
+        &self,
+        old_token: &str,
+        user_id: String,
+        provider: String,
+    ) -> Option<String> {
         let old_token_hash = hash_token(old_token);
-        
+
         // Remove old token and get its data
         if let Some((_, old_data)) = self.refresh_token_cache.remove(&old_token_hash) {
             if old_data.expires_at > Utc::now() {
@@ -177,10 +182,12 @@ impl OAuthCache {
                     user_id,
                     provider,
                     created_at: now,
-                    expires_at: now + chrono::Duration::seconds(self.refresh_token_ttl.as_secs() as i64),
+                    expires_at: now
+                        + chrono::Duration::seconds(self.refresh_token_ttl.as_secs() as i64),
                     rotation_count: old_data.rotation_count + 1,
                 };
-                self.refresh_token_cache.insert(new_token_hash, new_token_data);
+                self.refresh_token_cache
+                    .insert(new_token_hash, new_token_data);
                 Some(new_token)
             } else {
                 None
@@ -197,7 +204,8 @@ impl OAuthCache {
 
     // Cleanup methods
     fn cleanup_expired_validations(&self) {
-        self.validation_cache.retain(|_, validation| !validation.claims.is_expired());
+        self.validation_cache
+            .retain(|_, validation| !validation.claims.is_expired());
     }
 
     #[allow(dead_code)]
@@ -209,19 +217,20 @@ impl OAuthCache {
     #[allow(dead_code)]
     fn cleanup_expired_refresh_tokens(&self) {
         let now = Utc::now();
-        self.refresh_token_cache.retain(|_, token_data| token_data.expires_at > now);
+        self.refresh_token_cache
+            .retain(|_, token_data| token_data.expires_at > now);
     }
 
     fn start_cleanup_task(&self) {
         let validation_cache = self.validation_cache.clone();
         let state_cache = self.state_cache.clone();
         let refresh_token_cache = self.refresh_token_cache.clone();
-        
+
         tokio::spawn(async move {
             let mut interval = time::interval(Duration::from_secs(3600)); // Clean up every hour
             loop {
                 interval.tick().await;
-                
+
                 let now = Utc::now();
                 validation_cache.retain(|_, validation| !validation.claims.is_expired());
                 state_cache.retain(|_, state| state.expires_at > now);
@@ -261,7 +270,7 @@ mod tests {
     async fn test_validation_cache() {
         let cache = OAuthCache::new(3600, 600, 86400, 1000);
         let token = "test_token";
-        
+
         let claims = crate::auth::jwt::OAuthClaims::new(
             "google:123".to_string(),
             "google".to_string(),
@@ -285,8 +294,11 @@ mod tests {
     #[tokio::test]
     async fn test_state_cache() {
         let cache = OAuthCache::new(3600, 600, 86400, 1000);
-        
-        let state = cache.create_state("google".to_string(), "http://localhost/callback".to_string());
+
+        let state = cache.create_state(
+            "google".to_string(),
+            "http://localhost/callback".to_string(),
+        );
         assert!(!state.is_empty());
 
         let state_data = cache.get_and_remove_state(&state);
@@ -302,7 +314,7 @@ mod tests {
     #[tokio::test]
     async fn test_refresh_token_cache() {
         let cache = OAuthCache::new(3600, 600, 86400, 1000);
-        
+
         let token = cache.create_refresh_token("google:123".to_string(), "google".to_string());
         assert!(!token.is_empty());
 
@@ -314,14 +326,15 @@ mod tests {
         assert_eq!(data.rotation_count, 0);
 
         // Test rotation
-        let new_token = cache.rotate_refresh_token(&token, "google:123".to_string(), "google".to_string());
+        let new_token =
+            cache.rotate_refresh_token(&token, "google:123".to_string(), "google".to_string());
         assert!(new_token.is_some());
         let new_token = new_token.unwrap();
         assert_ne!(token, new_token);
 
         // Old token should be invalid
         assert!(cache.get_refresh_token_data(&token).is_none());
-        
+
         // New token should be valid with incremented rotation count
         let new_data = cache.get_refresh_token_data(&new_token);
         assert!(new_data.is_some());
@@ -333,14 +346,14 @@ mod tests {
         let token = "test_token_123";
         let hash1 = hash_token(token);
         let hash2 = hash_token(token);
-        
+
         // Same token should produce same hash
         assert_eq!(hash1, hash2);
-        
+
         // Different tokens should produce different hashes
         let different_hash = hash_token("different_token");
         assert_ne!(hash1, different_hash);
-        
+
         // Hash should be hex string of expected length (SHA256 = 64 hex chars)
         assert_eq!(hash1.len(), 64);
     }
@@ -349,7 +362,7 @@ mod tests {
     async fn test_expired_validation_cleanup() {
         let cache = OAuthCache::new(1, 600, 86400, 1000); // 1 second TTL
         let token = "test_token";
-        
+
         let claims = crate::auth::jwt::OAuthClaims::new(
             "google:123".to_string(),
             "google".to_string(),
@@ -360,13 +373,13 @@ mod tests {
         );
 
         cache.set_validation(token, claims);
-        
+
         // Should be available immediately
         assert!(cache.get_validation(token).is_some());
-        
+
         // Wait for expiration
         tokio::time::sleep(Duration::from_secs(2)).await;
-        
+
         // Should be removed due to expiration
         assert!(cache.get_validation(token).is_none());
     }

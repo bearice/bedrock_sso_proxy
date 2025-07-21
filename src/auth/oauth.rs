@@ -1,13 +1,12 @@
 use crate::{
+    auth::{OAuthClaims, cache::OAuthCache, jwt::JwtService},
     config::{Config, OAuthProvider},
     error::AppError,
-    auth::{cache::OAuthCache, jwt::JwtService, OAuthClaims},
-    health::{HealthChecker, HealthCheckResult},
+    health::{HealthCheckResult, HealthChecker},
 };
 use oauth2::{
     AuthUrl, AuthorizationCode, ClientId, ClientSecret, CsrfToken, RedirectUrl, Scope,
-    TokenUrl, basic::BasicClient, reqwest::async_http_client,
-    TokenResponse as OAuth2TokenResponse,
+    TokenResponse as OAuth2TokenResponse, TokenUrl, basic::BasicClient, reqwest::async_http_client,
 };
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
@@ -81,18 +80,28 @@ impl OAuthService {
         }
     }
 
-    pub fn get_authorization_url(&self, provider_name: &str, redirect_uri: &str) -> Result<AuthorizeResponse, AppError> {
-        let provider = self.config.get_oauth_provider(provider_name)
-            .ok_or_else(|| AppError::BadRequest(format!("Unknown OAuth provider: {}", provider_name)))?;
+    pub fn get_authorization_url(
+        &self,
+        provider_name: &str,
+        redirect_uri: &str,
+    ) -> Result<AuthorizeResponse, AppError> {
+        let provider = self
+            .config
+            .get_oauth_provider(provider_name)
+            .ok_or_else(|| {
+                AppError::BadRequest(format!("Unknown OAuth provider: {}", provider_name))
+            })?;
 
         // Use the configured redirect URI if available, otherwise use the provided one
         let actual_redirect_uri = provider.redirect_uri.as_deref().unwrap_or(redirect_uri);
 
         let client = self.create_oauth_client(&provider)?;
-        
+
         // Create CSRF state token - store the actual redirect URI being used
-        let state = self.cache.create_state(provider_name.to_string(), actual_redirect_uri.to_string());
-        
+        let state = self
+            .cache
+            .create_state(provider_name.to_string(), actual_redirect_uri.to_string());
+
         let (authorization_url, _csrf_token) = client
             .authorize_url(|| CsrfToken::new(state.clone()))
             .add_scopes(provider.scopes.iter().map(|s| Scope::new(s.clone())))
@@ -105,21 +114,32 @@ impl OAuthService {
         })
     }
 
-    pub async fn exchange_code_for_token(&self, request: TokenRequest) -> Result<TokenResponse, AppError> {
+    pub async fn exchange_code_for_token(
+        &self,
+        request: TokenRequest,
+    ) -> Result<TokenResponse, AppError> {
         // Validate state token
-        let state_data = self.cache.get_and_remove_state(&request.state)
+        let state_data = self
+            .cache
+            .get_and_remove_state(&request.state)
             .ok_or_else(|| AppError::BadRequest("Invalid or expired state token".to_string()))?;
 
         if state_data.provider != request.provider {
-            return Err(AppError::BadRequest("State token provider mismatch".to_string()));
+            return Err(AppError::BadRequest(
+                "State token provider mismatch".to_string(),
+            ));
         }
 
         if state_data.redirect_uri != request.redirect_uri {
             return Err(AppError::BadRequest("Redirect URI mismatch".to_string()));
         }
 
-        let provider = self.config.get_oauth_provider(&request.provider)
-            .ok_or_else(|| AppError::BadRequest(format!("Unknown OAuth provider: {}", request.provider)))?;
+        let provider = self
+            .config
+            .get_oauth_provider(&request.provider)
+            .ok_or_else(|| {
+                AppError::BadRequest(format!("Unknown OAuth provider: {}", request.provider))
+            })?;
 
         let client = self.create_oauth_client(&provider)?;
 
@@ -131,18 +151,24 @@ impl OAuthService {
             .map_err(|e| AppError::BadRequest(format!("Token exchange failed: {}", e)))?;
 
         // Get user info from OAuth provider
-        let user_info = self.get_user_info(&provider, token_result.access_token().secret()).await?;
-        
+        let user_info = self
+            .get_user_info(&provider, token_result.access_token().secret())
+            .await?;
+
         // Extract user ID and email based on provider configuration
         let user_id = user_info
             .get(&provider.user_id_field)
             .and_then(|v| v.as_str())
-            .ok_or_else(|| AppError::BadRequest("User ID not found in provider response".to_string()))?;
+            .ok_or_else(|| {
+                AppError::BadRequest("User ID not found in provider response".to_string())
+            })?;
 
         let email = user_info
             .get(&provider.email_field)
             .and_then(|v| v.as_str())
-            .ok_or_else(|| AppError::BadRequest("Email not found in provider response".to_string()))?;
+            .ok_or_else(|| {
+                AppError::BadRequest("Email not found in provider response".to_string())
+            })?;
 
         // Create composite user ID
         let composite_user_id = format!("{}:{}", request.provider, user_id);
@@ -170,19 +196,30 @@ impl OAuthService {
 
     pub async fn refresh_token(&self, request: RefreshRequest) -> Result<TokenResponse, AppError> {
         // Get refresh token data
-        let token_data = self.cache.get_refresh_token_data(&request.refresh_token)
-            .ok_or_else(|| AppError::Unauthorized("Invalid or expired refresh token".to_string()))?;
+        let token_data = self
+            .cache
+            .get_refresh_token_data(&request.refresh_token)
+            .ok_or_else(|| {
+                AppError::Unauthorized("Invalid or expired refresh token".to_string())
+            })?;
 
         // Create new refresh token (rotation)
-        let new_refresh_token = self.cache.rotate_refresh_token(
-            &request.refresh_token,
-            token_data.user_id.clone(),
-            token_data.provider.clone(),
-        ).ok_or_else(|| AppError::Internal("Failed to rotate refresh token".to_string()))?;
+        let new_refresh_token = self
+            .cache
+            .rotate_refresh_token(
+                &request.refresh_token,
+                token_data.user_id.clone(),
+                token_data.provider.clone(),
+            )
+            .ok_or_else(|| AppError::Internal("Failed to rotate refresh token".to_string()))?;
 
         // Get provider config for scopes
-        let provider = self.config.get_oauth_provider(&token_data.provider)
-            .ok_or_else(|| AppError::BadRequest(format!("Unknown OAuth provider: {}", token_data.provider)))?;
+        let provider = self
+            .config
+            .get_oauth_provider(&token_data.provider)
+            .ok_or_else(|| {
+                AppError::BadRequest(format!("Unknown OAuth provider: {}", token_data.provider))
+            })?;
 
         // For refresh, we need to get current user email (we could cache this or require re-auth)
         // For now, we'll use a placeholder since we don't store email in refresh token data
@@ -212,16 +249,18 @@ impl OAuthService {
     }
 
     pub fn list_providers(&self) -> ProvidersResponse {
-        let providers = self.config.list_oauth_providers()
+        let providers = self
+            .config
+            .list_oauth_providers()
             .into_iter()
             .filter_map(|name| {
-                self.config.get_oauth_provider(&name).map(|provider| {
-                    ProviderInfo {
+                self.config
+                    .get_oauth_provider(&name)
+                    .map(|provider| ProviderInfo {
                         name: name.clone(),
                         display_name: self.get_display_name(&name),
                         scopes: provider.scopes,
-                    }
-                })
+                    })
             })
             .collect();
 
@@ -229,7 +268,9 @@ impl OAuthService {
     }
 
     pub fn get_redirect_uri_for_state(&self, state: &str) -> Option<String> {
-        self.cache.get_state_data(state).map(|state_data| state_data.redirect_uri)
+        self.cache
+            .get_state_data(state)
+            .map(|state_data| state_data.redirect_uri)
     }
 
     pub async fn validate_token(&self, token: &str) -> Result<ValidationResponse, AppError> {
@@ -261,18 +302,28 @@ impl OAuthService {
 
     fn create_oauth_client(&self, provider: &OAuthProvider) -> Result<BasicClient, AppError> {
         let auth_url = AuthUrl::new(
-            provider.authorization_url.as_ref()
-                .ok_or_else(|| AppError::BadRequest("Authorization URL not configured".to_string()))?
-                .clone()
-        ).map_err(|e| AppError::BadRequest(format!("Invalid authorization URL: {}", e)))?;
+            provider
+                .authorization_url
+                .as_ref()
+                .ok_or_else(|| {
+                    AppError::BadRequest("Authorization URL not configured".to_string())
+                })?
+                .clone(),
+        )
+        .map_err(|e| AppError::BadRequest(format!("Invalid authorization URL: {}", e)))?;
 
         let token_url = TokenUrl::new(
-            provider.token_url.as_ref()
+            provider
+                .token_url
+                .as_ref()
                 .ok_or_else(|| AppError::BadRequest("Token URL not configured".to_string()))?
-                .clone()
-        ).map_err(|e| AppError::BadRequest(format!("Invalid token URL: {}", e)))?;
+                .clone(),
+        )
+        .map_err(|e| AppError::BadRequest(format!("Invalid token URL: {}", e)))?;
 
-        let redirect_url = provider.redirect_uri.as_ref()
+        let redirect_url = provider
+            .redirect_uri
+            .as_ref()
             .map(|uri| RedirectUrl::new(uri.clone()))
             .transpose()
             .map_err(|e| AppError::BadRequest(format!("Invalid redirect URI: {}", e)))?;
@@ -291,11 +342,18 @@ impl OAuthService {
         Ok(client)
     }
 
-    async fn get_user_info(&self, provider: &OAuthProvider, access_token: &str) -> Result<HashMap<String, Value>, AppError> {
-        let user_info_url = provider.user_info_url.as_ref()
+    async fn get_user_info(
+        &self,
+        provider: &OAuthProvider,
+        access_token: &str,
+    ) -> Result<HashMap<String, Value>, AppError> {
+        let user_info_url = provider
+            .user_info_url
+            .as_ref()
             .ok_or_else(|| AppError::BadRequest("User info URL not configured".to_string()))?;
 
-        let response = self.http_client
+        let response = self
+            .http_client
             .get(user_info_url)
             .bearer_auth(access_token)
             .send()
@@ -351,22 +409,23 @@ impl HealthChecker for OAuthHealthChecker {
     async fn check(&self) -> HealthCheckResult {
         let providers = self.service.list_providers();
         let provider_count = providers.providers.len();
-        
+
         if provider_count == 0 {
             HealthCheckResult::degraded_with_details(
                 "No OAuth providers configured".to_string(),
                 serde_json::json!({
                     "provider_count": 0,
                     "available_providers": []
-                })
+                }),
             )
         } else {
             // Check if providers have required configuration
             let mut configured_providers = vec![];
             let mut misconfigured_providers = vec![];
-            
+
             for provider_info in &providers.providers {
-                if let Some(provider) = self.service.config.get_oauth_provider(&provider_info.name) {
+                if let Some(provider) = self.service.config.get_oauth_provider(&provider_info.name)
+                {
                     if provider.client_id.is_empty() || provider.client_secret.is_empty() {
                         misconfigured_providers.push(&provider_info.name);
                     } else {
@@ -374,7 +433,7 @@ impl HealthChecker for OAuthHealthChecker {
                     }
                 }
             }
-            
+
             if misconfigured_providers.is_empty() {
                 HealthCheckResult::healthy_with_details(serde_json::json!({
                     "provider_count": provider_count,
@@ -383,13 +442,16 @@ impl HealthChecker for OAuthHealthChecker {
                 }))
             } else {
                 HealthCheckResult::degraded_with_details(
-                    format!("Some OAuth providers are misconfigured: {:?}", misconfigured_providers),
+                    format!(
+                        "Some OAuth providers are misconfigured: {:?}",
+                        misconfigured_providers
+                    ),
                     serde_json::json!({
                         "provider_count": provider_count,
                         "configured_providers": configured_providers,
                         "misconfigured_providers": misconfigured_providers,
                         "cache_status": "active"
-                    })
+                    }),
                 )
             }
         }
@@ -411,27 +473,30 @@ impl HealthChecker for OAuthHealthChecker {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::config::{OAuthConfig, OAuthProvider, JwtConfig, CacheConfig};
     use crate::auth::jwt::JwtService;
-    use std::collections::HashMap;
+    use crate::config::{CacheConfig, JwtConfig, OAuthConfig, OAuthProvider};
     use jsonwebtoken::Algorithm;
+    use std::collections::HashMap;
 
     fn create_test_config() -> Config {
         let mut providers = HashMap::new();
-        providers.insert("google".to_string(), OAuthProvider {
-            client_id: "test-client-id".to_string(),
-            client_secret: "test-client-secret".to_string(),
-            redirect_uri: Some("http://localhost:3000/callback".to_string()),
-            scopes: vec!["openid".to_string(), "email".to_string()],
-            authorization_url: Some("https://accounts.google.com/o/oauth2/v2/auth".to_string()),
-            token_url: Some("https://oauth2.googleapis.com/token".to_string()),
-            user_info_url: Some("https://www.googleapis.com/oauth2/v2/userinfo".to_string()),
-            user_id_field: "id".to_string(),
-            email_field: "email".to_string(),
-            tenant_id: None,
-            instance_url: None,
-            domain: None,
-        });
+        providers.insert(
+            "google".to_string(),
+            OAuthProvider {
+                client_id: "test-client-id".to_string(),
+                client_secret: "test-client-secret".to_string(),
+                redirect_uri: Some("http://localhost:3000/callback".to_string()),
+                scopes: vec!["openid".to_string(), "email".to_string()],
+                authorization_url: Some("https://accounts.google.com/o/oauth2/v2/auth".to_string()),
+                token_url: Some("https://oauth2.googleapis.com/token".to_string()),
+                user_info_url: Some("https://www.googleapis.com/oauth2/v2/userinfo".to_string()),
+                user_id_field: "id".to_string(),
+                email_field: "email".to_string(),
+                tenant_id: None,
+                instance_url: None,
+                domain: None,
+            },
+        );
 
         let mut config = Config::default();
         config.oauth = OAuthConfig { providers };
@@ -454,9 +519,9 @@ mod tests {
         let config = create_test_config();
         let cache = OAuthCache::new(3600, 600, 86400, 1000);
         let jwt_service = JwtService::new("test-secret".to_string(), Algorithm::HS256);
-        
+
         let oauth_service = OAuthService::new(config, cache, jwt_service);
-        
+
         // Test that service was created successfully
         let providers = oauth_service.list_providers();
         assert_eq!(providers.providers.len(), 1);
@@ -471,12 +536,17 @@ mod tests {
         let jwt_service = JwtService::new("test-secret".to_string(), Algorithm::HS256);
         let oauth_service = OAuthService::new(config, cache, jwt_service);
 
-        let result = oauth_service.get_authorization_url("google", "http://localhost:3000/callback");
+        let result =
+            oauth_service.get_authorization_url("google", "http://localhost:3000/callback");
         assert!(result.is_ok());
-        
+
         let response = result.unwrap();
         assert_eq!(response.provider, "google");
-        assert!(response.authorization_url.starts_with("https://accounts.google.com/o/oauth2/v2/auth"));
+        assert!(
+            response
+                .authorization_url
+                .starts_with("https://accounts.google.com/o/oauth2/v2/auth")
+        );
         assert!(!response.state.is_empty());
     }
 
@@ -487,7 +557,8 @@ mod tests {
         let jwt_service = JwtService::new("test-secret".to_string(), Algorithm::HS256);
         let oauth_service = OAuthService::new(config, cache, jwt_service);
 
-        let result = oauth_service.get_authorization_url("unknown", "http://localhost:3000/callback");
+        let result =
+            oauth_service.get_authorization_url("unknown", "http://localhost:3000/callback");
         assert!(result.is_err());
     }
 
@@ -500,7 +571,7 @@ mod tests {
 
         let providers = oauth_service.list_providers();
         assert_eq!(providers.providers.len(), 1);
-        
+
         let google_provider = &providers.providers[0];
         assert_eq!(google_provider.name, "google");
         assert_eq!(google_provider.display_name, "Google");

@@ -1,13 +1,13 @@
 use crate::{
-    auth::oauth::{OAuthService, TokenRequest, RefreshRequest},
+    auth::oauth::{OAuthService, RefreshRequest, TokenRequest},
     error::AppError,
 };
 use axum::{
-    extract::{Path, Query, State, Request},
+    Router,
+    extract::{Path, Query, Request, State},
+    http::HeaderMap,
     response::{Json, Redirect},
     routing::{get, post},
-    Router,
-    http::HeaderMap,
 };
 use serde::Deserialize;
 use std::sync::Arc;
@@ -35,11 +35,10 @@ pub async fn authorize_handler(
     Query(params): Query<AuthorizeQuery>,
     headers: HeaderMap,
 ) -> Result<Json<crate::auth::oauth::AuthorizeResponse>, AppError> {
-    let redirect_uri = params.redirect_uri
-        .unwrap_or_else(|| {
-            // Build redirect URI from request headers to avoid hardcoded URLs
-            build_redirect_uri_from_request(&headers, &provider)
-        });
+    let redirect_uri = params.redirect_uri.unwrap_or_else(|| {
+        // Build redirect URI from request headers to avoid hardcoded URLs
+        build_redirect_uri_from_request(&headers, &provider)
+    });
 
     let response = oauth_service.get_authorization_url(&provider, &redirect_uri)?;
     Ok(Json(response))
@@ -75,22 +74,25 @@ pub async fn callback_handler(
 ) -> Result<Redirect, AppError> {
     // Handle OAuth errors first
     if let Some(error) = params.error {
-        let error_description = params.error_description.unwrap_or_else(|| "OAuth authentication failed".to_string());
-        let error_url = build_callback_url(&[
-            ("error", &error),
-            ("error_description", &error_description),
-        ])?;
+        let error_description = params
+            .error_description
+            .unwrap_or_else(|| "OAuth authentication failed".to_string());
+        let error_url =
+            build_callback_url(&[("error", &error), ("error_description", &error_description)])?;
         return Ok(Redirect::to(&error_url));
     }
 
-    let code = params.code
+    let code = params
+        .code
         .ok_or_else(|| AppError::BadRequest("Missing authorization code".to_string()))?;
-    
-    let state = params.state
+
+    let state = params
+        .state
         .ok_or_else(|| AppError::BadRequest("Missing state parameter".to_string()))?;
 
     // Get the redirect URI from the state data (stored when authorization URL was generated)
-    let redirect_uri = oauth_service.get_redirect_uri_for_state(&state)
+    let redirect_uri = oauth_service
+        .get_redirect_uri_for_state(&state)
         .ok_or_else(|| AppError::BadRequest("Invalid or expired state parameter".to_string()))?;
 
     let token_request = TokenRequest {
@@ -136,7 +138,9 @@ pub async fn validate_handler(
         .ok_or_else(|| AppError::Unauthorized("Missing Authorization header".to_string()))?;
 
     if !auth_header.starts_with("Bearer ") {
-        return Err(AppError::Unauthorized("Invalid Authorization format".to_string()));
+        return Err(AppError::Unauthorized(
+            "Invalid Authorization format".to_string(),
+        ));
     }
 
     let token = &auth_header[7..];
@@ -156,61 +160,70 @@ pub struct CallbackQuery {
 fn build_redirect_uri_from_request(headers: &HeaderMap, provider: &str) -> String {
     // 1. Determine the scheme (http/https)
     let scheme = determine_scheme_from_headers(headers);
-    
+
     // 2. Get the host (with port if non-standard)
     let host = determine_host_from_headers(headers);
-    
+
     // 3. Determine the base path (for sub-path deployments)
     let base_path = determine_base_path_from_headers(headers);
-    
+
     // 4. Build the complete redirect URI
-    format!("{}://{}{}/auth/callback/{}", scheme, host, base_path, provider)
+    format!(
+        "{}://{}{}/auth/callback/{}",
+        scheme, host, base_path, provider
+    )
 }
 
 /// Determine the scheme from various proxy headers
 fn determine_scheme_from_headers(headers: &HeaderMap) -> &'static str {
     // Check X-Forwarded-Proto (most common)
-    if let Some(proto) = headers.get("x-forwarded-proto").and_then(|h| h.to_str().ok()) {
+    if let Some(proto) = headers
+        .get("x-forwarded-proto")
+        .and_then(|h| h.to_str().ok())
+    {
         if proto.contains("https") {
             return "https";
         }
     }
-    
+
     // Check X-Forwarded-SSL (Apache/nginx)
     if headers.get("x-forwarded-ssl").is_some() {
         return "https";
     }
-    
+
     // Check Front-End-Https (Microsoft IIS)
     if let Some(fe_https) = headers.get("front-end-https").and_then(|h| h.to_str().ok()) {
         if fe_https.eq_ignore_ascii_case("on") {
             return "https";
         }
     }
-    
+
     // Check X-Url-Scheme (some load balancers)
     if let Some(scheme) = headers.get("x-url-scheme").and_then(|h| h.to_str().ok()) {
         if scheme.eq_ignore_ascii_case("https") {
             return "https";
         }
     }
-    
+
     "http" // default to http for development
 }
 
 /// Determine the host from various headers, handling proxied requests
 fn determine_host_from_headers(headers: &HeaderMap) -> String {
     // Check X-Forwarded-Host (most common for proxied requests)
-    if let Some(host) = headers.get("x-forwarded-host").and_then(|h| h.to_str().ok()) {
+    if let Some(host) = headers
+        .get("x-forwarded-host")
+        .and_then(|h| h.to_str().ok())
+    {
         // Take the first host if there are multiple (comma-separated)
         return host.split(',').next().unwrap().trim().to_string();
     }
-    
+
     // Check X-Original-Host (some proxies)
     if let Some(host) = headers.get("x-original-host").and_then(|h| h.to_str().ok()) {
         return host.to_string();
     }
-    
+
     // Fallback to standard Host header
     headers
         .get("host")
@@ -222,20 +235,26 @@ fn determine_host_from_headers(headers: &HeaderMap) -> String {
 /// Determine the base path for sub-path deployments
 fn determine_base_path_from_headers(headers: &HeaderMap) -> String {
     // Check X-Forwarded-Prefix (nginx, Traefik)
-    if let Some(prefix) = headers.get("x-forwarded-prefix").and_then(|h| h.to_str().ok()) {
+    if let Some(prefix) = headers
+        .get("x-forwarded-prefix")
+        .and_then(|h| h.to_str().ok())
+    {
         return ensure_leading_slash(prefix.trim_end_matches('/'));
     }
-    
+
     // Check X-Forwarded-Path (some load balancers)
-    if let Some(path) = headers.get("x-forwarded-path").and_then(|h| h.to_str().ok()) {
+    if let Some(path) = headers
+        .get("x-forwarded-path")
+        .and_then(|h| h.to_str().ok())
+    {
         return ensure_leading_slash(path.trim_end_matches('/'));
     }
-    
+
     // Check X-Script-Name (WSGI-style)
     if let Some(script_name) = headers.get("x-script-name").and_then(|h| h.to_str().ok()) {
         return ensure_leading_slash(script_name.trim_end_matches('/'));
     }
-    
+
     // Check X-Original-URI and extract path prefix
     if let Some(original_uri) = headers.get("x-original-uri").and_then(|h| h.to_str().ok()) {
         if let Some(path_end) = original_uri.find("/auth/") {
@@ -245,7 +264,7 @@ fn determine_base_path_from_headers(headers: &HeaderMap) -> String {
             }
         }
     }
-    
+
     // No sub-path detected
     String::new()
 }
@@ -262,10 +281,10 @@ fn ensure_leading_slash(path: &str) -> String {
 }
 
 /// Helper function to build callback URLs with proper query parameter encoding.
-/// 
+///
 /// This is much safer than manual string formatting because:
 /// - Automatic URL encoding of special characters
-/// - Prevents injection attacks through malicious parameters  
+/// - Prevents injection attacks through malicious parameters
 /// - Handles edge cases like empty values, special characters
 /// - More maintainable and readable than format! macros
 /// - Deployment path agnostic (returns relative URL)
@@ -273,25 +292,24 @@ fn build_callback_url(params: &[(&str, &str)]) -> Result<String, AppError> {
     // Use a temporary base URL just for query parameter building
     let mut url = Url::parse("http://temp/callback")
         .map_err(|e| AppError::Internal(format!("Failed to parse base URL: {}", e)))?;
-    
+
     {
         let mut query_pairs = url.query_pairs_mut();
         for (key, value) in params {
             query_pairs.append_pair(key, value);
         }
     }
-    
+
     // Return just the relative path and query, no assumptions about deployment domain/path
     Ok(format!("/callback?{}", url.query().unwrap_or("")))
 }
-
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::{
-        config::{Config, OAuthConfig, OAuthProvider, JwtConfig, CacheConfig},
-        auth::{jwt::JwtService, cache::OAuthCache, oauth::OAuthService},
+        auth::{cache::OAuthCache, jwt::JwtService, oauth::OAuthService},
+        config::{CacheConfig, Config, JwtConfig, OAuthConfig, OAuthProvider},
     };
     use axum::{
         body::Body,
@@ -303,20 +321,23 @@ mod tests {
 
     fn create_test_oauth_service() -> Arc<OAuthService> {
         let mut providers = HashMap::new();
-        providers.insert("google".to_string(), OAuthProvider {
-            client_id: "test-client-id".to_string(),
-            client_secret: "test-client-secret".to_string(),
-            redirect_uri: Some("http://localhost:3000/callback".to_string()),
-            scopes: vec!["openid".to_string(), "email".to_string()],
-            authorization_url: Some("https://accounts.google.com/o/oauth2/v2/auth".to_string()),
-            token_url: Some("https://oauth2.googleapis.com/token".to_string()),
-            user_info_url: Some("https://www.googleapis.com/oauth2/v2/userinfo".to_string()),
-            user_id_field: "id".to_string(),
-            email_field: "email".to_string(),
-            tenant_id: None,
-            instance_url: None,
-            domain: None,
-        });
+        providers.insert(
+            "google".to_string(),
+            OAuthProvider {
+                client_id: "test-client-id".to_string(),
+                client_secret: "test-client-secret".to_string(),
+                redirect_uri: Some("http://localhost:3000/callback".to_string()),
+                scopes: vec!["openid".to_string(), "email".to_string()],
+                authorization_url: Some("https://accounts.google.com/o/oauth2/v2/auth".to_string()),
+                token_url: Some("https://oauth2.googleapis.com/token".to_string()),
+                user_info_url: Some("https://www.googleapis.com/oauth2/v2/userinfo".to_string()),
+                user_id_field: "id".to_string(),
+                email_field: "email".to_string(),
+                tenant_id: None,
+                instance_url: None,
+                domain: None,
+            },
+        );
 
         let mut config = Config::default();
         config.oauth = OAuthConfig { providers };
@@ -417,9 +438,9 @@ mod tests {
             ("access_token", "token123"),
             ("expires_in", "3600"),
             ("scope", "email profile"),
-        ]).unwrap();
-        
-        
+        ])
+        .unwrap();
+
         assert!(success_url.starts_with("/callback?"));
         assert!(success_url.contains("success=true"));
         assert!(success_url.contains("provider=google"));
@@ -433,8 +454,9 @@ mod tests {
             ("error", "invalid_request"),
             ("error_description", "Missing required parameter"),
             ("provider", "github"),
-        ]).unwrap();
-        
+        ])
+        .unwrap();
+
         assert!(error_url.starts_with("/callback?"));
         assert!(error_url.contains("error=invalid_request"));
         assert!(error_url.contains("error_description=Missing+required+parameter"));
@@ -448,18 +470,18 @@ mod tests {
         headers.insert("host", "example.com".parse().unwrap());
         let uri = build_redirect_uri_from_request(&headers, "google");
         assert_eq!(uri, "http://example.com/auth/callback/google");
-        
+
         // Test HTTPS with x-forwarded-proto
         headers.insert("x-forwarded-proto", "https".parse().unwrap());
         let uri = build_redirect_uri_from_request(&headers, "github");
         assert_eq!(uri, "https://example.com/auth/callback/github");
-        
+
         // Test HTTPS with x-forwarded-ssl
         headers.remove("x-forwarded-proto");
         headers.insert("x-forwarded-ssl", "on".parse().unwrap());
         let uri = build_redirect_uri_from_request(&headers, "microsoft");
         assert_eq!(uri, "https://example.com/auth/callback/microsoft");
-        
+
         // Test sub-path deployment with X-Forwarded-Prefix
         headers.clear();
         headers.insert("host", "api.example.com".parse().unwrap());
@@ -467,21 +489,27 @@ mod tests {
         headers.insert("x-forwarded-prefix", "/my-app".parse().unwrap());
         let uri = build_redirect_uri_from_request(&headers, "google");
         assert_eq!(uri, "https://api.example.com/my-app/auth/callback/google");
-        
+
         // Test X-Forwarded-Host with multiple hosts (should use first)
         headers.clear();
-        headers.insert("x-forwarded-host", "api.example.com, internal.example.com".parse().unwrap());
+        headers.insert(
+            "x-forwarded-host",
+            "api.example.com, internal.example.com".parse().unwrap(),
+        );
         headers.insert("x-forwarded-proto", "https".parse().unwrap());
         let uri = build_redirect_uri_from_request(&headers, "github");
         assert_eq!(uri, "https://api.example.com/auth/callback/github");
-        
+
         // Test X-Original-URI path extraction
         headers.clear();
         headers.insert("host", "example.com".parse().unwrap());
-        headers.insert("x-original-uri", "/my-service/auth/authorize/google".parse().unwrap());
+        headers.insert(
+            "x-original-uri",
+            "/my-service/auth/authorize/google".parse().unwrap(),
+        );
         let uri = build_redirect_uri_from_request(&headers, "google");
         assert_eq!(uri, "http://example.com/my-service/auth/callback/google");
-        
+
         // Test multiple proxy headers (should prioritize correctly)
         headers.clear();
         headers.insert("host", "localhost:3000".parse().unwrap());
@@ -489,8 +517,11 @@ mod tests {
         headers.insert("x-forwarded-proto", "https".parse().unwrap());
         headers.insert("x-forwarded-prefix", "/api/v1".parse().unwrap());
         let uri = build_redirect_uri_from_request(&headers, "microsoft");
-        assert_eq!(uri, "https://api.production.com/api/v1/auth/callback/microsoft");
-        
+        assert_eq!(
+            uri,
+            "https://api.production.com/api/v1/auth/callback/microsoft"
+        );
+
         // Test fallback when no headers
         let empty_headers = HeaderMap::new();
         let uri = build_redirect_uri_from_request(&empty_headers, "google");
@@ -505,5 +536,4 @@ mod tests {
         assert_eq!(ensure_leading_slash("api/v1"), "/api/v1");
         assert_eq!(ensure_leading_slash("/api/v1"), "/api/v1");
     }
-
 }

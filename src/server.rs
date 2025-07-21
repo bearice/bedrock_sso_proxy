@@ -1,20 +1,20 @@
 use crate::{
     auth::{
-        jwt::{parse_algorithm, JwtService},
-        middleware::{AuthConfig, jwt_auth_middleware},
         cache::OAuthCache,
+        jwt::{JwtService, parse_algorithm},
+        middleware::{AuthConfig, jwt_auth_middleware},
         oauth::OAuthService,
     },
     aws_http::AwsHttpClient,
     config::Config,
     error::AppError,
     health::HealthService,
-    routes::{create_auth_routes, create_bedrock_routes, create_protected_bedrock_routes, create_frontend_router},
+    routes::{
+        create_auth_routes, create_bedrock_routes, create_frontend_router,
+        create_protected_bedrock_routes,
+    },
 };
-use axum::{
-    Router,
-    middleware,
-};
+use axum::{Router, middleware};
 use std::{net::SocketAddr, sync::Arc};
 use tokio::net::TcpListener;
 use tracing::info;
@@ -42,7 +42,7 @@ impl Server {
             self.config.jwt.refresh_token_ttl,
             self.config.cache.max_entries,
         );
-        
+
         let oauth_service = Arc::new(OAuthService::new(
             self.config.clone(),
             cache,
@@ -51,17 +51,24 @@ impl Server {
 
         // Create centralized health service and register health checkers
         let health_service = Arc::new(HealthService::new());
-        
-        // Register AWS health checker
-        health_service.register(Arc::new(aws_http_client.clone().health_checker())).await;
-        
-        // Register OAuth health checker
-        health_service.register(Arc::new(oauth_service.health_checker())).await;
-        
-        // Register JWT health checker
-        health_service.register(Arc::new(jwt_service.health_checker())).await;
 
-        let app = self.create_oauth_app(auth_config, aws_http_client, oauth_service, health_service);
+        // Register AWS health checker
+        health_service
+            .register(Arc::new(aws_http_client.clone().health_checker()))
+            .await;
+
+        // Register OAuth health checker
+        health_service
+            .register(Arc::new(oauth_service.health_checker()))
+            .await;
+
+        // Register JWT health checker
+        health_service
+            .register(Arc::new(jwt_service.health_checker()))
+            .await;
+
+        let app =
+            self.create_oauth_app(auth_config, aws_http_client, oauth_service, health_service);
 
         let addr = SocketAddr::from(([0, 0, 0, 0], self.config.server.port));
         let listener = TcpListener::bind(addr)
@@ -96,12 +103,11 @@ impl Server {
                     .layer(middleware::from_fn_with_state(
                         auth_config,
                         jwt_auth_middleware,
-                    ))
+                    )),
             )
             // Frontend routes (serve last to not conflict with API routes)
             .fallback_service(create_frontend_router(self.config.frontend.clone()))
     }
-
 
     // For testing - OAuth always enabled
     pub async fn create_app(
@@ -113,14 +119,14 @@ impl Server {
             self.config.jwt.secret.clone(),
             parse_algorithm(&self.config.jwt.algorithm).unwrap(),
         );
-        
+
         let cache = OAuthCache::new(
             self.config.cache.validation_ttl,
             600,
             self.config.jwt.refresh_token_ttl,
             self.config.cache.max_entries,
         );
-        
+
         let oauth_service = Arc::new(OAuthService::new(
             self.config.clone(),
             cache,
@@ -129,9 +135,15 @@ impl Server {
 
         // Create health service for testing
         let health_service = Arc::new(HealthService::new());
-        health_service.register(Arc::new(aws_http_client.clone().health_checker())).await;
-        health_service.register(Arc::new(oauth_service.health_checker())).await;
-        health_service.register(Arc::new(jwt_service.health_checker())).await;
+        health_service
+            .register(Arc::new(aws_http_client.clone().health_checker()))
+            .await;
+        health_service
+            .register(Arc::new(oauth_service.health_checker()))
+            .await;
+        health_service
+            .register(Arc::new(jwt_service.health_checker()))
+            .await;
 
         Router::new()
             .nest("/auth", create_auth_routes().with_state(oauth_service))
@@ -142,7 +154,7 @@ impl Server {
                     .layer(middleware::from_fn_with_state(
                         auth_config,
                         jwt_auth_middleware,
-                    ))
+                    )),
             )
             .fallback_service(create_frontend_router(self.config.frontend.clone()))
     }
@@ -151,8 +163,8 @@ impl Server {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::auth::middleware::AuthConfig;
     use crate::auth::jwt::JwtService;
+    use crate::auth::middleware::AuthConfig;
     use crate::aws_http::AwsHttpClient;
     use crate::config::Config;
     use axum::{

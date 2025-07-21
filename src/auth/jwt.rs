@@ -1,8 +1,10 @@
 use crate::error::AppError;
-use crate::health::{HealthChecker, HealthCheckResult};
-use jsonwebtoken::{Algorithm, DecodingKey, Validation, decode, encode, EncodingKey, Header, jwk::Jwk};
-use std::str::FromStr;
+use crate::health::{HealthCheckResult, HealthChecker};
 use chrono::{DateTime, Utc};
+use jsonwebtoken::{
+    Algorithm, DecodingKey, EncodingKey, Header, Validation, decode, encode, jwk::Jwk,
+};
+use std::str::FromStr;
 
 use serde::{Deserialize, Serialize};
 
@@ -162,7 +164,9 @@ impl JwtService {
         // Fall back to legacy token format
         match self.validate_legacy_token(token) {
             Ok(legacy_claims) => Ok(ValidatedClaims::Legacy(legacy_claims)),
-            Err(_) => Err(AppError::Unauthorized("Invalid or expired token".to_string())),
+            Err(_) => Err(AppError::Unauthorized(
+                "Invalid or expired token".to_string(),
+            )),
         }
     }
 
@@ -215,33 +219,29 @@ impl HealthChecker for JwtHealthChecker {
                                     "token_creation": "success",
                                     "token_validation": "failed",
                                     "error": "claims mismatch"
-                                })
+                                }),
                             )
                         }
                     }
-                    Err(err) => {
-                        HealthCheckResult::unhealthy_with_details(
-                            "Failed to validate test JWT token".to_string(),
-                            serde_json::json!({
-                                "algorithm": format!("{:?}", self.service.algorithm),
-                                "token_creation": "success",
-                                "token_validation": "failed",
-                                "error": err.to_string()
-                            })
-                        )
-                    }
+                    Err(err) => HealthCheckResult::unhealthy_with_details(
+                        "Failed to validate test JWT token".to_string(),
+                        serde_json::json!({
+                            "algorithm": format!("{:?}", self.service.algorithm),
+                            "token_creation": "success",
+                            "token_validation": "failed",
+                            "error": err.to_string()
+                        }),
+                    ),
                 }
             }
-            Err(err) => {
-                HealthCheckResult::unhealthy_with_details(
-                    "Failed to create test JWT token".to_string(),
-                    serde_json::json!({
-                        "algorithm": format!("{:?}", self.service.algorithm),
-                        "token_creation": "failed",
-                        "error": err.to_string()
-                    })
-                )
-            }
+            Err(err) => HealthCheckResult::unhealthy_with_details(
+                "Failed to create test JWT token".to_string(),
+                serde_json::json!({
+                    "algorithm": format!("{:?}", self.service.algorithm),
+                    "token_creation": "failed",
+                    "error": err.to_string()
+                }),
+            ),
         }
     }
 
@@ -392,7 +392,7 @@ mod tests {
     #[test]
     fn test_jwt_service_oauth_token() {
         let service = JwtService::new("test-secret".to_string(), Algorithm::HS256);
-        
+
         let claims = OAuthClaims::new(
             "google:123".to_string(),
             "google".to_string(),
@@ -423,7 +423,7 @@ mod tests {
     #[test]
     fn test_jwt_service_mixed_validation() {
         let service = JwtService::new("test-secret".to_string(), Algorithm::HS256);
-        
+
         // Test OAuth token
         let oauth_claims = OAuthClaims::new(
             "google:123".to_string(),
@@ -434,7 +434,7 @@ mod tests {
             None,
         );
         let oauth_token = service.create_oauth_token(&oauth_claims).unwrap();
-        
+
         match service.validate_token(&oauth_token).unwrap() {
             ValidatedClaims::OAuth(claims) => {
                 assert_eq!(claims.sub, "google:123");
@@ -445,7 +445,7 @@ mod tests {
 
         // Test legacy token
         let legacy_token = create_test_token("test-secret", "user123", 3600);
-        
+
         match service.validate_token(&legacy_token).unwrap() {
             ValidatedClaims::Legacy(claims) => {
                 assert_eq!(claims.sub, "user123");
@@ -464,18 +464,21 @@ mod tests {
             3600,
             None,
         );
-        
+
         let oauth_validated = ValidatedClaims::OAuth(oauth_claims);
         assert_eq!(oauth_validated.subject(), "google:123");
         assert_eq!(oauth_validated.provider(), Some("google"));
         assert_eq!(oauth_validated.email(), Some("test@example.com"));
-        assert_eq!(oauth_validated.scopes(), Some(&["email".to_string(), "profile".to_string()][..]));
+        assert_eq!(
+            oauth_validated.scopes(),
+            Some(&["email".to_string(), "profile".to_string()][..])
+        );
 
         let legacy_claims = Claims {
             sub: "user123".to_string(),
             exp: 1234567890,
         };
-        
+
         let legacy_validated = ValidatedClaims::Legacy(legacy_claims);
         assert_eq!(legacy_validated.subject(), "user123");
         assert_eq!(legacy_validated.provider(), None);

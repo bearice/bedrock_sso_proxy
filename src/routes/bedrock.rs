@@ -1,11 +1,11 @@
 use crate::{aws_http::AwsHttpClient, error::AppError, health::HealthService};
 use axum::{
+    Router,
     body::{Body, Bytes},
     extract::{Path, Query, State},
     http::{HeaderMap, StatusCode},
     response::{Json, Response},
     routing::{get, post},
-    Router,
 };
 use futures_util::StreamExt;
 use serde::Deserialize;
@@ -19,8 +19,7 @@ struct HealthCheckQuery {
 }
 
 pub fn create_bedrock_routes() -> Router<(AwsHttpClient, Arc<HealthService>)> {
-    Router::new()
-        .route("/health", get(health_check))
+    Router::new().route("/health", get(health_check))
 }
 
 pub fn create_protected_bedrock_routes() -> Router<AwsHttpClient> {
@@ -39,11 +38,11 @@ async fn health_check(
     // Use the centralized health service
     let filter = params.check.as_deref();
     let health_response = health_service.check_health(filter).await;
-    
+
     // Convert the health response to the expected JSON format
     let response_json = serde_json::to_value(&health_response)
         .map_err(|e| AppError::Internal(format!("Failed to serialize health response: {}", e)))?;
-    
+
     Ok(Json(response_json))
 }
 
@@ -176,11 +175,13 @@ mod tests {
         http::{Request, StatusCode},
     };
     use tower::ServiceExt;
-    
+
     async fn create_test_health_service() -> Arc<HealthService> {
         let health_service = Arc::new(HealthService::new());
         let aws_client = AwsHttpClient::new_test();
-        health_service.register(Arc::new(aws_client.health_checker())).await;
+        health_service
+            .register(Arc::new(aws_client.health_checker()))
+            .await;
         health_service
     }
 

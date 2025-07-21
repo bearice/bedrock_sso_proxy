@@ -1,9 +1,16 @@
 use axum::{
+    Router,
     body::Body,
     http::{Method, Request, StatusCode},
-    Router,
 };
-use bedrock_sso_proxy::{Config, Server, auth::{AuthConfig, jwt::{JwtService, parse_algorithm}}, aws_http::AwsHttpClient};
+use bedrock_sso_proxy::{
+    Config, Server,
+    auth::{
+        AuthConfig,
+        jwt::{JwtService, parse_algorithm},
+    },
+    aws_http::AwsHttpClient,
+};
 use jsonwebtoken::{Algorithm, DecodingKey, EncodingKey, Header, Validation, decode, encode};
 use serde::{Deserialize, Serialize};
 use std::{
@@ -115,7 +122,10 @@ impl TestHarness {
         let mut config = Config::default();
         config.jwt.secret = secret.to_string();
 
-        let jwt_service = JwtService::new(config.jwt.secret.clone(), parse_algorithm(&config.jwt.algorithm).unwrap());
+        let jwt_service = JwtService::new(
+            config.jwt.secret.clone(),
+            parse_algorithm(&config.jwt.algorithm).unwrap(),
+        );
         let auth_config = Arc::new(AuthConfig::new(jwt_service));
         let aws_http_client = AwsHttpClient::new_test();
 
@@ -141,7 +151,12 @@ impl TestHarness {
 
     /// Create JWT token for integration tests
     #[allow(dead_code)]
-    pub fn create_integration_token(&self, sub: &str, user_id: Option<&str>, permissions: Option<Vec<&str>>) -> String {
+    pub fn create_integration_token(
+        &self,
+        sub: &str,
+        user_id: Option<&str>,
+        permissions: Option<Vec<&str>>,
+    ) -> String {
         let claims = FlexibleClaims::integration(sub, user_id, permissions);
         self.create_token(&claims)
     }
@@ -155,7 +170,12 @@ impl TestHarness {
 
     /// Create JWT token with custom expiry
     #[allow(dead_code)]
-    pub fn create_token_with_expiry(&self, sub: &str, exp_offset: i64, user_id: Option<&str>) -> String {
+    pub fn create_token_with_expiry(
+        &self,
+        sub: &str,
+        exp_offset: i64,
+        user_id: Option<&str>,
+    ) -> String {
         let claims = FlexibleClaims::with_expiry(sub, exp_offset, user_id);
         self.create_token(&claims)
     }
@@ -185,7 +205,6 @@ impl TestHarness {
 pub struct RequestBuilder;
 
 impl RequestBuilder {
-
     /// Health check with auth
     pub fn health_with_auth(token: &str) -> Request<Body> {
         Request::builder()
@@ -227,7 +246,6 @@ impl RequestBuilder {
             .body(Body::from(body.to_string()))
             .unwrap()
     }
-
 
     /// Custom request with method, headers, and body
     #[allow(dead_code)]

@@ -4,16 +4,13 @@ use axum::{
 };
 use std::sync::Arc;
 mod common;
-use common::{TestHarness, RequestBuilder};
+use common::{RequestBuilder, TestHarness};
 
 #[tokio::test]
 async fn test_integration_jwt_token_validation() {
     let harness = TestHarness::with_secret("integration-test-secret-123").await;
-    let token = harness.create_integration_token(
-        "test_user",
-        Some("user123"),
-        Some(vec!["read", "write"]),
-    );
+    let token =
+        harness.create_integration_token("test_user", Some("user123"), Some(vec!["read", "write"]));
 
     // Verify we can decode the token
     let claims = harness.verify_token(&token).unwrap();
@@ -28,7 +25,7 @@ async fn test_integration_jwt_token_validation() {
 #[tokio::test]
 async fn test_integration_server_with_real_jwt() {
     let harness = TestHarness::with_secret("integration-test-secret-456").await;
-    
+
     let token = harness.create_integration_token(
         "integration_user",
         Some("int_123"),
@@ -49,7 +46,8 @@ async fn test_integration_invalid_signature() {
     let wrong_harness = TestHarness::with_secret("wrong-secret").await;
     let token = wrong_harness.create_integration_token("test_user", Some("user123"), None);
 
-    let request = RequestBuilder::invoke_model_with_auth("test-model", &token, r#"{"messages": []}"#);
+    let request =
+        RequestBuilder::invoke_model_with_auth("test-model", &token, r#"{"messages": []}"#);
 
     let response = harness.make_request(request).await;
     assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
@@ -65,7 +63,11 @@ async fn test_integration_token_with_custom_claims() {
         Some(vec!["bedrock:*", "admin:*"]),
     );
 
-    let request = RequestBuilder::invoke_streaming_with_auth("anthropic.claude-v2", &token, r#"{"messages": [{"role": "user", "content": "Test"}]}"#);
+    let request = RequestBuilder::invoke_streaming_with_auth(
+        "anthropic.claude-v2",
+        &token,
+        r#"{"messages": [{"role": "user", "content": "Test"}]}"#,
+    );
 
     let response = harness.make_request(request).await;
     assert_eq!(response.status(), StatusCode::OK);
@@ -152,7 +154,8 @@ async fn test_integration_token_expiration_edge_cases() {
     tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
 
     // Request should now fail
-    let request = RequestBuilder::invoke_model_with_auth("test-model", &short_token, r#"{"messages": []}"#);
+    let request =
+        RequestBuilder::invoke_model_with_auth("test-model", &short_token, r#"{"messages": []}"#);
 
     let response = harness.make_request(request).await;
 

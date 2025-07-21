@@ -1,4 +1,5 @@
-use bedrock_sso_proxy::{config::Config, aws_http::AwsHttpClient};
+use base64::{Engine as _, engine::general_purpose};
+use bedrock_sso_proxy::{aws_http::AwsHttpClient, config::Config};
 use chrono::{Duration, Utc};
 use clap::{Parser, Subcommand};
 use futures_util::stream::StreamExt;
@@ -7,7 +8,6 @@ use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use std::io::{self, Write};
-use base64::{Engine as _, engine::general_purpose};
 
 #[derive(Parser)]
 #[command(name = "bedrock-e2e-client")]
@@ -22,7 +22,11 @@ struct Cli {
     #[arg(short, long, default_value = "http://localhost:3000")]
     server_url: String,
 
-    #[arg(short, long, help = "Connect directly to AWS Bedrock instead of through proxy")]
+    #[arg(
+        short,
+        long,
+        help = "Connect directly to AWS Bedrock instead of through proxy"
+    )]
     direct: bool,
 }
 
@@ -30,7 +34,11 @@ struct Cli {
 enum Commands {
     /// Interactive chat with a model
     Chat {
-        #[arg(short, long, default_value = "apac.anthropic.claude-3-sonnet-20240229-v1:0")]
+        #[arg(
+            short,
+            long,
+            default_value = "apac.anthropic.claude-3-sonnet-20240229-v1:0"
+        )]
         model: String,
 
         #[arg(short, long)]
@@ -38,7 +46,11 @@ enum Commands {
     },
     /// Send a single message to a model
     Message {
-        #[arg(short, long, default_value = "apac.anthropic.claude-3-sonnet-20240229-v1:0")]
+        #[arg(
+            short,
+            long,
+            default_value = "apac.anthropic.claude-3-sonnet-20240229-v1:0"
+        )]
         model: String,
 
         #[arg(short, long)]
@@ -83,10 +95,15 @@ struct E2EClient {
 }
 
 impl E2EClient {
-    fn new(server_url: String, jwt_secret: &str, config: &Config, direct_mode: bool) -> Result<Self, Box<dyn std::error::Error>> {
+    fn new(
+        server_url: String,
+        jwt_secret: &str,
+        config: &Config,
+        direct_mode: bool,
+    ) -> Result<Self, Box<dyn std::error::Error>> {
         let jwt_token = Self::generate_jwt_token(jwt_secret)?;
         let client = Client::new();
-        
+
         let aws_client = if direct_mode {
             Some(AwsHttpClient::new(config.aws.clone()))
         } else {
@@ -132,9 +149,15 @@ impl E2EClient {
     }
 
     // Shared response parsing for standard responses
-    fn parse_standard_response(&self, response_text: &str, connection_type: &str) -> Result<(), Box<dyn std::error::Error>> {
+    fn parse_standard_response(
+        &self,
+        response_text: &str,
+        connection_type: &str,
+    ) -> Result<(), Box<dyn std::error::Error>> {
         if let Ok(json_value) = serde_json::from_str::<Value>(response_text) {
-            if let Ok(bedrock_response) = serde_json::from_value::<BedrockResponse>(json_value.clone()) {
+            if let Ok(bedrock_response) =
+                serde_json::from_value::<BedrockResponse>(json_value.clone())
+            {
                 // Handle Anthropic Claude response format
                 if let Some(content) = bedrock_response.content {
                     for block in content {
@@ -143,7 +166,10 @@ impl E2EClient {
                         }
                     }
                 } else if let Some(completion) = bedrock_response.completion {
-                    println!("\n🤖 Model Response ({}):\n{}\n", connection_type, completion);
+                    println!(
+                        "\n🤖 Model Response ({}):\n{}\n",
+                        connection_type, completion
+                    );
                 } else {
                     println!(
                         "\n📋 Raw Response ({}):\n{}\n",
@@ -159,7 +185,10 @@ impl E2EClient {
                 );
             }
         } else {
-            println!("\n📋 Raw Response ({}):\n{}\n", connection_type, response_text);
+            println!(
+                "\n📋 Raw Response ({}):\n{}\n",
+                connection_type, response_text
+            );
         }
         Ok(())
     }
@@ -169,22 +198,30 @@ impl E2EClient {
         if let Some(start) = chunk_str.find("{\"bytes\":\"") {
             if let Some(end) = chunk_str[start..].find("\"}") {
                 let json_str = &chunk_str[start..start + end + 2];
-                
+
                 if let Ok(event_data) = serde_json::from_str::<Value>(json_str) {
                     if let Some(base64_bytes) = event_data.get("bytes").and_then(|b| b.as_str()) {
                         if let Ok(decoded_bytes) = general_purpose::STANDARD.decode(base64_bytes) {
                             if let Ok(decoded_str) = String::from_utf8(decoded_bytes) {
-                                if let Ok(decoded_json) = serde_json::from_str::<Value>(&decoded_str) {
+                                if let Ok(decoded_json) =
+                                    serde_json::from_str::<Value>(&decoded_str)
+                                {
                                     // Check for content_block_delta with text
-                                    if decoded_json.get("type").and_then(|t| t.as_str()) == Some("content_block_delta") {
+                                    if decoded_json.get("type").and_then(|t| t.as_str())
+                                        == Some("content_block_delta")
+                                    {
                                         if let Some(delta) = decoded_json.get("delta") {
-                                            if let Some(text) = delta.get("text").and_then(|t| t.as_str()) {
+                                            if let Some(text) =
+                                                delta.get("text").and_then(|t| t.as_str())
+                                            {
                                                 return Some(text.to_string());
                                             }
                                         }
                                     }
                                     // Check for message_stop to end stream
-                                    else if decoded_json.get("type").and_then(|t| t.as_str()) == Some("message_stop") {
+                                    else if decoded_json.get("type").and_then(|t| t.as_str())
+                                        == Some("message_stop")
+                                    {
                                         return Some("__STREAM_END__".to_string());
                                     }
                                 }
@@ -275,19 +312,23 @@ impl E2EClient {
         model: &str,
         message: &str,
     ) -> Result<(), Box<dyn std::error::Error>> {
-        let aws_client = self.aws_client.as_ref()
+        let aws_client = self
+            .aws_client
+            .as_ref()
             .ok_or("Direct mode requires AWS client to be initialized")?;
 
         let payload = Self::create_bedrock_payload(message);
         let payload_bytes = serde_json::to_vec(&payload)?;
 
         println!("🔗 Connecting directly to AWS Bedrock...");
-        let response = aws_client.invoke_model(
-            model,
-            Some("application/json"),
-            Some("application/json"),
-            payload_bytes,
-        ).await?;
+        let response = aws_client
+            .invoke_model(
+                model,
+                Some("application/json"),
+                Some("application/json"),
+                payload_bytes,
+            )
+            .await?;
 
         println!("Response status: {}", response.status);
 
@@ -338,7 +379,8 @@ impl E2EClient {
 
         if response.status().is_success() {
             println!("\n🤖 Model Response (Via Proxy streaming):");
-            self.handle_proxy_streaming_response(response.bytes_stream()).await?;
+            self.handle_proxy_streaming_response(response.bytes_stream())
+                .await?;
         } else {
             let error_text = response.text().await?;
             println!("❌ Proxy Streaming Error: {}", error_text);
@@ -352,7 +394,9 @@ impl E2EClient {
         model: &str,
         message: &str,
     ) -> Result<(), Box<dyn std::error::Error>> {
-        let aws_client = self.aws_client.as_ref()
+        let aws_client = self
+            .aws_client
+            .as_ref()
             .ok_or("Direct mode requires AWS client to be initialized")?;
 
         let payload = Self::create_bedrock_payload(message);
@@ -360,19 +404,22 @@ impl E2EClient {
         let headers = axum::http::HeaderMap::new();
 
         println!("🔗 Connecting directly to AWS Bedrock (streaming)...");
-        let response = aws_client.invoke_model_with_response_stream(
-            model,
-            &headers,
-            Some("application/json"),
-            Some("application/vnd.amazon.eventstream"),
-            payload_bytes,
-        ).await?;
+        let response = aws_client
+            .invoke_model_with_response_stream(
+                model,
+                &headers,
+                Some("application/json"),
+                Some("application/vnd.amazon.eventstream"),
+                payload_bytes,
+            )
+            .await?;
 
         println!("Streaming response status: {}", response.status);
 
         if response.status.is_success() {
             println!("\n🤖 Model Response (Direct AWS streaming):");
-            self.handle_direct_streaming_response(response.stream).await?;
+            self.handle_direct_streaming_response(response.stream)
+                .await?;
         } else {
             println!("❌ Direct AWS Streaming Error: Status {}", response.status);
         }
@@ -381,7 +428,10 @@ impl E2EClient {
     }
 
     // Proxy streaming response handler
-    async fn handle_proxy_streaming_response(&self, mut stream: impl futures_util::Stream<Item = Result<bytes::Bytes, reqwest::Error>> + Unpin) -> Result<(), Box<dyn std::error::Error>> {
+    async fn handle_proxy_streaming_response(
+        &self,
+        mut stream: impl futures_util::Stream<Item = Result<bytes::Bytes, reqwest::Error>> + Unpin,
+    ) -> Result<(), Box<dyn std::error::Error>> {
         while let Some(chunk_result) = stream.next().await {
             let chunk = chunk_result?;
             let chunk_str = String::from_utf8_lossy(&chunk);
@@ -401,7 +451,12 @@ impl E2EClient {
     }
 
     // Direct AWS streaming response handler
-    async fn handle_direct_streaming_response(&self, mut stream: Box<dyn futures_util::Stream<Item = Result<bytes::Bytes, reqwest::Error>> + Send + Unpin>) -> Result<(), Box<dyn std::error::Error>> {
+    async fn handle_direct_streaming_response(
+        &self,
+        mut stream: Box<
+            dyn futures_util::Stream<Item = Result<bytes::Bytes, reqwest::Error>> + Send + Unpin,
+        >,
+    ) -> Result<(), Box<dyn std::error::Error>> {
         while let Some(chunk_result) = stream.next().await {
             let chunk = chunk_result?;
             let chunk_str = String::from_utf8_lossy(&chunk);
@@ -426,7 +481,14 @@ impl E2EClient {
         streaming: bool,
     ) -> Result<(), Box<dyn std::error::Error>> {
         println!("🚀 Starting interactive chat with model: {}", model);
-        println!("💡 Connection mode: {}", if self.direct_mode { "Direct AWS" } else { "Via Proxy" });
+        println!(
+            "💡 Connection mode: {}",
+            if self.direct_mode {
+                "Direct AWS"
+            } else {
+                "Via Proxy"
+            }
+        );
         println!("💡 Type 'quit', 'exit', or press Ctrl-D to end the chat");
         println!(
             "💡 Streaming mode: {}",
@@ -440,13 +502,13 @@ impl E2EClient {
 
             let mut input = String::new();
             let bytes_read = io::stdin().read_line(&mut input)?;
-            
+
             // Check for EOF (Ctrl-D)
             if bytes_read == 0 {
                 println!("\n👋 Goodbye!");
                 break;
             }
-            
+
             let input = input.trim();
 
             if input.is_empty() {

@@ -7,7 +7,7 @@ use jsonwebtoken::{EncodingKey, Header, encode};
 use std::sync::Arc;
 
 mod common;
-use common::{FlexibleClaims, TestHarness, RequestBuilder, helpers};
+use common::{FlexibleClaims, RequestBuilder, TestHarness, helpers};
 
 #[tokio::test]
 async fn test_security_sql_injection_attempts() {
@@ -38,17 +38,17 @@ async fn test_security_sql_injection_attempts() {
         // if AWS processes the malicious model ID normally. We mainly want to ensure
         // no SQL injection occurs at the proxy level.
         let acceptable_statuses = [
-            StatusCode::OK,                     // AWS might process it normally
+            StatusCode::OK, // AWS might process it normally
             StatusCode::BAD_REQUEST,
             StatusCode::INTERNAL_SERVER_ERROR,
         ];
-        
+
         helpers::assert_status_in(
             &response,
             &acceptable_statuses,
             &format!("SQL injection model ID: {}", model_id),
         );
-        
+
         // Should not be an auth issue
         assert_ne!(
             response.status(),
@@ -79,7 +79,12 @@ async fn test_security_xss_attempts() {
         // We expect either success (proxy forwards), client error, or server error (AWS rejects)
         helpers::assert_status_in(
             &response,
-            &[StatusCode::OK, StatusCode::INTERNAL_SERVER_ERROR, StatusCode::BAD_REQUEST, StatusCode::FORBIDDEN],
+            &[
+                StatusCode::OK,
+                StatusCode::INTERNAL_SERVER_ERROR,
+                StatusCode::BAD_REQUEST,
+                StatusCode::FORBIDDEN,
+            ],
             &format!("XSS payload: {}", payload),
         );
     }
@@ -143,7 +148,11 @@ async fn test_security_header_injection() {
             // Malicious headers should either be stripped/ignored or cause request rejection
             helpers::assert_status_in(
                 &response,
-                &[StatusCode::OK, StatusCode::BAD_REQUEST, StatusCode::INTERNAL_SERVER_ERROR],
+                &[
+                    StatusCode::OK,
+                    StatusCode::BAD_REQUEST,
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                ],
                 &format!("header injection: {} = {}", header_name, header_value),
             );
         }
@@ -220,12 +229,12 @@ async fn test_security_path_traversal() {
         // if AWS processes the malicious model ID normally. We mainly want to ensure
         // no file system access or information disclosure occurs at the proxy level.
         let acceptable_statuses = [
-            StatusCode::OK,                     // AWS might process it normally
+            StatusCode::OK, // AWS might process it normally
             StatusCode::BAD_REQUEST,
             StatusCode::NOT_FOUND,
             StatusCode::INTERNAL_SERVER_ERROR,
         ];
-        
+
         helpers::assert_status_in(
             &response,
             &acceptable_statuses,
@@ -319,7 +328,6 @@ async fn test_security_http_method_tampering() {
 async fn test_security_jwt_algorithm_confusion() {
     let harness = TestHarness::new().await;
 
-
     let claims = FlexibleClaims::security("malicious_user", 3600);
 
     // Test 1: Create a manually crafted "none" algorithm token
@@ -331,7 +339,8 @@ async fn test_security_jwt_algorithm_confusion() {
         "" // No signature for "none" algorithm
     );
 
-    let request = RequestBuilder::invoke_model_with_auth("test-model", &none_payload, r#"{"messages": []}"#);
+    let request =
+        RequestBuilder::invoke_model_with_auth("test-model", &none_payload, r#"{"messages": []}"#);
 
     let response = harness.make_request(request).await;
     // Should reject "none" algorithm tokens
@@ -354,7 +363,11 @@ async fn test_security_jwt_algorithm_confusion() {
                 .encode(serde_json::to_string(&claims).unwrap())
         );
 
-        let request = RequestBuilder::invoke_model_with_auth("test-model", &malicious_token, r#"{"messages": []}"#);
+        let request = RequestBuilder::invoke_model_with_auth(
+            "test-model",
+            &malicious_token,
+            r#"{"messages": []}"#,
+        );
 
         let response = harness.make_request(request).await;
         // Should reject tokens with wrong algorithms
@@ -375,7 +388,8 @@ async fn test_security_jwt_algorithm_confusion() {
     )
     .unwrap();
 
-    let request = RequestBuilder::invoke_model_with_auth("test-model", &valid_token, r#"{"messages": []}"#);
+    let request =
+        RequestBuilder::invoke_model_with_auth("test-model", &valid_token, r#"{"messages": []}"#);
 
     let response = harness.make_request(request).await;
     // Valid HS256 token should not be rejected for auth reasons

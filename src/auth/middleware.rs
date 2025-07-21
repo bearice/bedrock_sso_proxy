@@ -1,5 +1,5 @@
+use crate::auth::{ValidatedClaims, jwt::JwtService};
 use crate::error::AppError;
-use crate::auth::{jwt::JwtService, ValidatedClaims};
 use axum::{
     extract::{Request, State},
     http::header::AUTHORIZATION,
@@ -69,7 +69,7 @@ pub async fn jwt_auth_middleware_with_claims(
 
     // Validate token and get claims
     let claims = auth_config.jwt_service.validate_token(token)?;
-    
+
     // Add claims to request extensions for downstream handlers
     request.extensions_mut().insert(claims);
 
@@ -87,14 +87,17 @@ pub fn extract_claims(request: &Request) -> Option<&ValidatedClaims> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::auth::{jwt::{JwtService, OAuthClaims}, ValidatedClaims};
+    use crate::auth::{
+        ValidatedClaims,
+        jwt::{JwtService, OAuthClaims},
+    };
     use axum::{
         Router,
         body::Body,
+        extract::Request as ExtractRequest,
         http::{Request, StatusCode},
         middleware,
         routing::get,
-        extract::Request as ExtractRequest,
     };
     use jsonwebtoken::{Algorithm, EncodingKey, Header, encode};
     use std::time::{SystemTime, UNIX_EPOCH};
@@ -154,12 +157,13 @@ mod tests {
         let jwt_service = JwtService::new("test-secret".to_string(), Algorithm::HS256);
         let auth_config = Arc::new(AuthConfig::new(jwt_service));
 
-        let app = Router::new()
-            .route("/test", get(test_handler))
-            .layer(middleware::from_fn_with_state(
-                auth_config.clone(),
-                jwt_auth_middleware,
-            ));
+        let app =
+            Router::new()
+                .route("/test", get(test_handler))
+                .layer(middleware::from_fn_with_state(
+                    auth_config.clone(),
+                    jwt_auth_middleware,
+                ));
 
         let token = create_legacy_token("test-secret", "user123", 3600);
         let request = Request::builder()
@@ -178,12 +182,13 @@ mod tests {
         let oauth_token = create_oauth_token(&jwt_service);
         let auth_config = Arc::new(AuthConfig::new(jwt_service));
 
-        let app = Router::new()
-            .route("/test", get(test_handler))
-            .layer(middleware::from_fn_with_state(
-                auth_config.clone(),
-                jwt_auth_middleware,
-            ));
+        let app =
+            Router::new()
+                .route("/test", get(test_handler))
+                .layer(middleware::from_fn_with_state(
+                    auth_config.clone(),
+                    jwt_auth_middleware,
+                ));
 
         let request = Request::builder()
             .uri("/test")
@@ -216,8 +221,10 @@ mod tests {
 
         let response = app.oneshot(request).await.unwrap();
         assert_eq!(response.status(), StatusCode::OK);
-        
-        let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
         let body_str = String::from_utf8(body.to_vec()).unwrap();
         assert_eq!(body_str, "oauth_success");
     }
@@ -243,8 +250,10 @@ mod tests {
 
         let response = app.oneshot(request).await.unwrap();
         assert_eq!(response.status(), StatusCode::OK);
-        
-        let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
         let body_str = String::from_utf8(body.to_vec()).unwrap();
         assert_eq!(body_str, "legacy_success");
     }
@@ -254,12 +263,13 @@ mod tests {
         let jwt_service = JwtService::new("test-secret".to_string(), Algorithm::HS256);
         let auth_config = Arc::new(AuthConfig::new(jwt_service));
 
-        let app = Router::new()
-            .route("/test", get(test_handler))
-            .layer(middleware::from_fn_with_state(
-                auth_config.clone(),
-                jwt_auth_middleware,
-            ));
+        let app =
+            Router::new()
+                .route("/test", get(test_handler))
+                .layer(middleware::from_fn_with_state(
+                    auth_config.clone(),
+                    jwt_auth_middleware,
+                ));
 
         let request = Request::builder().uri("/test").body(Body::empty()).unwrap();
 
@@ -272,12 +282,13 @@ mod tests {
         let jwt_service = JwtService::new("test-secret".to_string(), Algorithm::HS256);
         let auth_config = Arc::new(AuthConfig::new(jwt_service));
 
-        let app = Router::new()
-            .route("/test", get(test_handler))
-            .layer(middleware::from_fn_with_state(
-                auth_config.clone(),
-                jwt_auth_middleware,
-            ));
+        let app =
+            Router::new()
+                .route("/test", get(test_handler))
+                .layer(middleware::from_fn_with_state(
+                    auth_config.clone(),
+                    jwt_auth_middleware,
+                ));
 
         let request = Request::builder()
             .uri("/test")
@@ -294,12 +305,13 @@ mod tests {
         let jwt_service = JwtService::new("test-secret".to_string(), Algorithm::HS256);
         let auth_config = Arc::new(AuthConfig::new(jwt_service));
 
-        let app = Router::new()
-            .route("/test", get(test_handler))
-            .layer(middleware::from_fn_with_state(
-                auth_config.clone(),
-                jwt_auth_middleware,
-            ));
+        let app =
+            Router::new()
+                .route("/test", get(test_handler))
+                .layer(middleware::from_fn_with_state(
+                    auth_config.clone(),
+                    jwt_auth_middleware,
+                ));
 
         let request = Request::builder()
             .uri("/test")
@@ -316,12 +328,13 @@ mod tests {
         let jwt_service = JwtService::new("test-secret".to_string(), Algorithm::HS256);
         let auth_config = Arc::new(AuthConfig::new(jwt_service));
 
-        let app = Router::new()
-            .route("/test", get(test_handler))
-            .layer(middleware::from_fn_with_state(
-                auth_config.clone(),
-                jwt_auth_middleware,
-            ));
+        let app =
+            Router::new()
+                .route("/test", get(test_handler))
+                .layer(middleware::from_fn_with_state(
+                    auth_config.clone(),
+                    jwt_auth_middleware,
+                ));
 
         let token = create_legacy_token("test-secret", "user123", -3600);
         let request = Request::builder()
@@ -362,8 +375,10 @@ mod tests {
 
         let response = app.oneshot(request).await.unwrap();
         assert_eq!(response.status(), StatusCode::OK);
-        
-        let body = axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap();
+
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
         let body_str = String::from_utf8(body.to_vec()).unwrap();
         assert_eq!(body_str, "header_removed");
     }

@@ -85,10 +85,10 @@ impl HealthCheckResult {
 pub trait HealthChecker: Send + Sync {
     /// The name of this health check component
     fn name(&self) -> &str;
-    
+
     /// Perform the health check
     async fn check(&self) -> HealthCheckResult;
-    
+
     /// Optional: return static information about this component
     fn info(&self) -> Option<serde_json::Value> {
         None
@@ -277,13 +277,13 @@ mod tests {
     async fn test_register_and_check_healthy() {
         let service = HealthService::new();
         let checker = Arc::new(MockHealthyChecker);
-        
+
         service.register(checker).await;
-        
+
         let checkers = service.get_registered_checkers().await;
         assert_eq!(checkers.len(), 1);
         assert!(checkers.contains(&"mock_healthy".to_string()));
-        
+
         let response = service.check_health(Some("all")).await;
         assert!(matches!(response.status, HealthStatus::Healthy));
         assert_eq!(response.summary.total_checks, 1);
@@ -295,11 +295,11 @@ mod tests {
     #[tokio::test]
     async fn test_multiple_checkers_mixed_status() {
         let service = HealthService::new();
-        
+
         service.register(Arc::new(MockHealthyChecker)).await;
         service.register(Arc::new(MockDegradedChecker)).await;
         service.register(Arc::new(MockUnhealthyChecker)).await;
-        
+
         let response = service.check_health(Some("all")).await;
         assert!(matches!(response.status, HealthStatus::Unhealthy)); // Worst case wins
         assert_eq!(response.summary.total_checks, 3);
@@ -311,10 +311,10 @@ mod tests {
     #[tokio::test]
     async fn test_specific_health_check() {
         let service = HealthService::new();
-        
+
         service.register(Arc::new(MockHealthyChecker)).await;
         service.register(Arc::new(MockDegradedChecker)).await;
-        
+
         let response = service.check_health(Some("mock_healthy")).await;
         assert!(matches!(response.status, HealthStatus::Healthy));
         assert_eq!(response.summary.total_checks, 1);
@@ -325,9 +325,9 @@ mod tests {
     #[tokio::test]
     async fn test_no_checks_requested() {
         let service = HealthService::new();
-        
+
         service.register(Arc::new(MockHealthyChecker)).await;
-        
+
         let response = service.check_health(None).await;
         assert!(matches!(response.status, HealthStatus::Healthy));
         assert_eq!(response.summary.total_checks, 0); // No checks run
@@ -337,10 +337,10 @@ mod tests {
     #[tokio::test]
     async fn test_unregister_checker() {
         let service = HealthService::new();
-        
+
         service.register(Arc::new(MockHealthyChecker)).await;
         assert_eq!(service.get_registered_checkers().await.len(), 1);
-        
+
         service.unregister("mock_healthy").await;
         assert_eq!(service.get_registered_checkers().await.len(), 0);
     }

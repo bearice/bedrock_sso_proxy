@@ -1,6 +1,6 @@
 use config::{Config as ConfigBuilder, ConfigError, Environment, File};
 use serde::{Deserialize, Serialize};
-use std::{path::Path, collections::HashMap};
+use std::{collections::HashMap, path::Path};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Config {
@@ -148,19 +148,11 @@ impl Default for CacheConfig {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct FrontendConfig {
     /// Path to serve frontend files from filesystem
     /// If not specified, uses embedded assets
     pub path: Option<String>,
-}
-
-impl Default for FrontendConfig {
-    fn default() -> Self {
-        Self {
-            path: None,
-        }
-    }
 }
 
 impl Default for Config {
@@ -254,7 +246,8 @@ fn apply_predefined_provider_defaults(provider_name: &str, provider: &mut OAuthP
 
 fn apply_google_defaults(provider: &mut OAuthProvider) {
     if provider.authorization_url.is_none() {
-        provider.authorization_url = Some("https://accounts.google.com/o/oauth2/v2/auth".to_string());
+        provider.authorization_url =
+            Some("https://accounts.google.com/o/oauth2/v2/auth".to_string());
     }
     if provider.token_url.is_none() {
         provider.token_url = Some("https://oauth2.googleapis.com/token".to_string());
@@ -263,12 +256,18 @@ fn apply_google_defaults(provider: &mut OAuthProvider) {
         provider.user_info_url = Some("https://www.googleapis.com/oauth2/v2/userinfo".to_string());
     }
     if provider.scopes.is_empty() {
-        provider.scopes = vec!["openid".to_string(), "email".to_string(), "profile".to_string()];
+        provider.scopes = vec![
+            "openid".to_string(),
+            "email".to_string(),
+            "profile".to_string(),
+        ];
     }
-    if provider.user_id_field == "id" { // default wasn't overridden
+    if provider.user_id_field == "id" {
+        // default wasn't overridden
         provider.user_id_field = "id".to_string();
     }
-    if provider.email_field == "email" { // default wasn't overridden
+    if provider.email_field == "email" {
+        // default wasn't overridden
         provider.email_field = "email".to_string();
     }
 }
@@ -291,24 +290,38 @@ fn apply_github_defaults(provider: &mut OAuthProvider) {
 fn apply_microsoft_defaults(provider: &mut OAuthProvider) {
     let tenant = provider.tenant_id.as_deref().unwrap_or("common");
     if provider.authorization_url.is_none() {
-        provider.authorization_url = Some(format!("https://login.microsoftonline.com/{}/oauth2/v2.0/authorize", tenant));
+        provider.authorization_url = Some(format!(
+            "https://login.microsoftonline.com/{}/oauth2/v2.0/authorize",
+            tenant
+        ));
     }
     if provider.token_url.is_none() {
-        provider.token_url = Some(format!("https://login.microsoftonline.com/{}/oauth2/v2.0/token", tenant));
+        provider.token_url = Some(format!(
+            "https://login.microsoftonline.com/{}/oauth2/v2.0/token",
+            tenant
+        ));
     }
     if provider.user_info_url.is_none() {
         provider.user_info_url = Some("https://graph.microsoft.com/v1.0/me".to_string());
     }
     if provider.scopes.is_empty() {
-        provider.scopes = vec!["openid".to_string(), "profile".to_string(), "email".to_string()];
+        provider.scopes = vec![
+            "openid".to_string(),
+            "profile".to_string(),
+            "email".to_string(),
+        ];
     }
-    if provider.email_field == "email" { // default wasn't overridden
+    if provider.email_field == "email" {
+        // default wasn't overridden
         provider.email_field = "mail".to_string();
     }
 }
 
 fn apply_gitlab_defaults(provider: &mut OAuthProvider) {
-    let instance = provider.instance_url.as_deref().unwrap_or("https://gitlab.com");
+    let instance = provider
+        .instance_url
+        .as_deref()
+        .unwrap_or("https://gitlab.com");
     if provider.authorization_url.is_none() {
         provider.authorization_url = Some(format!("{}/oauth/authorize", instance));
     }
@@ -336,9 +349,14 @@ fn apply_auth0_defaults(provider: &mut OAuthProvider) {
         }
     }
     if provider.scopes.is_empty() {
-        provider.scopes = vec!["openid".to_string(), "profile".to_string(), "email".to_string()];
+        provider.scopes = vec![
+            "openid".to_string(),
+            "profile".to_string(),
+            "email".to_string(),
+        ];
     }
-    if provider.user_id_field == "id" { // default wasn't overridden
+    if provider.user_id_field == "id" {
+        // default wasn't overridden
         provider.user_id_field = "sub".to_string();
     }
 }
@@ -346,7 +364,8 @@ fn apply_auth0_defaults(provider: &mut OAuthProvider) {
 fn apply_okta_defaults(provider: &mut OAuthProvider) {
     if let Some(domain) = &provider.domain {
         if provider.authorization_url.is_none() {
-            provider.authorization_url = Some(format!("https://{}/oauth2/default/v1/authorize", domain));
+            provider.authorization_url =
+                Some(format!("https://{}/oauth2/default/v1/authorize", domain));
         }
         if provider.token_url.is_none() {
             provider.token_url = Some(format!("https://{}/oauth2/default/v1/token", domain));
@@ -356,9 +375,14 @@ fn apply_okta_defaults(provider: &mut OAuthProvider) {
         }
     }
     if provider.scopes.is_empty() {
-        provider.scopes = vec!["openid".to_string(), "profile".to_string(), "email".to_string()];
+        provider.scopes = vec![
+            "openid".to_string(),
+            "profile".to_string(),
+            "email".to_string(),
+        ];
     }
-    if provider.user_id_field == "id" { // default wasn't overridden
+    if provider.user_id_field == "id" {
+        // default wasn't overridden
         provider.user_id_field = "sub".to_string();
     }
 }
@@ -381,7 +405,7 @@ mod tests {
                 }
             })
             .collect();
-        
+
         for var in bedrock_vars {
             unsafe {
                 std::env::remove_var(&var);
@@ -522,7 +546,7 @@ jwt:
     #[serial]
     fn test_config_load_with_environment_variables() {
         let _guard = EnvGuard::new();
-        
+
         unsafe {
             std::env::set_var("BEDROCK_SERVER__HOST", "127.0.0.1");
             std::env::set_var("BEDROCK_SERVER__PORT", "8080");
@@ -578,7 +602,7 @@ jwt:
     #[serial]
     fn test_config_with_algorithm() {
         let _guard = EnvGuard::new();
-        
+
         let yaml_content = r#"
 server:
   host: "0.0.0.0"
@@ -604,7 +628,7 @@ logging:
     #[serial]
     fn test_aws_config_with_credentials() {
         let _guard = EnvGuard::new();
-        
+
         let yaml_content = r#"
 server:
   host: "0.0.0.0"

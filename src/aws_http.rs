@@ -1,6 +1,6 @@
 use crate::config::AwsConfig;
 use crate::error::AppError;
-use crate::health::{HealthChecker, HealthCheckResult};
+use crate::health::{HealthCheckResult, HealthChecker};
 use aws_credential_types::Credentials;
 use aws_sigv4::http_request::{SignableBody, SignableRequest, SigningSettings, sign};
 use aws_sigv4::sign::v4;
@@ -370,8 +370,9 @@ impl HealthChecker for AwsHealthChecker {
             Ok(()) => {
                 let auth_type = if self.client.config.bearer_token.is_some() {
                     "bearer_token"
-                } else if self.client.config.access_key_id.is_some() 
-                    && self.client.config.secret_access_key.is_some() {
+                } else if self.client.config.access_key_id.is_some()
+                    && self.client.config.secret_access_key.is_some()
+                {
                     "sigv4"
                 } else {
                     "unknown"
@@ -383,16 +384,14 @@ impl HealthChecker for AwsHealthChecker {
                     "endpoint": self.client.base_url
                 }))
             }
-            Err(err) => {
-                HealthCheckResult::unhealthy_with_details(
-                    "AWS authentication not configured".to_string(),
-                    serde_json::json!({
-                        "error": err.to_string(),
-                        "region": self.client.config.region,
-                        "endpoint": self.client.base_url
-                    })
-                )
-            }
+            Err(err) => HealthCheckResult::unhealthy_with_details(
+                "AWS authentication not configured".to_string(),
+                serde_json::json!({
+                    "error": err.to_string(),
+                    "region": self.client.config.region,
+                    "endpoint": self.client.base_url
+                }),
+            ),
         }
     }
 
@@ -565,11 +564,11 @@ mod tests {
         // Should succeed in making the HTTP call but get rejected by AWS
         assert!(result.is_ok());
         let response = result.unwrap();
-        
+
         // With test credentials, AWS should return 403 Forbidden (deterministic)
         assert_eq!(response.status, reqwest::StatusCode::FORBIDDEN);
         assert!(!response.body.is_empty()); // Should have error response body
-        
+
         // Verify client configuration
         assert_eq!(client.get_host(), "bedrock-runtime.us-east-1.amazonaws.com");
     }
