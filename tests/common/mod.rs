@@ -31,6 +31,7 @@ pub struct FlexibleClaims {
 
 impl FlexibleClaims {
     /// Create basic claims for integration tests
+    #[allow(dead_code)]
     pub fn integration(sub: &str, user_id: Option<&str>, permissions: Option<Vec<&str>>) -> Self {
         let now = SystemTime::now()
             .duration_since(UNIX_EPOCH)
@@ -49,6 +50,7 @@ impl FlexibleClaims {
     }
 
     /// Create claims for security tests with custom expiry
+    #[allow(dead_code)]
     pub fn security(sub: &str, exp_offset: i64) -> Self {
         let now = SystemTime::now()
             .duration_since(UNIX_EPOCH)
@@ -74,6 +76,7 @@ impl FlexibleClaims {
     }
 
     /// Create claims with custom expiry offset
+    #[allow(dead_code)]
     pub fn with_expiry(sub: &str, exp_offset: i64, user_id: Option<&str>) -> Self {
         let now = SystemTime::now()
             .duration_since(UNIX_EPOCH)
@@ -95,6 +98,7 @@ impl FlexibleClaims {
 
 /// Unified test harness that handles app setup and token management
 pub struct TestHarness {
+    #[allow(dead_code)]
     pub config: Config,
     pub app: Router,
     pub jwt_secret: String,
@@ -136,18 +140,21 @@ impl TestHarness {
     }
 
     /// Create JWT token for integration tests
+    #[allow(dead_code)]
     pub fn create_integration_token(&self, sub: &str, user_id: Option<&str>, permissions: Option<Vec<&str>>) -> String {
         let claims = FlexibleClaims::integration(sub, user_id, permissions);
         self.create_token(&claims)
     }
 
     /// Create JWT token for security tests
+    #[allow(dead_code)]
     pub fn create_security_token(&self, sub: &str, exp_offset: i64) -> String {
         let claims = FlexibleClaims::security(sub, exp_offset);
         self.create_token(&claims)
     }
 
     /// Create JWT token with custom expiry
+    #[allow(dead_code)]
     pub fn create_token_with_expiry(&self, sub: &str, exp_offset: i64, user_id: Option<&str>) -> String {
         let claims = FlexibleClaims::with_expiry(sub, exp_offset, user_id);
         self.create_token(&claims)
@@ -159,6 +166,7 @@ impl TestHarness {
     }
 
     /// Verify JWT token
+    #[allow(dead_code)]
     pub fn verify_token(&self, token: &str) -> Result<FlexibleClaims, jsonwebtoken::errors::Error> {
         let mut validation = Validation::new(Algorithm::HS256);
         validation.validate_exp = true;
@@ -177,13 +185,6 @@ impl TestHarness {
 pub struct RequestBuilder;
 
 impl RequestBuilder {
-    /// Health check without auth
-    pub fn health() -> Request<Body> {
-        Request::builder()
-            .uri("/health")
-            .body(Body::empty())
-            .unwrap()
-    }
 
     /// Health check with auth
     pub fn health_with_auth(token: &str) -> Request<Body> {
@@ -195,6 +196,7 @@ impl RequestBuilder {
     }
 
     /// Health check with query parameter and auth
+    #[allow(dead_code)]
     pub fn health_with_check_and_auth(check_type: &str, token: &str) -> Request<Body> {
         Request::builder()
             .uri(&format!("/health?check={}", check_type))
@@ -215,6 +217,7 @@ impl RequestBuilder {
     }
 
     /// Model invoke streaming with auth
+    #[allow(dead_code)]
     pub fn invoke_streaming_with_auth(model_id: &str, token: &str, body: &str) -> Request<Body> {
         Request::builder()
             .uri(&format!("/model/{}/invoke-with-response-stream", model_id))
@@ -225,18 +228,9 @@ impl RequestBuilder {
             .unwrap()
     }
 
-    /// Custom request with authorization header
-    pub fn custom_auth_header(uri: &str, method: &str, auth_header: &str, body: &str) -> Request<Body> {
-        Request::builder()
-            .uri(uri)
-            .method(method)
-            .header("Authorization", auth_header)
-            .header("Content-Type", "application/json")
-            .body(Body::from(body.to_string()))
-            .unwrap()
-    }
 
     /// Custom request with method, headers, and body
+    #[allow(dead_code)]
     pub fn custom_request(
         uri: &str,
         method: Method,
@@ -258,6 +252,7 @@ impl RequestBuilder {
     }
 
     /// Request with custom content type
+    #[allow(dead_code)]
     pub fn with_content_type(
         uri: &str,
         method: Method,
@@ -279,6 +274,7 @@ pub mod helpers {
     use super::*;
 
     /// Assert response status with context
+    #[allow(dead_code)]
     pub fn assert_status_with_context(
         response: &axum::response::Response,
         expected: StatusCode,
@@ -295,6 +291,7 @@ pub mod helpers {
     }
 
     /// Assert response status is one of several acceptable values
+    #[allow(dead_code)]
     pub fn assert_status_in(
         response: &axum::response::Response,
         acceptable: &[StatusCode],
