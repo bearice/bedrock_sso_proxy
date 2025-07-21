@@ -39,6 +39,19 @@ cargo clippy                  # Lint code (required before commit)
 cargo fmt                     # Format code (required before commit)
 ```
 
+### Frontend Development
+```bash
+cd frontend                   # Change to frontend directory
+npm install                   # Install dependencies
+npm run dev                   # Start development server
+npm run build                 # Build for production
+npm run lint                  # Lint TypeScript/React code (required before commit)
+npm run lint:fix              # Auto-fix linting issues
+npm run format                # Format code with Prettier (required before commit)
+npm run format:check          # Check code formatting
+npm run type-check            # TypeScript type checking
+```
+
 ### E2E Testing
 ```bash
 # Build and run the test client
@@ -96,8 +109,26 @@ Use `BEDROCK_` prefix with double underscores for nesting:
 - You should always follow design in DESIGN.md when coding
 - After each phase, do a commit and make it easy to review and rewind
 - When adding a dep, make sure it's the latest version
-- Before commit, use cargo clippy to check code and cargo fmt to format, do not ignore warnings.
 - You should add tests for new code when a phase is finished
+
+### Pre-Commit Workflow (REQUIRED)
+
+**Backend (Rust):**
+```bash
+cargo fmt          # Format code
+cargo clippy       # Check linting/warnings  
+cargo test         # Run tests
+```
+
+**Frontend (React/TypeScript):**
+```bash
+cd frontend
+npm run format     # Format with Prettier
+npm run lint       # ESLint checks
+npm run type-check # TypeScript validation
+```
+
+**Always run these before committing** - no exceptions! This ensures code quality and consistency.
 
 ## Project Status
 

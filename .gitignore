@@ -20,6 +20,7 @@ frontend/lerna-debug.log*
 frontend/.DS_Store
 frontend/dist-ssr
 frontend/*.local
+frontend/.eslintcache
 
 # Editor
 .vscode/
