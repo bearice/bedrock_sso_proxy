@@ -32,3 +32,4 @@ frontend/.eslintcache
 # OS
 .DS_Store
 Thumbs.db
+data/*
