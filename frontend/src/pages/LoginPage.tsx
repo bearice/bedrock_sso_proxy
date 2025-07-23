@@ -5,13 +5,20 @@ import { Shield, RefreshCw, AlertCircle } from 'lucide-react';
 
 const getProviderIcon = (name: string) => {
   switch (name) {
-    case 'google': return '🔍';
-    case 'github': return '🐙';
-    case 'microsoft': return '🪟';
-    case 'gitlab': return '🦊';
-    case 'auth0': return '🔐';
-    case 'okta': return '🔑';
-    default: return '🔒';
+    case 'google':
+      return '🔍';
+    case 'github':
+      return '🐙';
+    case 'microsoft':
+      return '🪟';
+    case 'gitlab':
+      return '🦊';
+    case 'auth0':
+      return '🔐';
+    case 'okta':
+      return '🔑';
+    default:
+      return '🔒';
   }
 };
 
@@ -109,14 +116,18 @@ export function LoginPage() {
           <div className="card">
             <h3>No OAuth Providers Configured</h3>
             <p>No OAuth providers are currently configured on the server.</p>
-            <p>To configure OAuth providers, add them to your <code>config.yaml</code>:</p>
-            <pre style={{
-              background: '#f7fafc',
-              padding: '1rem',
-              borderRadius: '8px',
-              fontSize: '0.875rem',
-              color: '#2d3748'
-            }}>{`oauth:
+            <p>
+              To configure OAuth providers, add them to your <code>config.yaml</code>:
+            </p>
+            <pre
+              style={{
+                background: '#f7fafc',
+                padding: '1rem',
+                borderRadius: '8px',
+                fontSize: '0.875rem',
+                color: '#2d3748',
+              }}
+            >{`oauth:
   providers:
     google:
       client_id: "your-google-client-id"
@@ -148,13 +159,19 @@ export function LoginPage() {
                     </span>
                     {authLoading === provider.name
                       ? `Connecting to ${provider.display_name}...`
-                      : `Login with ${provider.display_name}`
-                    }
+                      : `Login with ${provider.display_name}`}
                   </button>
                 ))}
               </div>
 
-              <div style={{ marginTop: '1.5rem', padding: '1rem', background: '#f7fafc', borderRadius: '8px' }}>
+              <div
+                style={{
+                  marginTop: '1.5rem',
+                  padding: '1rem',
+                  background: '#f7fafc',
+                  borderRadius: '8px',
+                }}
+              >
                 <h4 style={{ marginBottom: '0.5rem', color: '#4a5568' }}>What happens next?</h4>
                 <ol style={{ paddingLeft: '1.5rem', color: '#666' }}>
                   <li>You&apos;ll be redirected to your chosen provider</li>

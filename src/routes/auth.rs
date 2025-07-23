@@ -355,7 +355,7 @@ mod tests {
 
         let cache = OAuthCache::new(3600, 600, 86400, 1000);
         let jwt_service = JwtService::new("test-secret".to_string(), Algorithm::HS256);
-        Arc::new(OAuthService::new(config, cache, jwt_service))
+        Arc::new(OAuthService::new(config, cache, jwt_service, None))
     }
 
     #[tokio::test]

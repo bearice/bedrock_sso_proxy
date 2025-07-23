@@ -38,7 +38,7 @@ export function CallbackPage() {
         const urlProvider = urlParams.get('provider');
         const errorParam = urlParams.get('error');
         const errorDescription = urlParams.get('error_description');
-        
+
         authLogger.debug('URL params', {
           success,
           accessToken: accessToken ? `${accessToken.substring(0, 20)}...` : null,
@@ -46,7 +46,7 @@ export function CallbackPage() {
           scope,
           urlProvider,
           errorParam,
-          errorDescription
+          errorDescription,
         });
 
         // Check for OAuth errors first
@@ -75,7 +75,7 @@ export function CallbackPage() {
           authLogger.debug('Calling setTokens', {
             provider: urlProvider,
             tokenType: tokenResponse.token_type,
-            expiresIn: tokenResponse.expires_in
+            expiresIn: tokenResponse.expires_in,
           });
 
           // Store tokens in auth state and set up navigation
@@ -125,7 +125,6 @@ export function CallbackPage() {
         setStatus('success');
         setShouldNavigate(true);
         authLogger.debug('Set up for navigation, waiting for auth state update');
-
       } catch (err) {
         console.error('Token exchange failed:', err);
 
@@ -159,7 +158,7 @@ export function CallbackPage() {
       microsoft: 'Microsoft',
       gitlab: 'GitLab',
       auth0: 'Auth0',
-      okta: 'Okta'
+      okta: 'Okta',
     };
     return names[provider] || provider;
   };
@@ -177,9 +176,16 @@ export function CallbackPage() {
       <div className="container">
         <div className="card">
           <div style={{ textAlign: 'center' }}>
-            <Loader2 size={48} style={{ color: '#667eea', marginBottom: '1rem' }} className="loading-spinner" />
+            <Loader2
+              size={48}
+              style={{ color: '#667eea', marginBottom: '1rem' }}
+              className="loading-spinner"
+            />
             <h2>Processing Authentication</h2>
-            <p>Exchanging authorization code with {actualProvider ? getProviderDisplayName(actualProvider) : 'OAuth provider'}...</p>
+            <p>
+              Exchanging authorization code with{' '}
+              {actualProvider ? getProviderDisplayName(actualProvider) : 'OAuth provider'}...
+            </p>
             <p style={{ color: '#666', fontSize: '0.875rem', marginTop: '1.5rem' }}>
               This should only take a few seconds. Please don&apos;t close this tab.
             </p>
@@ -195,10 +201,16 @@ export function CallbackPage() {
         <div className="card">
           <div style={{ textAlign: 'center' }}>
             <CheckCircle size={48} style={{ color: '#28a745', marginBottom: '1rem' }} />
-            <h2 className="status-message success" style={{ border: 'none', background: 'none', color: '#28a745' }}>
+            <h2
+              className="status-message success"
+              style={{ border: 'none', background: 'none', color: '#28a745' }}
+            >
               ✅ Authentication Successful!
             </h2>
-            <p>You have successfully authenticated with {actualProvider ? getProviderDisplayName(actualProvider) : 'your OAuth provider'}.</p>
+            <p>
+              You have successfully authenticated with{' '}
+              {actualProvider ? getProviderDisplayName(actualProvider) : 'your OAuth provider'}.
+            </p>
             <p style={{ color: '#666', marginBottom: '1.5rem' }}>
               You will be redirected to your dashboard automatically...
             </p>
@@ -217,15 +229,20 @@ export function CallbackPage() {
         <div className="card">
           <div style={{ textAlign: 'center' }}>
             <XCircle size={48} style={{ color: '#dc3545', marginBottom: '1rem' }} />
-            <h2 className="status-message error" style={{ border: 'none', background: 'none', color: '#dc3545' }}>
+            <h2
+              className="status-message error"
+              style={{ border: 'none', background: 'none', color: '#dc3545' }}
+            >
               ❌ Authentication Failed
             </h2>
             <p style={{ marginBottom: '1rem' }}>
-              <strong>Provider:</strong> {actualProvider ? getProviderDisplayName(actualProvider) : 'Unknown'}
+              <strong>Provider:</strong>{' '}
+              {actualProvider ? getProviderDisplayName(actualProvider) : 'Unknown'}
             </p>
 
             <div className="status-message error">
-              <strong>Error Details:</strong><br />
+              <strong>Error Details:</strong>
+              <br />
               {error}
             </div>
 
@@ -239,7 +256,15 @@ export function CallbackPage() {
               </ul>
             </div>
 
-            <div style={{ display: 'flex', gap: '1rem', justifyContent: 'center', flexWrap: 'wrap', marginTop: '2rem' }}>
+            <div
+              style={{
+                display: 'flex',
+                gap: '1rem',
+                justifyContent: 'center',
+                flexWrap: 'wrap',
+                marginTop: '2rem',
+              }}
+            >
               <button onClick={handleRetry} className="btn btn-primary">
                 Try Again
               </button>

@@ -12,12 +12,12 @@ export function useProviders() {
       try {
         setLoading(true);
         setError(null);
-        
+
         const response = await authApi.getProviders();
         setProviders(response.providers);
       } catch (err) {
         let errorMessage = 'Failed to load OAuth providers';
-        
+
         if (err instanceof ApiError) {
           if (err.status === 500) {
             errorMessage = 'Server error - please check OAuth configuration';
@@ -27,7 +27,7 @@ export function useProviders() {
         } else if (err instanceof Error) {
           errorMessage = err.message;
         }
-        
+
         console.error('Failed to load providers:', err);
         setError(errorMessage);
       } finally {
@@ -49,7 +49,7 @@ export function useProviders() {
         setError('Failed to refresh providers');
       }
     };
-    
+
     loadProviders();
   };
 

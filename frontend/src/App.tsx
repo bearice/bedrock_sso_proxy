@@ -36,28 +36,20 @@ function AppContent() {
               )
             }
           />
-          <Route
-            path="/login"
-            element={<LoginPage />}
-          />
-          <Route
-            path="/callback"
-            element={<CallbackPage />}
-          />
+          <Route path="/login" element={<LoginPage />} />
+          <Route path="/callback" element={<CallbackPage />} />
           <Route
             path="/dashboard"
             element={
-              isAuthenticated ? (
-                (() => {
-                  appLogger.debug('Rendering DashboardPage');
-                  return <DashboardPage />;
-                })()
-              ) : (
-                (() => {
-                  appLogger.debug('Redirecting to login from dashboard route');
-                  return <Navigate to="/login" replace />;
-                })()
-              )
+              isAuthenticated
+                ? (() => {
+                    appLogger.debug('Rendering DashboardPage');
+                    return <DashboardPage />;
+                  })()
+                : (() => {
+                    appLogger.debug('Redirecting to login from dashboard route');
+                    return <Navigate to="/login" replace />;
+                  })()
             }
           />
           <Route
@@ -67,7 +59,9 @@ function AppContent() {
                 <div className="card">
                   <h1>404 - Page Not Found</h1>
                   <p>The page you&apos;re looking for doesn&apos;t exist.</p>
-                  <a href="/" className="btn btn-primary">Go Home</a>
+                  <a href="/" className="btn btn-primary">
+                    Go Home
+                  </a>
                 </div>
               </div>
             }

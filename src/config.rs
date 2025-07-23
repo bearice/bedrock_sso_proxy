@@ -168,6 +168,7 @@ pub struct AdminConfig {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Default)]
 pub struct StorageConfig {
     #[serde(default)]
     pub redis: RedisStorageConfig,
@@ -229,14 +230,6 @@ fn default_database_migration_on_startup() -> bool {
     true
 }
 
-impl Default for StorageConfig {
-    fn default() -> Self {
-        Self {
-            redis: RedisStorageConfig::default(),
-            database: DatabaseStorageConfig::default(),
-        }
-    }
-}
 
 impl Default for RedisStorageConfig {
     fn default() -> Self {

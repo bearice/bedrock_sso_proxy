@@ -4,22 +4,22 @@ import {
   TokenResponse,
   ValidationResponse,
   TokenRequest,
-  RefreshRequest
+  RefreshRequest,
 } from '../types/auth';
 
-const API_BASE = '';  // Proxied by Vite dev server or served from same origin in production
+const API_BASE = ''; // Proxied by Vite dev server or served from same origin in production
 
 class ApiError extends Error {
-  constructor(public status: number, message: string) {
+  constructor(
+    public status: number,
+    message: string
+  ) {
     super(message);
     this.name = 'ApiError';
   }
 }
 
-async function fetchApi<T>(
-  endpoint: string,
-  options: RequestInit = {}
-): Promise<T> {
+async function fetchApi<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
   const response = await fetch(`${API_BASE}${endpoint}`, {
     headers: {
       'Content-Type': 'application/json',
@@ -54,15 +54,12 @@ export const authApi = {
   },
 
   // Get authorization URL for OAuth provider
-  async getAuthorizationUrl(
-    provider: string,
-    redirectUri?: string
-  ): Promise<AuthorizeResponse> {
+  async getAuthorizationUrl(provider: string, redirectUri?: string): Promise<AuthorizeResponse> {
     const params = new URLSearchParams();
     if (redirectUri) {
       params.append('redirect_uri', redirectUri);
     }
-    
+
     const query = params.toString() ? `?${params.toString()}` : '';
     return fetchApi<AuthorizeResponse>(`/auth/authorize/${provider}${query}`);
   },

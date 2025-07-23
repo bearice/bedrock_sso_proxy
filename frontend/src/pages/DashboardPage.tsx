@@ -1,29 +1,21 @@
 import { useState, useCallback } from 'react';
 import { useAuth } from '../hooks/useAuth';
-import { 
-  LogOut, 
-  Copy, 
-  RefreshCw, 
-  User, 
-  Shield, 
-  Clock, 
+import {
+  LogOut,
+  Copy,
+  RefreshCw,
+  User,
+  Shield,
+  Clock,
   Key,
   ExternalLink,
   Terminal,
-  FileText
+  FileText,
 } from 'lucide-react';
 
 export function DashboardPage() {
-  const { 
-    token, 
-    refreshToken, 
-    provider, 
-    user, 
-    expiresAt, 
-    scopes,
-    refreshTokens,
-    logout 
-  } = useAuth();
+  const { token, refreshToken, provider, user, expiresAt, scopes, refreshTokens, logout } =
+    useAuth();
 
   const [copied, setCopied] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
@@ -49,7 +41,7 @@ export function DashboardPage() {
 
   const handleRefreshToken = useCallback(async () => {
     if (!refreshToken) return;
-    
+
     try {
       setRefreshing(true);
       await refreshTokens(refreshToken);
@@ -64,14 +56,14 @@ export function DashboardPage() {
   const formatExpirationTime = (timestamp: number) => {
     const now = Date.now() / 1000;
     const diff = timestamp - now;
-    
+
     if (diff <= 0) {
       return 'Expired';
     }
-    
+
     const days = Math.floor(diff / (24 * 3600));
     const hours = Math.floor((diff % (24 * 3600)) / 3600);
-    
+
     if (days > 30) {
       const months = Math.floor(days / 30);
       return `${months} month${months > 1 ? 's' : ''} remaining`;
@@ -89,11 +81,11 @@ export function DashboardPage() {
   const getProviderDisplayName = (provider: string) => {
     const names: { [key: string]: string } = {
       google: 'Google',
-      github: 'GitHub', 
+      github: 'GitHub',
       microsoft: 'Microsoft',
       gitlab: 'GitLab',
       auth0: 'Auth0',
-      okta: 'Okta'
+      okta: 'Okta',
     };
     return names[provider] || provider;
   };
@@ -110,8 +102,12 @@ export function DashboardPage() {
               <User size={20} style={{ marginRight: '0.5rem', verticalAlign: 'text-bottom' }} />
               Welcome back!
             </h3>
-            <p><strong>User ID:</strong> {user}</p>
-            <p><strong>Provider:</strong> {getProviderDisplayName(provider || '')}</p>
+            <p>
+              <strong>User ID:</strong> {user}
+            </p>
+            <p>
+              <strong>Provider:</strong> {getProviderDisplayName(provider || '')}
+            </p>
           </div>
           <div>
             <span className="provider-badge">{getProviderDisplayName(provider || '')}</span>
@@ -123,23 +119,23 @@ export function DashboardPage() {
         </div>
 
         {expiresAt && (
-          <div style={{ 
-            display: 'flex', 
-            alignItems: 'center', 
-            justifyContent: 'space-between',
-            padding: '0.75rem',
-            background: '#f7fafc',
-            borderRadius: '8px',
-            marginTop: '1rem'
-          }}>
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              padding: '0.75rem',
+              background: '#f7fafc',
+              borderRadius: '8px',
+              marginTop: '1rem',
+            }}
+          >
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
               <Clock size={16} style={{ color: '#4a5568' }} />
-              <span style={{ color: '#4a5568' }}>
-                Token {formatExpirationTime(expiresAt)}
-              </span>
+              <span style={{ color: '#4a5568' }}>Token {formatExpirationTime(expiresAt)}</span>
             </div>
             {refreshToken && (
-              <button 
+              <button
                 onClick={handleRefreshToken}
                 disabled={refreshing}
                 className="btn btn-secondary"
@@ -160,15 +156,12 @@ export function DashboardPage() {
           JWT Access Token
         </h2>
         <p>Use this token to authenticate your requests to the Bedrock API.</p>
-        
+
         <div className="token-display">
           <div className="token-box">
             <h4>Access Token</h4>
             <div className="token-value">{token}</div>
-            <button 
-              onClick={() => copyToClipboard(token!, 'token')}
-              className="copy-btn"
-            >
+            <button onClick={() => copyToClipboard(token!, 'token')} className="copy-btn">
               <Copy size={14} />
               {copied === 'token' ? 'Copied!' : 'Copy Token'}
             </button>
@@ -178,10 +171,7 @@ export function DashboardPage() {
             <div className="token-box">
               <h4>Refresh Token</h4>
               <div className="token-value">{refreshToken}</div>
-              <button 
-                onClick={() => copyToClipboard(refreshToken, 'refresh')}
-                className="copy-btn"
-              >
+              <button onClick={() => copyToClipboard(refreshToken, 'refresh')} className="copy-btn">
                 <Copy size={14} />
                 {copied === 'refresh' ? 'Copied!' : 'Copy Refresh Token'}
               </button>
@@ -191,9 +181,11 @@ export function DashboardPage() {
           {scopes && scopes.length > 0 && (
             <div style={{ marginTop: '1rem' }}>
               <h4>Granted Scopes:</h4>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', marginTop: '0.5rem' }}>
+              <div
+                style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', marginTop: '0.5rem' }}
+              >
                 {scopes.map((scope, index) => (
-                  <span 
+                  <span
                     key={index}
                     style={{
                       background: '#e2e8f0',
@@ -201,7 +193,7 @@ export function DashboardPage() {
                       padding: '0.25rem 0.75rem',
                       borderRadius: '12px',
                       fontSize: '0.875rem',
-                      fontWeight: '500'
+                      fontWeight: '500',
                     }}
                   >
                     {scope}
@@ -222,15 +214,21 @@ export function DashboardPage() {
         <p>Configure Claude Code to use your Bedrock proxy with these simple steps:</p>
 
         <h4>Method 1: Environment Variables (Recommended)</h4>
-        <pre>export BEDROCK_TOKEN=&quot;{token}&quot;
-export BEDROCK_ENDPOINT=&quot;{currentDomain}&quot;</pre>
+        <pre>
+          export BEDROCK_TOKEN=&quot;{token}&quot; export BEDROCK_ENDPOINT=&quot;{currentDomain}
+          &quot;
+        </pre>
 
         <h4>Method 2: Claude Code Configuration</h4>
-        <pre>claude-code config set bedrock.token &quot;{token}&quot;
-claude-code config set bedrock.endpoint &quot;{currentDomain}&quot;</pre>
+        <pre>
+          claude-code config set bedrock.token &quot;{token}&quot; claude-code config set
+          bedrock.endpoint &quot;{currentDomain}&quot;
+        </pre>
 
         <h4>Method 3: Configuration File</h4>
-        <p>Add to your <code>~/.claude/config.json</code>:</p>
+        <p>
+          Add to your <code>~/.claude/config.json</code>:
+        </p>
         <pre>{`{
   "bedrock": {
     "endpoint": "${currentDomain}",
@@ -239,7 +237,9 @@ claude-code config set bedrock.endpoint &quot;{currentDomain}&quot;</pre>
 }`}</pre>
 
         <h4>Method 4: CLAUDE.md Configuration</h4>
-        <p>Add to your project&apos;s <code>CLAUDE.md</code> file:</p>
+        <p>
+          Add to your project&apos;s <code>CLAUDE.md</code> file:
+        </p>
         <pre>{`# Bedrock Configuration
 export BEDROCK_TOKEN="${token?.substring(0, 20)}..."
 export BEDROCK_ENDPOINT="${currentDomain}"`}</pre>
@@ -267,23 +267,20 @@ export BEDROCK_ENDPOINT="${currentDomain}"`}</pre>
         <pre>claude-code &quot;Hello, can you help me test this setup?&quot;</pre>
 
         <div style={{ marginTop: '1rem', display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
-          <button 
-            onClick={() => copyToClipboard(
-              `curl -X POST "${currentDomain}/model/anthropic.claude-3-sonnet-20240229-v1:0/invoke" -H "Authorization: Bearer ${token}" -H "Content-Type: application/json" -d '{"anthropic_version": "bedrock-2023-05-31", "max_tokens": 1000, "messages": [{"role": "user", "content": "Hello!"}]}'`,
-              'curl'
-            )}
+          <button
+            onClick={() =>
+              copyToClipboard(
+                `curl -X POST "${currentDomain}/model/anthropic.claude-3-sonnet-20240229-v1:0/invoke" -H "Authorization: Bearer ${token}" -H "Content-Type: application/json" -d '{"anthropic_version": "bedrock-2023-05-31", "max_tokens": 1000, "messages": [{"role": "user", "content": "Hello!"}]}'`,
+                'curl'
+              )
+            }
             className="btn btn-secondary"
           >
             <Copy size={16} />
             {copied === 'curl' ? 'Copied!' : 'Copy curl Command'}
           </button>
-          
-          <a 
-            href="/health" 
-            target="_blank"
-            rel="noopener noreferrer"
-            className="btn btn-primary"
-          >
+
+          <a href="/health" target="_blank" rel="noopener noreferrer" className="btn btn-primary">
             <ExternalLink size={16} />
             Test Health Endpoint
           </a>
@@ -297,7 +294,7 @@ export BEDROCK_ENDPOINT="${currentDomain}"`}</pre>
           📚 Documentation & Support
         </h3>
         <p>Need more help? Check out these resources:</p>
-        
+
         <div style={{ display: 'grid', gap: '1rem', marginTop: '1rem' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
             <div style={{ flex: 1 }}>
@@ -306,9 +303,11 @@ export BEDROCK_ENDPOINT="${currentDomain}"`}</pre>
                 Complete API reference for all endpoints
               </p>
             </div>
-            <a href="#" className="btn btn-secondary">View Docs</a>
+            <a href="#" className="btn btn-secondary">
+              View Docs
+            </a>
           </div>
-          
+
           <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
             <div style={{ flex: 1 }}>
               <strong>Claude Code Guide</strong>
@@ -316,12 +315,17 @@ export BEDROCK_ENDPOINT="${currentDomain}"`}</pre>
                 Learn how to use Claude Code effectively
               </p>
             </div>
-            <a href="https://docs.anthropic.com/en/docs/claude-code" target="_blank" rel="noopener noreferrer" className="btn btn-secondary">
+            <a
+              href="https://docs.anthropic.com/en/docs/claude-code"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="btn btn-secondary"
+            >
               <ExternalLink size={16} />
               Visit Guide
             </a>
           </div>
-          
+
           <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
             <div style={{ flex: 1 }}>
               <strong>Server Health</strong>
@@ -329,7 +333,12 @@ export BEDROCK_ENDPOINT="${currentDomain}"`}</pre>
                 Check server status and configuration
               </p>
             </div>
-            <a href="/health" target="_blank" rel="noopener noreferrer" className="btn btn-secondary">
+            <a
+              href="/health"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="btn btn-secondary"
+            >
               <ExternalLink size={16} />
               Health Check
             </a>
