@@ -17,7 +17,12 @@ fn build_frontend() {
         return;
     }
 
-    println!("cargo:warning=Building frontend...");
+    // Determine build mode based on Cargo profile
+    let is_debug = std::env::var("DEBUG").unwrap_or_else(|_| "false".to_string()) == "true"
+        || std::env::var("PROFILE").unwrap_or_else(|_| "release".to_string()) == "debug";
+    
+    let build_mode = if is_debug { "debug" } else { "release" };
+    println!("cargo:warning=Building frontend in {} mode...", build_mode);
 
     // Check if npm is available
     let npm_check = Command::new("npm").arg("--version").output();
@@ -44,26 +49,33 @@ fn build_frontend() {
         }
     }
 
-    // Build the frontend
-    println!("cargo:warning=Building frontend assets...");
+    // Build the frontend with appropriate mode
+    println!("cargo:warning=Building frontend assets in {} mode...", build_mode);
+    let build_command = if is_debug { "build:debug" } else { "build" };
+    
     let build_result = Command::new("npm")
         .arg("run")
-        .arg("build")
+        .arg(build_command)
         .current_dir(frontend_dir)
-        .status();
+        .env("NODE_ENV", if is_debug { "development" } else { "production" })
+        .output();
 
     match build_result {
-        Ok(status) if status.success() => {
-            println!("cargo:warning=Frontend build completed successfully");
+        Ok(output) if output.status.success() => {
+            println!("cargo:warning=Frontend build completed successfully in {} mode", build_mode);
         }
-        Ok(status) => {
-            println!(
-                "cargo:warning=Frontend build failed with exit code: {:?}",
-                status.code()
+        Ok(output) => {
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            panic!(
+                "Frontend build failed with exit code: {:?}\nSTDOUT:\n{}\nSTDERR:\n{}",
+                output.status.code(),
+                stdout,
+                stderr
             );
         }
         Err(e) => {
-            println!("cargo:warning=Failed to run frontend build: {}", e);
+            panic!("Failed to run frontend build: {}", e);
         }
     }
 }

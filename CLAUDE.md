@@ -31,8 +31,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ### Build and Development
 ```bash
-cargo build                   # Build project (development mode)
-cargo build --release         # Production build (automatically builds frontend)
+cargo build                   # Build project (debug mode with unminified frontend + source maps)
+cargo build --release         # Production build (minified frontend + source maps)
 cargo build --features frontend # Force frontend build in dev mode
 cargo run --bin bedrock_proxy # Run server
 cargo test                    # Run all tests (71 total)
@@ -42,14 +42,17 @@ cargo clean                   # Clean Rust build artifacts only
 ./clean-all.sh                # Alternative: run cleanup script directly
 ```
 
-**Note**: Frontend is automatically built during `cargo build --release` or when using `--features frontend`.
+**Note**: Frontend is automatically built with appropriate optimizations:
+- **Debug mode** (`cargo build`): Unminified code with source maps for development debugging
+- **Release mode** (`cargo build --release`): Minified code with source maps for production
 
 ### Frontend Development
 ```bash
 cd frontend                   # Change to frontend directory
 npm install                   # Install dependencies
 npm run dev                   # Start development server
-npm run build                 # Build for production
+npm run build                 # Build for production (minified + source maps)
+npm run build:debug           # Build for development (unminified + source maps)
 npm run lint                  # Lint TypeScript/React code (required before commit)
 npm run lint:fix              # Auto-fix linting issues
 npm run format                # Format code with Prettier (required before commit)
