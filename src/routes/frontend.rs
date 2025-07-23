@@ -10,9 +10,17 @@ use std::path::PathBuf;
 use tokio::fs;
 use tracing::{debug, warn};
 
+// Production assets
+#[cfg(not(test))]
 #[derive(RustEmbed)]
 #[folder = "frontend/dist"]
-struct FrontendAssets;
+struct Assets;
+
+// Test assets - separate folder with known fixtures
+#[cfg(test)]
+#[derive(RustEmbed)]
+#[folder = "tests/fixtures/frontend"]
+struct Assets;
 
 /// Create frontend router with static file serving
 pub fn create_frontend_router(frontend_config: crate::config::FrontendConfig) -> Router {
@@ -86,13 +94,13 @@ async fn serve_from_filesystem(path: &str, frontend_path: &str) -> Response {
 
 /// Serve files from embedded assets
 async fn serve_from_embedded(path: &str) -> Response {
-    if let Some(embedded_file) = FrontendAssets::get(path) {
+    if let Some(embedded_file) = Assets::get(path) {
         debug!("Serving from embedded assets: {}", path);
         serve_file_content(path, embedded_file.data.into_owned())
     } else {
         // File not found - try index.html for SPA routing
         if !path.contains('.') {
-            if let Some(index_file) = FrontendAssets::get("index.html") {
+            if let Some(index_file) = Assets::get("index.html") {
                 debug!("Serving SPA fallback from embedded: index.html");
                 Html(String::from_utf8_lossy(&index_file.data).to_string()).into_response()
             } else {
@@ -137,8 +145,6 @@ fn serve_file_content(path: &str, content: Vec<u8>) -> Response {
 mod tests {
     use super::*;
     use axum_test::TestServer;
-    use tempfile::TempDir;
-    use tokio::fs;
 
     #[tokio::test]
     async fn test_serve_embedded_index() {
@@ -150,53 +156,46 @@ mod tests {
 
         let response = server.get("/").await;
         response.assert_status_ok();
-        response.assert_text_contains("Bedrock SSO Proxy");
+        response.assert_text_contains("Bedrock SSO Proxy Test Frontend");
     }
 
     #[tokio::test]
     async fn test_filesystem_serving() {
         use crate::config::FrontendConfig;
 
-        let temp_dir = TempDir::new().unwrap();
-        let frontend_dir = temp_dir.path().join("frontend");
+        // Use the existing test fixtures directory
+        let fixtures_dir = std::path::Path::new("tests/fixtures/frontend");
 
-        // Create a frontend directory
-        fs::create_dir_all(&frontend_dir).await.unwrap();
-        fs::write(
-            frontend_dir.join("index.html"),
-            "<html><body>Test Frontend</body></html>",
-        )
-        .await
-        .unwrap();
-        fs::write(frontend_dir.join("app.js"), "console.log('test');")
-            .await
-            .unwrap();
-
-        // Configure to serve from filesystem
+        // Configure to serve from filesystem (test fixtures)
         let mut config = FrontendConfig::default();
-        config.path = Some(frontend_dir.to_string_lossy().to_string());
+        config.path = Some(fixtures_dir.to_string_lossy().to_string());
 
         let app = create_frontend_router(config);
         let server = TestServer::new(app).unwrap();
 
-        // Test index.html
+        // Test index.html from fixtures
         let response = server.get("/").await;
         response.assert_status_ok();
-        response.assert_text_contains("Test Frontend");
+        response.assert_text_contains("Bedrock SSO Proxy Test Frontend");
 
-        // Test JS file
-        let response = server.get("/app.js").await;
+        // Test CSS file from fixtures
+        let response = server.get("/assets/index-test123.css").await;
         response.assert_status_ok();
-        response.assert_text("console.log('test');");
+        response.assert_text_contains("font-family");
 
-        // Test 404
+        // Test SVG file from fixtures
+        let response = server.get("/favicon.svg").await;
+        response.assert_status_ok();
+        response.assert_text_contains("<svg");
+
+        // Test 404 for non-existent file
         let response = server.get("/nonexistent.txt").await;
         response.assert_status(StatusCode::NOT_FOUND);
 
-        // Test SPA routing
+        // Test SPA routing - should serve index.html from fixtures
         let response = server.get("/some/route").await;
         response.assert_status_ok();
-        response.assert_text_contains("Test Frontend"); // Should serve index.html
+        response.assert_text_contains("Bedrock SSO Proxy Test Frontend");
     }
 
     #[tokio::test]
@@ -225,16 +224,13 @@ mod tests {
         }
 
         // Test valid paths that should serve SPA fallback
+        let config = FrontendConfig::default();
         let valid_paths = vec!["about", "users/123", "settings"];
         for valid_path in valid_paths {
             let response = serve_static_file(Path(valid_path.to_string()), config.clone()).await;
-            match response.into_response().status() {
-                StatusCode::SERVICE_UNAVAILABLE | StatusCode::OK => {} // Either no frontend built or SPA fallback
-                other => panic!(
-                    "Expected OK or SERVICE_UNAVAILABLE for path '{}', got {}",
-                    valid_path, other
-                ),
-            }
+            let response = response.into_response();
+            assert_eq!(response.status(), StatusCode::OK,
+                "Expected OK for SPA route '{}', got {}", valid_path, response.status());
         }
     }
 
@@ -242,52 +238,57 @@ mod tests {
     async fn test_embedded_assets() {
         use crate::config::FrontendConfig;
 
-        let config = FrontendConfig::default(); // Use embedded assets
+        let config = FrontendConfig::default(); // Use embedded test assets
         let app = create_frontend_router(config);
         let server = TestServer::new(app).unwrap();
 
-        // Test embedded CSS (actual Vite build asset)
-        let response = server.get("/assets/index-CdUTKjF3.css").await;
+        // Test embedded CSS file (from test fixtures)
+        let response = server.get("/assets/index-test123.css").await;
         response.assert_status_ok();
         response.assert_header("content-type", "text/css; charset=utf-8");
+        response.assert_text_contains("font-family");
 
-        // Test embedded SVG
+        // Test embedded SVG file (from test fixtures)
         let response = server.get("/favicon.svg").await;
         response.assert_status_ok();
         response.assert_header("content-type", "image/svg+xml");
         response.assert_text_contains("<svg");
+
+        // Test that non-existent files with extensions return 404
+        let response = server.get("/nonexistent.css").await;
+        response.assert_status(StatusCode::NOT_FOUND);
+
+        // Test SPA routing for paths without extensions (should serve index.html)
+        let response = server.get("/some-route").await;
+        response.assert_status_ok();
+        response.assert_text_contains("Bedrock SSO Proxy Test Frontend");
     }
 
     #[tokio::test]
     async fn test_content_types() {
         use crate::config::FrontendConfig;
 
-        let temp_dir = TempDir::new().unwrap();
-        let frontend_dir = temp_dir.path().join("frontend");
-
-        fs::create_dir_all(&frontend_dir).await.unwrap();
-
-        // Create the CSS file
-        fs::write(frontend_dir.join("style.css"), "body { color: red; }")
-            .await
-            .unwrap();
-
-        // Create the JS file
-        fs::write(frontend_dir.join("script.js"), "console.log('test');")
-            .await
-            .unwrap();
+        // Use the existing test fixtures directory
+        let fixtures_dir = std::path::Path::new("tests/fixtures/frontend");
 
         let mut config = FrontendConfig::default();
-        config.path = Some(frontend_dir.to_string_lossy().to_string());
+        config.path = Some(fixtures_dir.to_string_lossy().to_string());
         let app = create_frontend_router(config);
         let server = TestServer::new(app).unwrap();
 
-        let response = server.get("/style.css").await;
+        // Test CSS content type using fixture
+        let response = server.get("/assets/index-test123.css").await;
         response.assert_status_ok();
         response.assert_header("content-type", "text/css; charset=utf-8");
 
-        let response = server.get("/script.js").await;
+        // Test SVG content type using fixture
+        let response = server.get("/favicon.svg").await;
         response.assert_status_ok();
-        response.assert_header("content-type", "application/javascript; charset=utf-8");
+        response.assert_header("content-type", "image/svg+xml");
+
+        // Test HTML content type using fixture
+        let response = server.get("/index.html").await;
+        response.assert_status_ok();
+        response.assert_header("content-type", "text/html; charset=utf-8");
     }
 }
