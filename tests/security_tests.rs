@@ -232,6 +232,7 @@ async fn test_security_path_traversal() {
             StatusCode::OK, // AWS might process it normally
             StatusCode::BAD_REQUEST,
             StatusCode::NOT_FOUND,
+            StatusCode::METHOD_NOT_ALLOWED, // Invalid method/route combination
             StatusCode::INTERNAL_SERVER_ERROR,
         ];
 

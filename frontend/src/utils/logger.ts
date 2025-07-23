@@ -31,25 +31,25 @@ class Logger {
     return `${timestamp} ${prefix}${contextStr} ${level}: ${message}`;
   }
 
-  error(message: string, data?: any, context?: string): void {
+  error(message: string, data?: unknown, context?: string): void {
     if (this.shouldLog(LogLevel.ERROR)) {
       console.error(this.formatMessage('ERROR', message, context), data || '');
     }
   }
 
-  warn(message: string, data?: any, context?: string): void {
+  warn(message: string, data?: unknown, context?: string): void {
     if (this.shouldLog(LogLevel.WARN)) {
       console.warn(this.formatMessage('WARN', message, context), data || '');
     }
   }
 
-  info(message: string, data?: any, context?: string): void {
+  info(message: string, data?: unknown, context?: string): void {
     if (this.shouldLog(LogLevel.INFO)) {
       console.info(this.formatMessage('INFO', message, context), data || '');
     }
   }
 
-  debug(message: string, data?: any, context?: string): void {
+  debug(message: string, data?: unknown, context?: string): void {
     if (this.shouldLog(LogLevel.DEBUG)) {
       console.log(this.formatMessage('DEBUG', message, context), data || '');
     }
@@ -59,7 +59,7 @@ class Logger {
 // Create logger instances
 const getLogLevel = (): LogLevel => {
   // Safe way to access Vite environment variables
-  const envLevel = (import.meta as any).env?.VITE_LOG_LEVEL;
+  const envLevel = (import.meta as { env?: { VITE_LOG_LEVEL?: string } }).env?.VITE_LOG_LEVEL;
   const localStorageLevel = typeof window !== 'undefined' ? localStorage.getItem('log_level') : null;
   const level = envLevel || localStorageLevel || 'info';
   
@@ -105,6 +105,6 @@ export const disableDebugMode = () => {
 
 // Make debug functions available globally for console access
 if (typeof window !== 'undefined') {
-  (window as any).enableDebugMode = enableDebugMode;
-  (window as any).disableDebugMode = disableDebugMode;
+  (window as typeof window & { enableDebugMode?: typeof enableDebugMode; disableDebugMode?: typeof disableDebugMode }).enableDebugMode = enableDebugMode;
+  (window as typeof window & { enableDebugMode?: typeof enableDebugMode; disableDebugMode?: typeof disableDebugMode }).disableDebugMode = disableDebugMode;
 }

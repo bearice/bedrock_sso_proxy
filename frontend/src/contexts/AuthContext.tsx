@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import React, { createContext, useState, useEffect, useCallback } from 'react';
 import { AuthState, TokenResponse } from '../types/auth';
 import { authApi } from '../services/api';
 import { authLogger } from '../utils/logger';
@@ -16,7 +16,7 @@ function parseJwtPayload(token: string): { sub?: string; exp?: number; scopes?: 
   }
 }
 
-interface AuthContextType extends AuthState {
+export interface AuthContextType extends AuthState {
   loading: boolean;
   setTokens: (tokenResponse: TokenResponse, provider: string) => void;
   refreshTokens: (refreshToken: string) => Promise<TokenResponse>;
@@ -24,7 +24,7 @@ interface AuthContextType extends AuthState {
   clearAuth: () => void;
 }
 
-const AuthContext = createContext<AuthContextType | undefined>(undefined);
+export const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [authState, setAuthState] = useState<AuthState>({
@@ -267,10 +267,3 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   );
 }
 
-export function useAuth(): AuthContextType {
-  const context = useContext(AuthContext);
-  if (context === undefined) {
-    throw new Error('useAuth must be used within an AuthProvider');
-  }
-  return context;
-}

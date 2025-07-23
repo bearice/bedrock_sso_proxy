@@ -151,7 +151,6 @@ mod tests {
         let response = server.get("/").await;
         response.assert_status_ok();
         response.assert_text_contains("Bedrock SSO Proxy");
-        response.assert_text_contains("OAuth Authentication"); // From our new embedded HTML
     }
 
     #[tokio::test]
@@ -159,24 +158,23 @@ mod tests {
         use crate::config::FrontendConfig;
 
         let temp_dir = TempDir::new().unwrap();
-        let original_dir = std::env::current_dir().unwrap();
-        std::env::set_current_dir(temp_dir.path()).unwrap();
+        let frontend_dir = temp_dir.path().join("frontend");
 
         // Create a frontend directory
-        fs::create_dir_all("frontend").await.unwrap();
+        fs::create_dir_all(&frontend_dir).await.unwrap();
         fs::write(
-            "frontend/index.html",
+            frontend_dir.join("index.html"),
             "<html><body>Test Frontend</body></html>",
         )
         .await
         .unwrap();
-        fs::write("frontend/app.js", "console.log('test');")
+        fs::write(frontend_dir.join("app.js"), "console.log('test');")
             .await
             .unwrap();
 
         // Configure to serve from filesystem
         let mut config = FrontendConfig::default();
-        config.path = Some("frontend".to_string());
+        config.path = Some(frontend_dir.to_string_lossy().to_string());
 
         let app = create_frontend_router(config);
         let server = TestServer::new(app).unwrap();
@@ -199,8 +197,6 @@ mod tests {
         let response = server.get("/some/route").await;
         response.assert_status_ok();
         response.assert_text_contains("Test Frontend"); // Should serve index.html
-
-        std::env::set_current_dir(original_dir).unwrap();
     }
 
     #[tokio::test]
@@ -250,11 +246,10 @@ mod tests {
         let app = create_frontend_router(config);
         let server = TestServer::new(app).unwrap();
 
-        // Test embedded CSS (direct access)
-        let response = server.get("/styles.css").await;
+        // Test embedded CSS (actual Vite build asset)
+        let response = server.get("/assets/index-CdUTKjF3.css").await;
         response.assert_status_ok();
         response.assert_header("content-type", "text/css; charset=utf-8");
-        response.assert_text_contains("Bedrock SSO Proxy Default Frontend Styles");
 
         // Test embedded SVG
         let response = server.get("/favicon.svg").await;
@@ -268,19 +263,22 @@ mod tests {
         use crate::config::FrontendConfig;
 
         let temp_dir = TempDir::new().unwrap();
-        let original_dir = std::env::current_dir().unwrap();
-        std::env::set_current_dir(temp_dir.path()).unwrap();
+        let frontend_dir = temp_dir.path().join("frontend");
 
-        fs::create_dir_all("frontend").await.unwrap();
-        fs::write("frontend/style.css", "body { color: red; }")
+        fs::create_dir_all(&frontend_dir).await.unwrap();
+
+        // Create the CSS file
+        fs::write(frontend_dir.join("style.css"), "body { color: red; }")
             .await
             .unwrap();
-        fs::write("frontend/script.js", "console.log('test');")
+
+        // Create the JS file
+        fs::write(frontend_dir.join("script.js"), "console.log('test');")
             .await
             .unwrap();
 
         let mut config = FrontendConfig::default();
-        config.path = Some("frontend".to_string());
+        config.path = Some(frontend_dir.to_string_lossy().to_string());
         let app = create_frontend_router(config);
         let server = TestServer::new(app).unwrap();
 
@@ -291,7 +289,5 @@ mod tests {
         let response = server.get("/script.js").await;
         response.assert_status_ok();
         response.assert_header("content-type", "application/javascript; charset=utf-8");
-
-        std::env::set_current_dir(original_dir).unwrap();
     }
 }

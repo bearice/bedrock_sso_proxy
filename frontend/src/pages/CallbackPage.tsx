@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { useAuth } from '../contexts/AuthContext';
+import { useAuth } from '../hooks/useAuth';
 import { authApi, ApiError } from '../services/api';
 import { CheckCircle, XCircle, Loader2 } from 'lucide-react';
 import { authLogger } from '../utils/logger';
