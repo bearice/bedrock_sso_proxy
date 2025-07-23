@@ -277,7 +277,6 @@ impl ValidatedClaims {
             ValidatedClaims::Legacy(_) => None,
         }
     }
-
 }
 
 #[cfg(test)]
