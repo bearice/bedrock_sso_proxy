@@ -40,7 +40,7 @@ pub async fn authorize_handler(
         build_redirect_uri_from_request(&headers, &provider)
     });
 
-    let response = oauth_service.get_authorization_url(&provider, &redirect_uri)?;
+    let response = oauth_service.get_authorization_url(&provider, &redirect_uri).await?;
     Ok(Json(response))
 }
 
@@ -93,6 +93,7 @@ pub async fn callback_handler(
     // Get the redirect URI from the state data (stored when authorization URL was generated)
     let redirect_uri = oauth_service
         .get_redirect_uri_for_state(&state)
+        .await
         .ok_or_else(|| AppError::BadRequest("Invalid or expired state parameter".to_string()))?;
 
     let token_request = TokenRequest {
@@ -308,7 +309,7 @@ fn build_callback_url(params: &[(&str, &str)]) -> Result<String, AppError> {
 mod tests {
     use super::*;
     use crate::{
-        auth::{cache::OAuthCache, jwt::JwtService, oauth::OAuthService},
+        auth::{jwt::JwtService, oauth::OAuthService},
         config::{CacheConfig, Config, JwtConfig, OAuthConfig, OAuthProvider},
     };
     use axum::{
@@ -353,9 +354,12 @@ mod tests {
             cleanup_interval: 300,
         };
 
-        let cache = OAuthCache::new(3600, 600, 86400, 1000);
+        let storage = Arc::new(crate::storage::Storage::new(
+            Box::new(crate::storage::memory::MemoryCacheStorage::new(3600)),
+            Box::new(crate::storage::memory::MemoryDatabaseStorage::new()),
+        ));
         let jwt_service = JwtService::new("test-secret".to_string(), Algorithm::HS256).unwrap();
-        Arc::new(OAuthService::new(config, cache, jwt_service, None))
+        Arc::new(OAuthService::new(config, jwt_service, storage))
     }
 
     #[tokio::test]

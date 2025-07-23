@@ -1,11 +1,10 @@
 use crate::{
-    auth::{OAuthClaims, cache::OAuthCache, jwt::JwtService},
+    auth::{OAuthClaims, jwt::JwtService},
     config::{Config, OAuthProvider},
     error::AppError,
     health::{HealthCheckResult, HealthChecker},
-    storage::Storage,
+    storage::{Storage, CachedValidation, StateData, RefreshTokenData},
 };
-use chrono::Utc;
 use oauth2::{
     AuthUrl, AuthorizationCode, ClientId, ClientSecret, CsrfToken, RedirectUrl, Scope,
     TokenResponse as OAuth2TokenResponse, TokenUrl, basic::BasicClient, reqwest::async_http_client,
@@ -14,9 +13,9 @@ use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use sha2::{Digest, Sha256};
+use chrono::{Duration as ChronoDuration, Utc};
 use std::{collections::HashMap, sync::Arc};
 use uuid::Uuid;
-
 #[derive(Debug, Serialize)]
 pub struct AuthorizeResponse {
     pub authorization_url: String,
@@ -68,29 +67,26 @@ pub struct ValidationResponse {
 
 pub struct OAuthService {
     config: Config,
-    cache: OAuthCache,
     jwt_service: JwtService,
     http_client: Client,
-    storage: Option<Arc<Storage>>,
+    storage: Arc<Storage>,
 }
 
 impl OAuthService {
     pub fn new(
         config: Config,
-        cache: OAuthCache,
         jwt_service: JwtService,
-        storage: Option<Arc<Storage>>,
+        storage: Arc<Storage>,
     ) -> Self {
         Self {
             config,
-            cache,
             jwt_service,
             http_client: Client::new(),
             storage,
         }
     }
 
-    pub fn get_authorization_url(
+    pub async fn get_authorization_url(
         &self,
         provider_name: &str,
         redirect_uri: &str,
@@ -109,8 +105,8 @@ impl OAuthService {
 
         // Create CSRF state token - store the actual redirect URI being used
         let state = self
-            .cache
-            .create_state(provider_name.to_string(), actual_redirect_uri.to_string());
+            .create_state_internal(provider_name.to_string(), actual_redirect_uri.to_string())
+            .await?;
 
         let (authorization_url, _csrf_token) = client
             .authorize_url(|| CsrfToken::new(state.clone()))
@@ -133,7 +129,7 @@ impl OAuthService {
             Ok(response) => Ok(response),
             Err(e) => {
                 // Log authentication failure if storage is available
-                if let Some(storage) = &self.storage {
+                let storage = &self.storage; {
                     let audit_entry = crate::storage::AuditLogEntry {
                         id: None,
                         user_id: None,
@@ -172,8 +168,8 @@ impl OAuthService {
     ) -> Result<TokenResponse, AppError> {
         // Validate state token
         let state_data = self
-            .cache
-            .get_and_remove_state(&request.state)
+            .get_and_remove_state_internal(&request.state)
+            .await?
             .ok_or_else(|| AppError::BadRequest("Invalid or expired state token".to_string()))?;
 
         if state_data.provider != request.provider {
@@ -231,7 +227,7 @@ impl OAuthService {
             .map(|s| s.to_string());
 
         // Store user information persistently if storage is available
-        if let Some(storage) = &self.storage {
+        let storage = &self.storage; {
             let now = Utc::now();
             let user_record = crate::storage::UserRecord {
                 id: None,
@@ -319,7 +315,7 @@ impl OAuthService {
             Ok(response) => Ok(response),
             Err(e) => {
                 // Log refresh token failure if storage is available
-                if let Some(storage) = &self.storage {
+                let storage = &self.storage; {
                     let audit_entry = crate::storage::AuditLogEntry {
                         id: None,
                         user_id: None,
@@ -346,7 +342,8 @@ impl OAuthService {
         request: RefreshRequest,
     ) -> Result<TokenResponse, AppError> {
         // Use database storage if available, otherwise fall back to cache
-        let (token_data, new_refresh_token) = if let Some(storage) = &self.storage {
+        let (token_data, new_refresh_token) = {
+            let storage = &self.storage;
             // Hash the token for database lookup
             let token_hash = self.hash_token(&request.refresh_token);
 
@@ -431,37 +428,6 @@ impl OAuthService {
             let _ = storage.database.store_audit_log(&audit_entry).await;
 
             (token_data, new_token)
-        } else {
-            // Fallback to cache-based implementation
-            let cache_token_data = self
-                .cache
-                .get_refresh_token_data(&request.refresh_token)
-                .ok_or_else(|| {
-                    AppError::Unauthorized("Invalid or expired refresh token".to_string())
-                })?;
-
-            let new_refresh_token = self
-                .cache
-                .rotate_refresh_token(
-                    &request.refresh_token,
-                    cache_token_data.user_id.clone(),
-                    cache_token_data.provider.clone(),
-                )
-                .ok_or_else(|| AppError::Internal("Failed to rotate refresh token".to_string()))?;
-
-            // Convert cache RefreshTokenData to storage RefreshTokenData
-            let storage_token_data = crate::storage::RefreshTokenData {
-                token_hash: "".to_string(), // Not used in this path
-                user_id: cache_token_data.user_id,
-                provider: cache_token_data.provider,
-                email: "".to_string(), // Not available in cache data
-                created_at: cache_token_data.created_at,
-                expires_at: cache_token_data.expires_at,
-                rotation_count: cache_token_data.rotation_count,
-                revoked_at: None,
-            };
-
-            (storage_token_data, new_refresh_token)
         };
 
         // Get provider config for scopes
@@ -519,20 +485,22 @@ impl OAuthService {
         ProvidersResponse { providers }
     }
 
-    pub fn get_redirect_uri_for_state(&self, state: &str) -> Option<String> {
-        self.cache
-            .get_state_data(state)
+    pub async fn get_redirect_uri_for_state(&self, state: &str) -> Option<String> {
+        self.get_state_data_internal(state)
+            .await
+            .ok()
+            .flatten()
             .map(|state_data| state_data.redirect_uri)
     }
 
     pub async fn validate_token(&self, token: &str) -> Result<ValidationResponse, AppError> {
         // Check cache first
-        if let Some(cached) = self.cache.get_validation(token) {
+        if let Some(cached) = self.get_validation_internal(token).await? {
             return Ok(ValidationResponse {
                 valid: true,
-                sub: cached.claims.sub,
-                provider: cached.claims.provider,
-                expires_at: cached.claims.exp as i64,
+                sub: cached.user_id,
+                provider: cached.provider,
+                expires_at: cached.expires_at.timestamp(),
             });
         }
 
@@ -540,7 +508,7 @@ impl OAuthService {
         let claims = self.jwt_service.validate_oauth_token(token)?;
 
         // Cache the validation result (claims are cloned into cache)
-        self.cache.set_validation(token, claims.clone());
+        self.set_validation_internal(token, &claims).await?;
 
         Ok(ValidationResponse {
             valid: true,
@@ -727,6 +695,142 @@ impl HealthChecker for OAuthHealthChecker {
     }
 }
 
+// Helper functions for cache operations
+fn hash_token(token: &str) -> String {
+    let mut hasher = Sha256::new();
+    hasher.update(token.as_bytes());
+    format!("{:x}", hasher.finalize())
+}
+
+impl OAuthService {
+    // State management methods
+    async fn create_state_internal(&self, provider: String, redirect_uri: String) -> Result<String, AppError> {
+        let state = Uuid::new_v4().to_string();
+        let now = Utc::now();
+        let state_data = StateData {
+            provider,
+            redirect_uri,
+            created_at: now,
+            expires_at: now + ChronoDuration::seconds(600), // 10 minutes TTL
+        };
+        
+        self.storage.cache.store_state(&state, &state_data, 600).await
+            .map_err(|e| AppError::Internal(format!("Failed to store state: {}", e)))?;
+        
+        Ok(state)
+    }
+    
+    async fn get_state_data_internal(&self, state: &str) -> Result<Option<StateData>, AppError> {
+        self.storage.cache.get_state(state).await
+            .map_err(|e| AppError::Internal(format!("Failed to get state: {}", e)))
+    }
+    
+    async fn get_and_remove_state_internal(&self, state: &str) -> Result<Option<StateData>, AppError> {
+        let state_data = self.get_state_data_internal(state).await?;
+        if state_data.is_some() {
+            self.storage.cache.delete_state(state).await
+                .map_err(|e| AppError::Internal(format!("Failed to delete state: {}", e)))?;
+        }
+        Ok(state_data)
+    }
+    
+    // Refresh token methods
+    async fn create_refresh_token_internal(&self, user_id: String, provider: String) -> Result<String, AppError> {
+        let token = Uuid::new_v4().to_string();
+        let token_hash = hash_token(&token);
+        let now = Utc::now();
+        let token_data = RefreshTokenData {
+            token_hash: token_hash.clone(),
+            user_id,
+            provider,
+            email: "".to_string(), // Will be populated by caller
+            created_at: now,
+            expires_at: now + ChronoDuration::seconds(self.config.jwt.refresh_token_ttl as i64),
+            rotation_count: 0,
+            revoked_at: None,
+        };
+        
+        self.storage.database.store_refresh_token(&token_data).await
+            .map_err(|e| AppError::Internal(format!("Failed to store refresh token: {}", e)))?;
+        
+        Ok(token)
+    }
+    
+    async fn get_refresh_token_data_internal(&self, token: &str) -> Result<Option<RefreshTokenData>, AppError> {
+        let token_hash = hash_token(token);
+        self.storage.database.get_refresh_token(&token_hash).await
+            .map_err(|e| AppError::Internal(format!("Failed to get refresh token: {}", e)))
+    }
+    
+    async fn rotate_refresh_token_internal(&self, old_token: &str, user_id: String, provider: String) -> Result<Option<String>, AppError> {
+        let old_token_hash = hash_token(old_token);
+        
+        // Get old token data
+        let old_data = self.storage.database.get_refresh_token(&old_token_hash).await
+            .map_err(|e| AppError::Internal(format!("Failed to get old refresh token: {}", e)))?;
+        
+        if let Some(old_data) = old_data {
+            if old_data.expires_at > Utc::now() {
+                // Revoke old token
+                self.storage.database.revoke_refresh_token(&old_token_hash).await
+                    .map_err(|e| AppError::Internal(format!("Failed to revoke old refresh token: {}", e)))?;
+                
+                // Create new token
+                let new_token = Uuid::new_v4().to_string();
+                let new_token_hash = hash_token(&new_token);
+                let now = Utc::now();
+                let new_token_data = RefreshTokenData {
+                    token_hash: new_token_hash,
+                    user_id,
+                    provider,
+                    email: old_data.email,
+                    created_at: now,
+                    expires_at: now + ChronoDuration::seconds(self.config.jwt.refresh_token_ttl as i64),
+                    rotation_count: old_data.rotation_count + 1,
+                    revoked_at: None,
+                };
+                
+                self.storage.database.store_refresh_token(&new_token_data).await
+                    .map_err(|e| AppError::Internal(format!("Failed to store new refresh token: {}", e)))?;
+                
+                Ok(Some(new_token))
+            } else {
+                Ok(None)
+            }
+        } else {
+            Ok(None)
+        }
+    }
+    
+    async fn revoke_refresh_token_internal(&self, token: &str) -> Result<(), AppError> {
+        let token_hash = hash_token(token);
+        self.storage.database.revoke_refresh_token(&token_hash).await
+            .map_err(|e| AppError::Internal(format!("Failed to revoke refresh token: {}", e)))
+    }
+    
+    // Validation cache methods
+    async fn get_validation_internal(&self, token: &str) -> Result<Option<CachedValidation>, AppError> {
+        let token_hash = hash_token(token);
+        self.storage.cache.get_validation(&token_hash).await
+            .map_err(|e| AppError::Internal(format!("Failed to get validation: {}", e)))
+    }
+    
+    async fn set_validation_internal(&self, token: &str, claims: &OAuthClaims) -> Result<(), AppError> {
+        let token_hash = hash_token(token);
+        let validation = CachedValidation {
+            user_id: claims.sub.clone(),
+            provider: claims.provider.clone(),
+            email: claims.email.clone(),
+            validated_at: Utc::now(),
+            expires_at: Utc::now() + ChronoDuration::seconds(claims.exp as i64),
+            scopes: vec!["bedrock:invoke".to_string()],
+        };
+        
+        self.storage.cache.store_validation(&token_hash, &validation, self.config.cache.validation_ttl).await
+            .map_err(|e| AppError::Internal(format!("Failed to store validation: {}", e)))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -771,13 +875,20 @@ mod tests {
         config
     }
 
+    fn create_test_storage() -> Arc<Storage> {
+        Arc::new(Storage::new(
+            Box::new(crate::storage::memory::MemoryCacheStorage::new(3600)),
+            Box::new(crate::storage::memory::MemoryDatabaseStorage::new()),
+        ))
+    }
+
     #[tokio::test]
     async fn test_oauth_service_creation() {
         let config = create_test_config();
-        let cache = OAuthCache::new(3600, 600, 86400, 1000);
+        let storage = create_test_storage();
         let jwt_service = JwtService::new("test-secret".to_string(), Algorithm::HS256).unwrap();
 
-        let oauth_service = OAuthService::new(config, cache, jwt_service, None);
+        let oauth_service = OAuthService::new(config, jwt_service, storage);
 
         // Test that service was created successfully
         let providers = oauth_service.list_providers();
@@ -789,12 +900,12 @@ mod tests {
     #[tokio::test]
     async fn test_get_authorization_url() {
         let config = create_test_config();
-        let cache = OAuthCache::new(3600, 600, 86400, 1000);
+        let storage = create_test_storage();
         let jwt_service = JwtService::new("test-secret".to_string(), Algorithm::HS256).unwrap();
-        let oauth_service = OAuthService::new(config, cache, jwt_service, None);
+        let oauth_service = OAuthService::new(config, jwt_service, storage);
 
         let result =
-            oauth_service.get_authorization_url("google", "http://localhost:3000/callback");
+            oauth_service.get_authorization_url("google", "http://localhost:3000/callback").await;
         assert!(result.is_ok());
 
         let response = result.unwrap();
@@ -810,21 +921,21 @@ mod tests {
     #[tokio::test]
     async fn test_get_authorization_url_unknown_provider() {
         let config = create_test_config();
-        let cache = OAuthCache::new(3600, 600, 86400, 1000);
+        let storage = create_test_storage();
         let jwt_service = JwtService::new("test-secret".to_string(), Algorithm::HS256).unwrap();
-        let oauth_service = OAuthService::new(config, cache, jwt_service, None);
+        let oauth_service = OAuthService::new(config, jwt_service, storage);
 
         let result =
-            oauth_service.get_authorization_url("unknown", "http://localhost:3000/callback");
+            oauth_service.get_authorization_url("unknown", "http://localhost:3000/callback").await;
         assert!(result.is_err());
     }
 
     #[tokio::test]
     async fn test_list_providers() {
         let config = create_test_config();
-        let cache = OAuthCache::new(3600, 600, 86400, 1000);
+        let storage = create_test_storage();
         let jwt_service = JwtService::new("test-secret".to_string(), Algorithm::HS256).unwrap();
-        let oauth_service = OAuthService::new(config, cache, jwt_service, None);
+        let oauth_service = OAuthService::new(config, jwt_service, storage);
 
         let providers = oauth_service.list_providers();
         assert_eq!(providers.providers.len(), 1);
@@ -838,9 +949,9 @@ mod tests {
     #[tokio::test]
     async fn test_display_names() {
         let config = create_test_config();
-        let cache = OAuthCache::new(3600, 600, 86400, 1000);
+        let storage = create_test_storage();
         let jwt_service = JwtService::new("test-secret".to_string(), Algorithm::HS256).unwrap();
-        let oauth_service = OAuthService::new(config, cache, jwt_service, None);
+        let oauth_service = OAuthService::new(config, jwt_service, storage);
 
         assert_eq!(oauth_service.get_display_name("google"), "Google");
         assert_eq!(oauth_service.get_display_name("github"), "GitHub");
@@ -854,9 +965,9 @@ mod tests {
     #[tokio::test]
     async fn test_validate_oauth_token() {
         let config = create_test_config();
-        let cache = OAuthCache::new(3600, 600, 86400, 1000);
+        let storage = create_test_storage();
         let jwt_service = JwtService::new("test-secret".to_string(), Algorithm::HS256).unwrap();
-        let oauth_service = OAuthService::new(config, cache, jwt_service.clone(), None);
+        let oauth_service = OAuthService::new(config, jwt_service.clone(), storage);
 
         // Create a test OAuth token
         let claims = OAuthClaims::new(

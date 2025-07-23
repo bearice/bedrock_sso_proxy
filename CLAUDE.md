@@ -180,4 +180,4 @@ npm run type-check # TypeScript validation
 
 ## Development Workflow
 
-- If you need to run a test server, ask me to do it
+- If you need to run a test server, ask user to do it, you can not spawn background process.

@@ -1,6 +1,5 @@
 use crate::{
     auth::{
-        cache::OAuthCache,
         jwt::{JwtService, parse_algorithm},
         middleware::{AuthConfig, jwt_auth_middleware},
         oauth::OAuthService,
@@ -60,18 +59,11 @@ impl Server {
         shutdown_manager.register(StorageShutdown::new(storage.clone()));
 
         // OAuth is always enabled
-        let cache = OAuthCache::new(
-            self.config.cache.validation_ttl,
-            600, // state TTL (10 minutes)
-            self.config.jwt.refresh_token_ttl,
-            self.config.cache.max_entries,
-        );
 
         let oauth_service = Arc::new(OAuthService::new(
             self.config.clone(),
-            cache,
             jwt_service.clone(),
-            Some(storage.clone()),
+            storage.clone(),
         ));
 
         // Create centralized health service and register health checkers
@@ -176,18 +168,16 @@ impl Server {
             parse_algorithm(&self.config.jwt.algorithm).unwrap(),
         )?;
 
-        let cache = OAuthCache::new(
-            self.config.cache.validation_ttl,
-            600,
-            self.config.jwt.refresh_token_ttl,
-            self.config.cache.max_entries,
-        );
+        // Create temporary storage for testing
+        let temp_storage = Arc::new(crate::storage::Storage::new(
+            Box::new(crate::storage::memory::MemoryCacheStorage::new(3600)),
+            Box::new(crate::storage::memory::MemoryDatabaseStorage::new()),
+        ));
 
         let oauth_service = Arc::new(OAuthService::new(
             self.config.clone(),
-            cache,
             jwt_service.clone(),
-            None, // No storage for testing
+            temp_storage,
         ));
 
         // Create health service for testing
