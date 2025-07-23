@@ -3,6 +3,7 @@ use crate::{
     config::{Config, OAuthProvider},
     error::AppError,
     health::{HealthCheckResult, HealthChecker},
+    storage::Storage,
 };
 use oauth2::{
     AuthUrl, AuthorizationCode, ClientId, ClientSecret, CsrfToken, RedirectUrl, Scope,
@@ -11,7 +12,10 @@ use oauth2::{
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use std::collections::HashMap;
+use std::{collections::HashMap, sync::Arc};
+use chrono::Utc;
+use uuid::Uuid;
+use sha2::{Digest, Sha256};
 
 #[derive(Debug, Serialize)]
 pub struct AuthorizeResponse {
@@ -20,7 +24,7 @@ pub struct AuthorizeResponse {
     pub provider: String,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Clone)]
 pub struct TokenRequest {
     pub provider: String,
     pub authorization_code: String,
@@ -28,7 +32,7 @@ pub struct TokenRequest {
     pub state: String,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Clone)]
 pub struct RefreshRequest {
     pub refresh_token: String,
 }
@@ -67,15 +71,22 @@ pub struct OAuthService {
     cache: OAuthCache,
     jwt_service: JwtService,
     http_client: Client,
+    storage: Option<Arc<Storage>>,
 }
 
 impl OAuthService {
-    pub fn new(config: Config, cache: OAuthCache, jwt_service: JwtService) -> Self {
+    pub fn new(
+        config: Config,
+        cache: OAuthCache,
+        jwt_service: JwtService,
+        storage: Option<Arc<Storage>>,
+    ) -> Self {
         Self {
             config,
             cache,
             jwt_service,
             http_client: Client::new(),
+            storage,
         }
     }
 
@@ -114,6 +125,42 @@ impl OAuthService {
     }
 
     pub async fn exchange_code_for_token(
+        &self,
+        request: TokenRequest,
+    ) -> Result<TokenResponse, AppError> {
+        // Perform the authentication flow and log the result
+        match self.exchange_code_for_token_internal(request.clone()).await {
+            Ok(response) => Ok(response),
+            Err(e) => {
+                // Log authentication failure if storage is available
+                if let Some(storage) = &self.storage {
+                    let audit_entry = crate::storage::AuditLogEntry {
+                        id: None,
+                        user_id: None,
+                        event_type: "oauth_login_failed".to_string(),
+                        provider: Some(request.provider.clone()),
+                        ip_address: None, // TODO: Extract from request context
+                        user_agent: None, // TODO: Extract from request context
+                        success: false,
+                        error_message: Some(e.to_string()),
+                        created_at: Utc::now(),
+                        metadata: Some({
+                            let mut metadata = std::collections::HashMap::new();
+                            metadata.insert("provider".to_string(), serde_json::Value::String(request.provider.clone()));
+                            metadata.insert("redirect_uri".to_string(), serde_json::Value::String(request.redirect_uri.clone()));
+                            metadata
+                        }),
+                    };
+
+                    // Store audit log (ignore errors to not mask the original error)
+                    let _ = storage.database.store_audit_log(&audit_entry).await;
+                }
+                Err(e)
+            }
+        }
+    }
+
+    async fn exchange_code_for_token_internal(
         &self,
         request: TokenRequest,
     ) -> Result<TokenResponse, AppError> {
@@ -169,6 +216,65 @@ impl OAuthService {
                 AppError::BadRequest("Email not found in provider response".to_string())
             })?;
 
+        // Get display name from user info
+        let display_name = user_info
+            .get("name")
+            .and_then(|v| v.as_str())
+            .or_else(|| user_info.get("display_name").and_then(|v| v.as_str()))
+            .or_else(|| user_info.get("full_name").and_then(|v| v.as_str()))
+            .map(|s| s.to_string());
+
+        // Store user information persistently if storage is available
+        if let Some(storage) = &self.storage {
+            let now = Utc::now();
+            let user_record = crate::storage::UserRecord {
+                id: None,
+                provider_user_id: user_id.to_string(),
+                provider: request.provider.clone(),
+                email: email.to_string(),
+                display_name,
+                created_at: now,
+                updated_at: now,
+                last_login: Some(now),
+            };
+
+            let db_user_id = storage
+                .database
+                .upsert_user(&user_record)
+                .await
+                .map_err(|e| AppError::Internal(format!("Failed to store user: {}", e)))?;
+
+            // Update last login time
+            storage
+                .database
+                .update_last_login(db_user_id)
+                .await
+                .map_err(|e| AppError::Internal(format!("Failed to update last login: {}", e)))?;
+
+            // Log successful authentication
+            let audit_entry = crate::storage::AuditLogEntry {
+                id: None,
+                user_id: Some(db_user_id),
+                event_type: "oauth_login".to_string(),
+                provider: Some(request.provider.clone()),
+                ip_address: None, // TODO: Extract from request context
+                user_agent: None, // TODO: Extract from request context
+                success: true,
+                error_message: None,
+                created_at: Utc::now(),
+                metadata: Some({
+                    let mut metadata = std::collections::HashMap::new();
+                    metadata.insert("provider".to_string(), serde_json::Value::String(request.provider.clone()));
+                    metadata.insert("user_id".to_string(), serde_json::Value::String(user_id.to_string()));
+                    metadata.insert("email".to_string(), serde_json::Value::String(email.to_string()));
+                    metadata
+                }),
+            };
+
+            // Store audit log (ignore errors to not block authentication)
+            let _ = storage.database.store_audit_log(&audit_entry).await;
+        }
+
         // Create composite user ID
         let composite_user_id = format!("{}:{}", request.provider, user_id);
 
@@ -193,23 +299,140 @@ impl OAuthService {
     }
 
     pub async fn refresh_token(&self, request: RefreshRequest) -> Result<TokenResponse, AppError> {
-        // Get refresh token data
-        let token_data = self
-            .cache
-            .get_refresh_token_data(&request.refresh_token)
-            .ok_or_else(|| {
-                AppError::Unauthorized("Invalid or expired refresh token".to_string())
-            })?;
+        // Perform token refresh and log the result
+        match self.refresh_token_internal(request.clone()).await {
+            Ok(response) => Ok(response),
+            Err(e) => {
+                // Log refresh token failure if storage is available
+                if let Some(storage) = &self.storage {
+                    let audit_entry = crate::storage::AuditLogEntry {
+                        id: None,
+                        user_id: None,
+                        event_type: "token_refresh_failed".to_string(),
+                        provider: None, // Provider unknown at this point
+                        ip_address: None, // TODO: Extract from request context
+                        user_agent: None, // TODO: Extract from request context
+                        success: false,
+                        error_message: Some(e.to_string()),
+                        created_at: Utc::now(),
+                        metadata: None,
+                    };
 
-        // Create new refresh token (rotation)
-        let new_refresh_token = self
-            .cache
-            .rotate_refresh_token(
-                &request.refresh_token,
-                token_data.user_id.clone(),
-                token_data.provider.clone(),
-            )
-            .ok_or_else(|| AppError::Internal("Failed to rotate refresh token".to_string()))?;
+                    // Store audit log (ignore errors to not mask the original error)
+                    let _ = storage.database.store_audit_log(&audit_entry).await;
+                }
+                Err(e)
+            }
+        }
+    }
+
+    async fn refresh_token_internal(&self, request: RefreshRequest) -> Result<TokenResponse, AppError> {
+        // Use database storage if available, otherwise fall back to cache
+        let (token_data, new_refresh_token) = if let Some(storage) = &self.storage {
+            // Hash the token for database lookup
+            let token_hash = self.hash_token(&request.refresh_token);
+            
+            // Get refresh token data from database
+            let token_data = storage
+                .database
+                .get_refresh_token(&token_hash)
+                .await
+                .map_err(|e| AppError::Internal(format!("Database error: {}", e)))?
+                .ok_or_else(|| {
+                    AppError::Unauthorized("Invalid or expired refresh token".to_string())
+                })?;
+
+            // Check if token is expired or revoked
+            if token_data.expires_at <= Utc::now() || token_data.revoked_at.is_some() {
+                return Err(AppError::Unauthorized(
+                    "Refresh token expired or revoked".to_string(),
+                ));
+            }
+
+            // Revoke old token
+            storage
+                .database
+                .revoke_refresh_token(&token_hash)
+                .await
+                .map_err(|e| AppError::Internal(format!("Failed to revoke token: {}", e)))?;
+
+            // Create new refresh token
+            let new_token = Uuid::new_v4().to_string();
+            let new_token_hash = self.hash_token(&new_token);
+            let new_token_data = crate::storage::RefreshTokenData {
+                token_hash: new_token_hash,
+                user_id: token_data.user_id.clone(),
+                provider: token_data.provider.clone(),
+                email: token_data.email.clone(),
+                created_at: Utc::now(),
+                expires_at: Utc::now() + chrono::Duration::seconds(self.config.jwt.refresh_token_ttl as i64),
+                rotation_count: token_data.rotation_count + 1,
+                revoked_at: None,
+            };
+
+            // Store new refresh token
+            storage
+                .database
+                .store_refresh_token(&new_token_data)
+                .await
+                .map_err(|e| AppError::Internal(format!("Failed to store new token: {}", e)))?;
+
+            // Log successful token refresh
+            let audit_entry = crate::storage::AuditLogEntry {
+                id: None,
+                user_id: None, // Would need user lookup by composite ID
+                event_type: "token_refresh".to_string(),
+                provider: Some(token_data.provider.clone()),
+                ip_address: None, // TODO: Extract from request context
+                user_agent: None, // TODO: Extract from request context
+                success: true,
+                error_message: None,
+                created_at: Utc::now(),
+                metadata: Some({
+                    let mut metadata = std::collections::HashMap::new();
+                    metadata.insert("provider".to_string(), serde_json::Value::String(token_data.provider.clone()));
+                    metadata.insert("user_id".to_string(), serde_json::Value::String(token_data.user_id.clone()));
+                    metadata.insert("rotation_count".to_string(), serde_json::Value::Number(serde_json::Number::from(new_token_data.rotation_count)));
+                    metadata
+                }),
+            };
+
+            // Store audit log (ignore errors to not block token refresh)
+            let _ = storage.database.store_audit_log(&audit_entry).await;
+
+            (token_data, new_token)
+        } else {
+            // Fallback to cache-based implementation
+            let cache_token_data = self
+                .cache
+                .get_refresh_token_data(&request.refresh_token)
+                .ok_or_else(|| {
+                    AppError::Unauthorized("Invalid or expired refresh token".to_string())
+                })?;
+
+            let new_refresh_token = self
+                .cache
+                .rotate_refresh_token(
+                    &request.refresh_token,
+                    cache_token_data.user_id.clone(),
+                    cache_token_data.provider.clone(),
+                )
+                .ok_or_else(|| AppError::Internal("Failed to rotate refresh token".to_string()))?;
+
+            // Convert cache RefreshTokenData to storage RefreshTokenData
+            let storage_token_data = crate::storage::RefreshTokenData {
+                token_hash: "".to_string(), // Not used in this path
+                user_id: cache_token_data.user_id,
+                provider: cache_token_data.provider,
+                email: "".to_string(), // Not available in cache data
+                created_at: cache_token_data.created_at,
+                expires_at: cache_token_data.expires_at,
+                rotation_count: cache_token_data.rotation_count,
+                revoked_at: None,
+            };
+
+            (storage_token_data, new_refresh_token)
+        };
 
         // Get provider config for scopes
         let provider = self
@@ -219,11 +442,13 @@ impl OAuthService {
                 AppError::BadRequest(format!("Unknown OAuth provider: {}", token_data.provider))
             })?;
 
-        // For refresh, we need to get current user email (we could cache this or require re-auth)
-        // For now, we'll use a placeholder since we don't store email in refresh token data
-        // In a real implementation, you might want to store email in the refresh token data
-        // or fetch it from the OAuth provider again
-        let email = format!("user@{}.com", token_data.provider); // Placeholder
+        // Use email from token data (available from database storage)
+        let email = if token_data.email.is_empty() {
+            // Fallback for cache-based tokens that don't have email
+            format!("user@{}.com", token_data.provider)
+        } else {
+            token_data.email.clone()
+        };
 
         // Create new OAuth JWT token
         let oauth_claims = OAuthClaims::new(
@@ -380,6 +605,13 @@ impl OAuthService {
             "okta" => "Okta".to_string(),
             _ => provider_name.to_string(),
         }
+    }
+
+    /// Hash a token for secure storage
+    fn hash_token(&self, token: &str) -> String {
+        let mut hasher = Sha256::new();
+        hasher.update(token.as_bytes());
+        format!("{:x}", hasher.finalize())
     }
 
     /// Create a health checker for this OAuth service

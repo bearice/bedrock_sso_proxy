@@ -17,6 +17,8 @@ pub struct Config {
     pub frontend: FrontendConfig,
     #[serde(default)]
     pub admin: AdminConfig,
+    #[serde(default)]
+    pub storage: StorageConfig,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -165,6 +167,100 @@ pub struct AdminConfig {
     pub emails: Vec<String>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct StorageConfig {
+    #[serde(default)]
+    pub redis: RedisStorageConfig,
+    #[serde(default)]
+    pub database: DatabaseStorageConfig,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RedisStorageConfig {
+    #[serde(default)]
+    pub enabled: bool,
+    #[serde(default = "default_redis_url")]
+    pub url: String,
+    #[serde(default = "default_redis_key_prefix")]
+    pub key_prefix: String,
+    #[serde(default = "default_redis_command_timeout")]
+    pub command_timeout_seconds: u64,
+    #[serde(default = "default_redis_max_connections")]
+    pub max_connections: u32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DatabaseStorageConfig {
+    #[serde(default)]
+    pub enabled: bool,
+    #[serde(default = "default_database_url")]
+    pub url: String,
+    #[serde(default = "default_database_max_connections")]
+    pub max_connections: u32,
+    #[serde(default = "default_database_migration_on_startup")]
+    pub migration_on_startup: bool,
+}
+
+fn default_redis_url() -> String {
+    "redis://localhost:6379".to_string()
+}
+
+fn default_redis_key_prefix() -> String {
+    "bedrock_sso:".to_string()
+}
+
+fn default_redis_command_timeout() -> u64 {
+    5
+}
+
+fn default_redis_max_connections() -> u32 {
+    10
+}
+
+fn default_database_url() -> String {
+    "sqlite://./data/bedrock_sso.db".to_string()
+}
+
+fn default_database_max_connections() -> u32 {
+    5
+}
+
+fn default_database_migration_on_startup() -> bool {
+    true
+}
+
+impl Default for StorageConfig {
+    fn default() -> Self {
+        Self {
+            redis: RedisStorageConfig::default(),
+            database: DatabaseStorageConfig::default(),
+        }
+    }
+}
+
+impl Default for RedisStorageConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            url: default_redis_url(),
+            key_prefix: default_redis_key_prefix(),
+            command_timeout_seconds: default_redis_command_timeout(),
+            max_connections: default_redis_max_connections(),
+        }
+    }
+}
+
+impl Default for DatabaseStorageConfig {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            url: default_database_url(),
+            max_connections: default_database_max_connections(),
+            migration_on_startup: default_database_migration_on_startup(),
+        }
+    }
+}
+
 impl Default for Config {
     fn default() -> Self {
         Self {
@@ -190,6 +286,7 @@ impl Default for Config {
             cache: CacheConfig::default(),
             frontend: FrontendConfig::default(),
             admin: AdminConfig::default(),
+            storage: StorageConfig::default(),
         }
     }
 }
@@ -246,9 +343,10 @@ impl Config {
     /// This performs case-insensitive matching
     pub fn is_admin(&self, email: &str) -> bool {
         let email_lower = email.to_lowercase();
-        self.admin.emails.iter().any(|admin_email| {
-            admin_email.to_lowercase() == email_lower
-        })
+        self.admin
+            .emails
+            .iter()
+            .any(|admin_email| admin_email.to_lowercase() == email_lower)
     }
 }
 
@@ -605,12 +703,12 @@ jwt:
         // Test exact match
         assert!(config.is_admin("admin@example.com"));
         assert!(config.is_admin("SUPERUSER@company.com"));
-        
+
         // Test case insensitive matching
         assert!(config.is_admin("ADMIN@example.com"));
         assert!(config.is_admin("superuser@company.com"));
         assert!(config.is_admin("Admin@Example.Com"));
-        
+
         // Test non-admin
         assert!(!config.is_admin("user@example.com"));
         assert!(!config.is_admin(""));
@@ -620,7 +718,7 @@ jwt:
     #[test]
     fn test_admin_config_empty_list() {
         let config = Config::default();
-        
+
         // No admins configured
         assert!(!config.is_admin("admin@example.com"));
         assert!(!config.is_admin("anyone@example.com"));

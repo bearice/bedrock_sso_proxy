@@ -13,6 +13,7 @@ use crate::{
         create_auth_routes, create_bedrock_routes, create_frontend_router,
         create_protected_bedrock_routes,
     },
+    storage::{factory::StorageFactory, StorageHealthChecker},
 };
 use axum::{Router, middleware};
 use std::{net::SocketAddr, sync::Arc};
@@ -35,6 +36,13 @@ impl Server {
 
         let aws_http_client = AwsHttpClient::new(self.config.aws.clone());
 
+        // Initialize storage system
+        let storage = Arc::new(
+            StorageFactory::create_from_config(&self.config)
+                .await
+                .map_err(|e| AppError::Internal(format!("Failed to initialize storage: {}", e)))?,
+        );
+
         // OAuth is always enabled
         let cache = OAuthCache::new(
             self.config.cache.validation_ttl,
@@ -47,6 +55,7 @@ impl Server {
             self.config.clone(),
             cache,
             jwt_service.clone(),
+            Some(storage.clone()),
         ));
 
         // Create centralized health service and register health checkers
@@ -65,6 +74,12 @@ impl Server {
         // Register JWT health checker
         health_service
             .register(Arc::new(jwt_service.health_checker()))
+            .await;
+
+        // Register storage health checker
+        let storage_health_checker = storage.clone();
+        health_service
+            .register(Arc::new(StorageHealthChecker::new(storage_health_checker)))
             .await;
 
         let app =
@@ -131,6 +146,7 @@ impl Server {
             self.config.clone(),
             cache,
             jwt_service.clone(),
+            None, // No storage for testing
         ));
 
         // Create health service for testing
