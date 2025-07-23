@@ -244,11 +244,212 @@ Authorization: Bearer <jwt_token>
 }
 ```
 
-## AWS Bedrock API Forwarding
+## API Endpoint Support
 
-### Supported Endpoints
+### Dual Format Support
+The proxy supports both Bedrock and Anthropic API formats to provide maximum compatibility with different clients and LLM gateways.
 
-#### 1. InvokeModel
+#### Bedrock Format (AWS Native)
+- **Endpoint**: `POST /model/{modelId}/invoke`
+- **Authentication**: JWT Bearer token
+- **Request Format**: Bedrock-specific JSON structure
+- **Use Case**: Direct AWS Bedrock compatibility
+
+#### Anthropic Format (Standard)
+- **Endpoint**: `POST /v1/messages`
+- **Authentication**: JWT Bearer token
+- **Request Format**: Standard Anthropic API JSON structure
+- **Use Case**: Anthropic SDK compatibility, LLM gateway integration
+
+### API Format Comparison
+
+| Feature | Bedrock Format | Anthropic Format |
+|---------|----------------|------------------|
+| **Endpoint** | `/model/{model_id}/invoke` | `/v1/messages` |
+| **Model Selection** | URL path parameter | Request body field |
+| **Message Format** | Direct message array | Standard Anthropic messages |
+| **Version Field** | `anthropic_version: "bedrock-2023-05-31"` | Not required |
+| **Streaming** | `/model/{model_id}/invoke-with-response-stream` | `/v1/messages` with `stream: true` |
+| **Response Format** | AWS Bedrock response structure | Standard Anthropic response structure |
+
+### Request/Response Transformation
+
+#### Anthropic → Bedrock Request Transformation
+```json
+// Anthropic Format Input
+{
+  "model": "claude-3-sonnet-20240229",
+  "max_tokens": 1000,
+  "messages": [
+    {"role": "user", "content": "Hello"}
+  ],
+  "temperature": 0.7,
+  "stream": false
+}
+
+// Transformed to Bedrock Format
+{
+  "anthropic_version": "bedrock-2023-05-31",
+  "max_tokens": 1000,
+  "messages": [
+    {"role": "user", "content": "Hello"}
+  ],
+  "temperature": 0.7
+}
+```
+
+#### Bedrock → Anthropic Response Transformation
+```json
+// Bedrock Format Response
+{
+  "content": [
+    {
+      "text": "Hello! How can I help you today?",
+      "type": "text"
+    }
+  ],
+  "id": "msg_01ABC123",
+  "model": "claude-3-sonnet-20240229",
+  "role": "assistant",
+  "stop_reason": "end_turn",
+  "stop_sequence": null,
+  "type": "message",
+  "usage": {
+    "input_tokens": 10,
+    "output_tokens": 25
+  }
+}
+
+// Transformed to Anthropic Format
+{
+  "id": "msg_01ABC123",
+  "type": "message",
+  "role": "assistant",
+  "content": [
+    {
+      "type": "text",
+      "text": "Hello! How can I help you today?"
+    }
+  ],
+  "model": "claude-3-sonnet-20240229",
+  "stop_reason": "end_turn",
+  "stop_sequence": null,
+  "usage": {
+    "input_tokens": 10,
+    "output_tokens": 25
+  }
+}
+```
+
+### Model ID Mapping
+
+#### Anthropic → Bedrock Model ID Transformation
+```rust
+// Anthropic model names → Bedrock model IDs
+let model_mapping = HashMap::from([
+    ("claude-3-sonnet-20240229", "anthropic.claude-3-sonnet-20240229-v1:0"),
+    ("claude-3-haiku-20240307", "anthropic.claude-3-haiku-20240307-v1:0"),
+    ("claude-3-opus-20240229", "anthropic.claude-3-opus-20240229-v1:0"),
+    ("claude-3-5-sonnet-20240620", "anthropic.claude-3-5-sonnet-20240620-v1:0"),
+    ("claude-3-5-haiku-20241022", "anthropic.claude-3-5-haiku-20241022-v1:0"),
+]);
+```
+
+### Implementation Architecture
+
+#### New Route Structure
+```rust
+// src/routes/anthropic.rs
+pub fn create_anthropic_routes() -> Router<AwsHttpClient> {
+    Router::new()
+        .route("/v1/messages", post(create_message))
+        .route("/v1/messages", post(create_message_stream))  // with stream=true
+}
+
+// src/routes/mod.rs
+pub mod anthropic;
+pub use anthropic::create_anthropic_routes;
+```
+
+#### Data Structures
+```rust
+// Anthropic API request format
+#[derive(Debug, Serialize, Deserialize)]
+pub struct AnthropicRequest {
+    pub model: String,
+    pub messages: Vec<Message>,
+    pub max_tokens: u32,
+    pub temperature: Option<f32>,
+    pub top_p: Option<f32>,
+    pub top_k: Option<u32>,
+    pub stop_sequences: Option<Vec<String>>,
+    pub stream: Option<bool>,
+    pub system: Option<String>,
+}
+
+// Bedrock API request format
+#[derive(Debug, Serialize, Deserialize)]
+pub struct BedrockRequest {
+    pub anthropic_version: String,
+    pub messages: Vec<Message>,
+    pub max_tokens: u32,
+    pub temperature: Option<f32>,
+    pub top_p: Option<f32>,
+    pub top_k: Option<u32>,
+    pub stop_sequences: Option<Vec<String>>,
+    pub system: Option<String>,
+}
+
+// Shared message structure
+#[derive(Debug, Serialize, Deserialize)]
+pub struct Message {
+    pub role: String,
+    pub content: serde_json::Value,
+}
+```
+
+#### Transformation Logic
+```rust
+// Transform Anthropic request to Bedrock format
+pub fn transform_anthropic_to_bedrock(req: AnthropicRequest) -> Result<(BedrockRequest, String), AppError> {
+    // Map model name to Bedrock model ID
+    let bedrock_model_id = map_anthropic_to_bedrock_model(&req.model)?;
+    
+    let bedrock_req = BedrockRequest {
+        anthropic_version: "bedrock-2023-05-31".to_string(),
+        messages: req.messages,
+        max_tokens: req.max_tokens,
+        temperature: req.temperature,
+        top_p: req.top_p,
+        top_k: req.top_k,
+        stop_sequences: req.stop_sequences,
+        system: req.system,
+    };
+    
+    Ok((bedrock_req, bedrock_model_id))
+}
+
+// Transform Bedrock response to Anthropic format
+pub fn transform_bedrock_to_anthropic(response: BedrockResponse) -> Result<AnthropicResponse, AppError> {
+    // Response structure is largely compatible, minimal transformation needed
+    Ok(AnthropicResponse {
+        id: response.id,
+        type_: response.type_,
+        role: response.role,
+        content: response.content,
+        model: response.model,
+        stop_reason: response.stop_reason,
+        stop_sequence: response.stop_sequence,
+        usage: response.usage,
+    })
+}
+```
+
+### AWS Bedrock API Forwarding
+
+#### Supported Bedrock Endpoints
+
+##### 1. InvokeModel
 ```
 POST /model/{modelId}/invoke
 ```
@@ -1025,6 +1226,26 @@ BEDROCK_OAUTH__PROVIDERS__GOOGLE__SCOPES=["openid","email","profile","calendar"]
 - [ ] Performance optimization and benchmarking
 
 **Deliverable**: Production-ready application with monitoring and documentation
+
+### Phase 8.1: Anthropic API Format Support ❌ PENDING
+**Goal**: Add Anthropic API format compatibility for enhanced LLM gateway integration
+- [ ] Create Anthropic request/response data structures
+- [ ] Implement model ID mapping (Anthropic → Bedrock format)
+- [ ] Add request/response transformation logic
+- [ ] Create `/v1/messages` endpoint handler
+- [ ] Add streaming support for Anthropic format
+- [ ] Implement error handling for transformation failures
+- [ ] Add comprehensive tests for Anthropic format
+- [ ] Update frontend to show both endpoint options
+- [ ] Update documentation with dual format support
+
+**Deliverable**: Dual format support (Bedrock + Anthropic) with comprehensive testing
+
+**Benefits**: 
+- ✅ **Better LLM Gateway Compatibility**: Works with more proxy solutions
+- ✅ **Anthropic SDK Support**: Direct compatibility with official Anthropic SDKs
+- ✅ **Enhanced Claude Code Integration**: Better support for ANTHROPIC_BEDROCK_BASE_URL
+- ✅ **Easier Client Migration**: Supports both formats simultaneously
 
 ### Phase 8.5: Additional Features ❌ PENDING
 **Goal**: Enhanced functionality and cost tracking

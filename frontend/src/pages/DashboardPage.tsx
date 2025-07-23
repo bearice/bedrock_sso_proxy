@@ -211,38 +211,48 @@ export function DashboardPage() {
           <Terminal size={20} style={{ marginRight: '0.5rem', verticalAlign: 'text-bottom' }} />
           🔧 Claude Code Setup
         </h3>
-        <p>Configure Claude Code to use your Bedrock proxy with these simple steps:</p>
+        <p>Use your JWT token to authenticate API requests to this Bedrock proxy:</p>
 
-        <h4>Method 1: Environment Variables (Recommended)</h4>
-        <pre>
-          export BEDROCK_TOKEN=&quot;{token}&quot; export BEDROCK_ENDPOINT=&quot;{currentDomain}
-          &quot;
-        </pre>
+        <div style={{ background: '#fff3cd', padding: '1rem', borderRadius: '8px', marginBottom: '1rem', border: '1px solid #ffeaa7' }}>
+          <strong>⚠️ Important:</strong> This is a custom proxy server, not the official Claude Code integration. 
+          For standard AWS Bedrock usage with Claude Code, see the <a href="https://docs.anthropic.com/en/docs/claude-code/amazon-bedrock" target="_blank" rel="noopener noreferrer">official documentation</a>.
+        </div>
 
-        <h4>Method 2: Claude Code Configuration</h4>
-        <pre>
-          claude-code config set bedrock.token &quot;{token}&quot; claude-code config set
-          bedrock.endpoint &quot;{currentDomain}&quot;
-        </pre>
+        <h4>API Usage</h4>
+        <p>This proxy provides Bedrock-compatible endpoints. Use the token as a Bearer token in the Authorization header:</p>
+        <pre>{`Authorization: Bearer ${token?.substring(0, 30)}...`}</pre>
 
-        <h4>Method 3: Configuration File</h4>
-        <p>
-          Add to your <code>~/.claude/config.json</code>:
-        </p>
+        <h4>Available Endpoints</h4>
+        <ul>
+          <li><code>GET /health</code> - Health check (no auth required)</li>
+          <li><code>POST /model/{"{"}{"{"}model_id{"}"}/invoke</code> - Standard invocation</li>
+          <li><code>POST /model/{"{"}{"{"}model_id{"}"}/invoke-with-response-stream</code> - Streaming responses</li>
+        </ul>
+
+        <h4>Claude Code Integration (LLM Gateway)</h4>
+        <p>Configure Claude Code to use this proxy as an LLM gateway:</p>
+
+        <h5>Method 1: Environment Variables</h5>
+        <pre>{`export ANTHROPIC_BEDROCK_BASE_URL="${currentDomain}"
+export ANTHROPIC_AUTH_TOKEN="${token?.substring(0, 20)}..."
+export CLAUDE_CODE_SKIP_BEDROCK_AUTH=1
+export CLAUDE_CODE_USE_BEDROCK=1`}</pre>
+
+        <h5>Method 2: Settings File</h5>
+        <p>Add to your <code>~/.claude/settings.json</code>:</p>
         <pre>{`{
-  "bedrock": {
-    "endpoint": "${currentDomain}",
-    "token": "${token?.substring(0, 20)}..."
+  "env": {
+    "ANTHROPIC_BEDROCK_BASE_URL": "${currentDomain}",
+    "ANTHROPIC_AUTH_TOKEN": "${token?.substring(0, 20)}...",
+    "CLAUDE_CODE_SKIP_BEDROCK_AUTH": "1",
+    "CLAUDE_CODE_USE_BEDROCK": "1"
   }
 }`}</pre>
 
-        <h4>Method 4: CLAUDE.md Configuration</h4>
-        <p>
-          Add to your project&apos;s <code>CLAUDE.md</code> file:
-        </p>
-        <pre>{`# Bedrock Configuration
-export BEDROCK_TOKEN="${token?.substring(0, 20)}..."
-export BEDROCK_ENDPOINT="${currentDomain}"`}</pre>
+        <div style={{ background: '#d1ecf1', padding: '1rem', borderRadius: '8px', marginTop: '1rem', border: '1px solid #bee5eb' }}>
+          <strong>💡 Tip:</strong> For official AWS Bedrock support, use <code>export CLAUDE_CODE_USE_BEDROCK=1</code> 
+          and configure AWS credentials instead. This requires proper AWS IAM permissions and enabled Claude models.
+        </div>
       </div>
 
       {/* Testing Section */}
