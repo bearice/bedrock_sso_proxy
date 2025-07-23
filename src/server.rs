@@ -13,12 +13,13 @@ use crate::{
         create_auth_routes, create_bedrock_routes, create_frontend_router,
         create_protected_bedrock_routes,
     },
+    shutdown::{HttpServerShutdown, ShutdownCoordinator, ShutdownManager, StorageShutdown},
     storage::{StorageHealthChecker, factory::StorageFactory},
 };
 use axum::{Router, middleware};
-use std::{net::SocketAddr, sync::Arc};
+use std::{net::SocketAddr, sync::Arc, time::Duration};
 use tokio::net::TcpListener;
-use tracing::info;
+use tracing::{error, info};
 
 pub struct Server {
     config: Config,
@@ -30,6 +31,18 @@ impl Server {
     }
 
     pub async fn run(&self) -> Result<(), AppError> {
+        // Initialize shutdown coordinator
+        let shutdown_coordinator = ShutdownCoordinator::new();
+        let mut shutdown_manager = ShutdownManager::new(Duration::from_secs(30));
+
+        // Initialize metrics and rate limiting (disabled for now)
+        if self.config.metrics.enabled {
+            info!("Metrics configuration found but not fully implemented yet");
+        }
+        if self.config.rate_limit.enabled {
+            info!("Rate limiting configuration found but not fully implemented yet");
+        }
+
         let jwt_algorithm = parse_algorithm(&self.config.jwt.algorithm)?;
         let jwt_service = JwtService::new(self.config.jwt.secret.clone(), jwt_algorithm);
         let auth_config = Arc::new(AuthConfig::new(jwt_service.clone()));
@@ -42,6 +55,9 @@ impl Server {
                 .await
                 .map_err(|e| AppError::Internal(format!("Failed to initialize storage: {}", e)))?,
         );
+
+        // Register storage for graceful shutdown
+        shutdown_manager.register(StorageShutdown::new(storage.clone()));
 
         // OAuth is always enabled
         let cache = OAuthCache::new(
@@ -92,9 +108,34 @@ impl Server {
 
         info!("Server listening on http://{}", addr);
 
-        axum::serve(listener, app)
-            .await
-            .map_err(|e| AppError::Internal(format!("Server error: {}", e)))?;
+        // Register HTTP server for graceful shutdown
+        shutdown_manager.register(HttpServerShutdown::new("HTTP Server".to_string()));
+
+        // Spawn shutdown signal handler
+        let shutdown_coordinator_clone = shutdown_coordinator.clone();
+        tokio::spawn(async move {
+            shutdown_coordinator_clone.wait_for_shutdown_signal().await;
+        });
+
+        // Run server with graceful shutdown
+        let shutdown_rx = shutdown_coordinator.subscribe();
+        let serve_future = axum::serve(listener, app).with_graceful_shutdown(async move {
+            let mut rx = shutdown_rx;
+            let _ = rx.changed().await;
+            info!("Graceful shutdown initiated");
+        });
+
+        tokio::select! {
+            result = serve_future => {
+                if let Err(e) = result {
+                    error!("Server error: {}", e);
+                }
+            }
+        }
+
+        // Perform graceful shutdown
+        shutdown_manager.shutdown_all().await;
+        info!("Server shutdown complete");
 
         Ok(())
     }

@@ -20,7 +20,7 @@ fn build_frontend() {
     // Determine build mode based on Cargo profile
     let is_debug = std::env::var("DEBUG").unwrap_or_else(|_| "false".to_string()) == "true"
         || std::env::var("PROFILE").unwrap_or_else(|_| "release".to_string()) == "debug";
-    
+
     let build_mode = if is_debug { "debug" } else { "release" };
     println!("cargo:warning=Building frontend in {} mode...", build_mode);
 
@@ -50,19 +50,32 @@ fn build_frontend() {
     }
 
     // Build the frontend with appropriate mode
-    println!("cargo:warning=Building frontend assets in {} mode...", build_mode);
+    println!(
+        "cargo:warning=Building frontend assets in {} mode...",
+        build_mode
+    );
     let build_command = if is_debug { "build:debug" } else { "build" };
-    
+
     let build_result = Command::new("npm")
         .arg("run")
         .arg(build_command)
         .current_dir(frontend_dir)
-        .env("NODE_ENV", if is_debug { "development" } else { "production" })
+        .env(
+            "NODE_ENV",
+            if is_debug {
+                "development"
+            } else {
+                "production"
+            },
+        )
         .output();
 
     match build_result {
         Ok(output) if output.status.success() => {
-            println!("cargo:warning=Frontend build completed successfully in {} mode", build_mode);
+            println!(
+                "cargo:warning=Frontend build completed successfully in {} mode",
+                build_mode
+            );
         }
         Ok(output) => {
             let stdout = String::from_utf8_lossy(&output.stdout);

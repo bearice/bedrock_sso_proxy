@@ -40,6 +40,12 @@ config = "^0.15"
 clap = { version = "^4.0", features = ["derive"] }
 base64 = "^0.22"
 
+# Metrics and production dependencies
+metrics = "^0.23"
+metrics-exporter-prometheus = "^0.15"
+governor = "^0.6"
+nonzero_ext = "^0.3"
+
 # OAuth dependencies
 oauth2 = "^4.4"
 uuid = { version = "^1.0", features = ["v4", "serde"] }
@@ -54,9 +60,9 @@ sqlx = { version = "^0.8", features = ["runtime-tokio-rustls", "postgres", "sqli
 
 [dev-dependencies]
 tokio-test = "^0.4"
-tempfile = "^3.0"
 tower = "^0.5"
 hyper = "^1.6"
 axum-test = "^17.3"
 serial_test = "^3.0"
+tempfile = "^3.0"
 urlencoding = "^2.1"
