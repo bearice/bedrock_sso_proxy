@@ -153,7 +153,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_jwt_auth_middleware_legacy_token() {
-        let jwt_service = JwtService::new("test-secret".to_string(), Algorithm::HS256);
+        let jwt_service = JwtService::new("test-secret".to_string(), Algorithm::HS256).unwrap();
         let auth_config = Arc::new(AuthConfig::new(jwt_service));
 
         let app =
@@ -177,7 +177,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_jwt_auth_middleware_oauth_token() {
-        let jwt_service = JwtService::new("test-secret".to_string(), Algorithm::HS256);
+        let jwt_service = JwtService::new("test-secret".to_string(), Algorithm::HS256).unwrap();
         let oauth_token = create_oauth_token(&jwt_service);
         let auth_config = Arc::new(AuthConfig::new(jwt_service));
 
@@ -201,7 +201,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_jwt_auth_middleware_with_claims_oauth() {
-        let jwt_service = JwtService::new("test-secret".to_string(), Algorithm::HS256);
+        let jwt_service = JwtService::new("test-secret".to_string(), Algorithm::HS256).unwrap();
         let oauth_token = create_oauth_token(&jwt_service);
         let auth_config = Arc::new(AuthConfig::new(jwt_service));
 
@@ -230,7 +230,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_jwt_auth_middleware_with_claims_legacy() {
-        let jwt_service = JwtService::new("test-secret".to_string(), Algorithm::HS256);
+        let jwt_service = JwtService::new("test-secret".to_string(), Algorithm::HS256).unwrap();
         let auth_config = Arc::new(AuthConfig::new(jwt_service));
 
         let app = Router::new()
@@ -259,7 +259,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_jwt_auth_middleware_missing_header() {
-        let jwt_service = JwtService::new("test-secret".to_string(), Algorithm::HS256);
+        let jwt_service = JwtService::new("test-secret".to_string(), Algorithm::HS256).unwrap();
         let auth_config = Arc::new(AuthConfig::new(jwt_service));
 
         let app =
@@ -278,7 +278,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_jwt_auth_middleware_invalid_format() {
-        let jwt_service = JwtService::new("test-secret".to_string(), Algorithm::HS256);
+        let jwt_service = JwtService::new("test-secret".to_string(), Algorithm::HS256).unwrap();
         let auth_config = Arc::new(AuthConfig::new(jwt_service));
 
         let app =
@@ -301,7 +301,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_jwt_auth_middleware_invalid_token() {
-        let jwt_service = JwtService::new("test-secret".to_string(), Algorithm::HS256);
+        let jwt_service = JwtService::new("test-secret".to_string(), Algorithm::HS256).unwrap();
         let auth_config = Arc::new(AuthConfig::new(jwt_service));
 
         let app =
@@ -324,7 +324,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_jwt_auth_middleware_expired_token() {
-        let jwt_service = JwtService::new("test-secret".to_string(), Algorithm::HS256);
+        let jwt_service = JwtService::new("test-secret".to_string(), Algorithm::HS256).unwrap();
         let auth_config = Arc::new(AuthConfig::new(jwt_service));
 
         let app =
@@ -348,7 +348,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_authorization_header_removed() {
-        let jwt_service = JwtService::new("test-secret".to_string(), Algorithm::HS256);
+        let jwt_service = JwtService::new("test-secret".to_string(), Algorithm::HS256).unwrap();
         let auth_config = Arc::new(AuthConfig::new(jwt_service));
 
         async fn header_check_handler(request: ExtractRequest) -> String {

@@ -113,39 +113,46 @@ impl OAuthClaims {
 pub struct JwtService {
     pub secret: String,
     pub algorithm: Algorithm,
+    encoding_key: EncodingKey,
+    decoding_key: DecodingKey,
 }
 
 impl JwtService {
-    pub fn new(secret: String, algorithm: Algorithm) -> Self {
-        Self { secret, algorithm }
+    pub fn new(secret: String, algorithm: Algorithm) -> Result<Self, AppError> {
+        let encoding_key = create_encoding_key(&secret, algorithm)?;
+        let decoding_key = create_decoding_key(&secret, algorithm)?;
+
+        Ok(Self {
+            secret,
+            algorithm,
+            encoding_key,
+            decoding_key,
+        })
     }
 
     pub fn create_oauth_token(&self, claims: &OAuthClaims) -> Result<String, AppError> {
-        let encoding_key = create_encoding_key(&self.secret, self.algorithm)?;
         let header = Header::new(self.algorithm);
-        encode(&header, claims, &encoding_key)
+        encode(&header, claims, &self.encoding_key)
             .map_err(|e| AppError::Internal(format!("Failed to create token: {}", e)))
     }
 
     pub fn validate_oauth_token(&self, token: &str) -> Result<OAuthClaims, AppError> {
-        let decoding_key = create_decoding_key(&self.secret, self.algorithm)?;
         let mut validation = Validation::new(self.algorithm);
         validation.validate_exp = true;
         validation.leeway = 0;
 
-        let token_data = decode::<OAuthClaims>(token, &decoding_key, &validation)
+        let token_data = decode::<OAuthClaims>(token, &self.decoding_key, &validation)
             .map_err(|_| AppError::Unauthorized("Invalid or expired token".to_string()))?;
 
         Ok(token_data.claims)
     }
 
     pub fn validate_legacy_token(&self, token: &str) -> Result<Claims, AppError> {
-        let decoding_key = create_decoding_key(&self.secret, self.algorithm)?;
         let mut validation = Validation::new(self.algorithm);
         validation.validate_exp = true;
         validation.leeway = 0;
 
-        let token_data = decode::<Claims>(token, &decoding_key, &validation)
+        let token_data = decode::<Claims>(token, &self.decoding_key, &validation)
             .map_err(|_| AppError::Unauthorized("Invalid or expired token".to_string()))?;
 
         Ok(token_data.claims)
@@ -378,7 +385,7 @@ mod tests {
 
     #[test]
     fn test_jwt_service_oauth_token() {
-        let service = JwtService::new("test-secret".to_string(), Algorithm::HS256);
+        let service = JwtService::new("test-secret".to_string(), Algorithm::HS256).unwrap();
 
         let claims = OAuthClaims::new(
             "google:123".to_string(),
@@ -399,7 +406,7 @@ mod tests {
 
     #[test]
     fn test_jwt_service_legacy_token() {
-        let service = JwtService::new("test-secret".to_string(), Algorithm::HS256);
+        let service = JwtService::new("test-secret".to_string(), Algorithm::HS256).unwrap();
         let token = create_test_token("test-secret", "user123", 3600);
 
         let validated = service.validate_legacy_token(&token).unwrap();
@@ -408,7 +415,7 @@ mod tests {
 
     #[test]
     fn test_jwt_service_mixed_validation() {
-        let service = JwtService::new("test-secret".to_string(), Algorithm::HS256);
+        let service = JwtService::new("test-secret".to_string(), Algorithm::HS256).unwrap();
 
         // Test OAuth token
         let oauth_claims = OAuthClaims::new(

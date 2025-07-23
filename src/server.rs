@@ -44,7 +44,7 @@ impl Server {
         }
 
         let jwt_algorithm = parse_algorithm(&self.config.jwt.algorithm)?;
-        let jwt_service = JwtService::new(self.config.jwt.secret.clone(), jwt_algorithm);
+        let jwt_service = JwtService::new(self.config.jwt.secret.clone(), jwt_algorithm)?;
         let auth_config = Arc::new(AuthConfig::new(jwt_service.clone()));
 
         let aws_http_client = AwsHttpClient::new(self.config.aws.clone());
@@ -170,11 +170,11 @@ impl Server {
         &self,
         auth_config: Arc<AuthConfig>,
         aws_http_client: AwsHttpClient,
-    ) -> Router {
+    ) -> Result<Router, AppError> {
         let jwt_service = JwtService::new(
             self.config.jwt.secret.clone(),
             parse_algorithm(&self.config.jwt.algorithm).unwrap(),
-        );
+        )?;
 
         let cache = OAuthCache::new(
             self.config.cache.validation_ttl,
@@ -202,7 +202,7 @@ impl Server {
             .register(Arc::new(jwt_service.health_checker()))
             .await;
 
-        Router::new()
+        Ok(Router::new()
             .nest("/auth", create_auth_routes().with_state(oauth_service))
             .merge(create_bedrock_routes().with_state((aws_http_client.clone(), health_service)))
             .merge(
@@ -213,7 +213,7 @@ impl Server {
                         jwt_auth_middleware,
                     )),
             )
-            .fallback_service(create_frontend_router(self.config.frontend.clone()))
+            .fallback_service(create_frontend_router(self.config.frontend.clone())))
     }
 }
 
@@ -262,12 +262,15 @@ mod tests {
     #[tokio::test]
     async fn test_health_check_with_valid_jwt() {
         let config = Config::default();
-        let jwt_service = JwtService::new(config.jwt.secret.clone(), Algorithm::HS256);
+        let jwt_service = JwtService::new(config.jwt.secret.clone(), Algorithm::HS256).unwrap();
         let auth_config = Arc::new(AuthConfig::new(jwt_service));
         let aws_http_client = AwsHttpClient::new_test();
 
         let server = Server::new(config.clone());
-        let app = server.create_app(auth_config, aws_http_client).await;
+        let app = server
+            .create_app(auth_config, aws_http_client)
+            .await
+            .unwrap();
 
         let token = create_test_token(&config.jwt.secret, "user123", 3600);
         let request = Request::builder()
@@ -283,12 +286,15 @@ mod tests {
     #[tokio::test]
     async fn test_health_check_without_jwt() {
         let config = Config::default();
-        let jwt_service = JwtService::new(config.jwt.secret.clone(), Algorithm::HS256);
+        let jwt_service = JwtService::new(config.jwt.secret.clone(), Algorithm::HS256).unwrap();
         let auth_config = Arc::new(AuthConfig::new(jwt_service));
         let aws_http_client = AwsHttpClient::new_test();
 
         let server = Server::new(config);
-        let app = server.create_app(auth_config, aws_http_client).await;
+        let app = server
+            .create_app(auth_config, aws_http_client)
+            .await
+            .unwrap();
 
         let request = Request::builder()
             .uri("/health")
@@ -309,12 +315,15 @@ mod tests {
     #[tokio::test]
     async fn test_invoke_model_with_valid_jwt() {
         let config = Config::default();
-        let jwt_service = JwtService::new(config.jwt.secret.clone(), Algorithm::HS256);
+        let jwt_service = JwtService::new(config.jwt.secret.clone(), Algorithm::HS256).unwrap();
         let auth_config = Arc::new(AuthConfig::new(jwt_service));
         let aws_http_client = AwsHttpClient::new_test();
 
         let server = Server::new(config.clone());
-        let app = server.create_app(auth_config, aws_http_client).await;
+        let app = server
+            .create_app(auth_config, aws_http_client)
+            .await
+            .unwrap();
 
         let token = create_test_token(&config.jwt.secret, "user123", 3600);
         let request = Request::builder()
@@ -342,12 +351,15 @@ mod tests {
     #[tokio::test]
     async fn test_invoke_model_without_jwt() {
         let config = Config::default();
-        let jwt_service = JwtService::new(config.jwt.secret.clone(), Algorithm::HS256);
+        let jwt_service = JwtService::new(config.jwt.secret.clone(), Algorithm::HS256).unwrap();
         let auth_config = Arc::new(AuthConfig::new(jwt_service));
         let aws_http_client = AwsHttpClient::new_test();
 
         let server = Server::new(config);
-        let app = server.create_app(auth_config, aws_http_client).await;
+        let app = server
+            .create_app(auth_config, aws_http_client)
+            .await
+            .unwrap();
 
         let request = Request::builder()
             .uri("/model/anthropic.claude-v2/invoke")

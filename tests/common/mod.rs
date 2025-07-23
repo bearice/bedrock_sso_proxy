@@ -125,12 +125,16 @@ impl TestHarness {
         let jwt_service = JwtService::new(
             config.jwt.secret.clone(),
             parse_algorithm(&config.jwt.algorithm).unwrap(),
-        );
+        )
+        .unwrap();
         let auth_config = Arc::new(AuthConfig::new(jwt_service));
         let aws_http_client = AwsHttpClient::new_test();
 
         let server = Server::new(config.clone());
-        let app = server.create_app(auth_config, aws_http_client).await;
+        let app = server
+            .create_app(auth_config, aws_http_client)
+            .await
+            .unwrap();
 
         Self {
             jwt_secret: config.jwt.secret.clone(),

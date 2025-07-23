@@ -229,8 +229,13 @@ mod tests {
         for valid_path in valid_paths {
             let response = serve_static_file(Path(valid_path.to_string()), config.clone()).await;
             let response = response.into_response();
-            assert_eq!(response.status(), StatusCode::OK,
-                "Expected OK for SPA route '{}', got {}", valid_path, response.status());
+            assert_eq!(
+                response.status(),
+                StatusCode::OK,
+                "Expected OK for SPA route '{}', got {}",
+                valid_path,
+                response.status()
+            );
         }
     }
 

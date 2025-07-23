@@ -382,9 +382,17 @@ cache:
   cleanup_interval: 3600  # 1 hour
 
 aws:
-  region: "us-east-1"
-  access_key_id: "optional"
-  secret_access_key: "optional"
+  region: "us-east-1"              # Default/primary region
+  access_key_id: "optional"        # Shared across regions
+  secret_access_key: "optional"    # Shared across regions
+  
+  # Multi-region support (Phase 8.5)
+  region_mapping:
+    "us.": "us-east-1"
+    "apac.": "ap-northeast-1"
+    "eu.": "eu-west-1"
+    "ca.": "ca-central-1"
+    "default": "us-east-1"         # For models without prefix
 
 logging:
   level: "info"
@@ -1011,12 +1019,20 @@ BEDROCK_OAUTH__PROVIDERS__GOOGLE__SCOPES=["openid","email","profile","calendar"]
 - [x] Configuration management (Environment variables, YAML config)
 - [x] Error recovery and fallback mechanisms
 - [ ] Metrics collection (Prometheus/OpenTelemetry)
-- [ ] Rate limiting per user/IP
+- [x] ~~Rate limiting per user/IP~~ (Removed in favor of simplified architecture)
 - [ ] Graceful shutdown handling
 - [ ] API documentation (OpenAPI/Swagger)
 - [ ] Performance optimization and benchmarking
 
 **Deliverable**: Production-ready application with monitoring and documentation
+
+### Phase 8.5: Additional Features ❌ PENDING
+**Goal**: Enhanced functionality and cost tracking
+- [ ] **Rate Limiting Removal**: Simplify architecture by removing rate limiting system
+- [ ] **Token Usage Tracking**: Track input/output tokens, requests, and costs per user per model
+- [ ] **Multi-Region Support**: Dynamic region routing based on model name prefixes
+
+**Deliverable**: Cost tracking, global deployment support, and simplified architecture
 
 ### Phase 9: Release & Deployment ❌ PENDING
 **Goal**: Packaging and deployment
@@ -1138,6 +1154,407 @@ src/
 - **Dual Validation**: Support both legacy JWT and OAuth-issued JWT validation
 - **Migration Path**: Gradual migration from legacy to OAuth tokens
 - **Enhanced Claims**: OAuth tokens include provider information and scopes
+
+## Additional Features (Phase 8.5)
+
+### 1. Rate Limiting Removal
+
+#### Current Implementation
+The system currently includes a comprehensive rate limiting system (`src/rate_limit.rs`) with:
+- User-based rate limiting (600 RPM for authenticated users)
+- IP-based rate limiting (1200 RPM per IP)
+- OAuth token creation rate limiting (10 RPM)
+- Configurable rate limits with Redis/memory storage
+
+#### Planned Changes
+- **Remove rate limiting middleware** from all routes
+- **Disable rate limiting by default** (`rate_limit.enabled = false`)
+- **Keep configuration structure** for backward compatibility
+- **Clean up unused dependencies** and storage methods
+- **Update documentation** and examples
+
+#### Benefits
+- ✅ **Simplified Architecture**: Reduced complexity and overhead
+- ✅ **Better Performance**: Eliminated rate limiting checks on every request
+- ✅ **Easier Scaling**: No shared state or coordination needed
+- ✅ **Cost Optimization**: Rely on natural AWS rate limiting and billing controls
+
+#### Configuration Update
+```yaml
+# Rate limiting disabled by default
+rate_limit:
+  enabled: false  # Changed from true
+  # Other settings preserved for compatibility
+```
+
+### 2. Token Usage Tracking
+
+#### Purpose
+Track detailed usage metrics per user per model to enable:
+- **Cost tracking and billing**
+- **Usage analytics and optimization**
+- **Quota management and alerts**
+- **Performance monitoring**
+
+#### Data Model
+```rust
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct UsageRecord {
+    pub id: Option<i32>,
+    pub user_id: i32,              // Foreign key to users table
+    pub model_id: String,          // Original model ID (with region prefix)
+    pub region: String,            // Determined AWS region
+    pub request_time: DateTime<Utc>,
+    pub input_tokens: u32,         // Tokens in request
+    pub output_tokens: u32,        // Tokens in response
+    pub total_tokens: u32,         // input_tokens + output_tokens
+    pub response_time_ms: u32,     // Response time in milliseconds
+    pub success: bool,             // Whether request succeeded
+    pub error_message: Option<String>, // Error details if failed
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct UsageSummary {
+    pub user_id: i32,
+    pub model_id: String,
+    pub period_start: DateTime<Utc>,
+    pub period_end: DateTime<Utc>,
+    pub total_requests: u32,
+    pub total_input_tokens: u64,
+    pub total_output_tokens: u64,
+    pub total_tokens: u64,
+    pub avg_response_time_ms: f32,
+    pub success_rate: f32,
+}
+```
+
+#### Database Schema
+```sql
+-- Usage tracking table
+CREATE TABLE usage_records (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    model_id TEXT NOT NULL,
+    region TEXT NOT NULL,
+    request_time DATETIME NOT NULL,
+    input_tokens INTEGER NOT NULL,
+    output_tokens INTEGER NOT NULL,
+    total_tokens INTEGER NOT NULL,
+    response_time_ms INTEGER NOT NULL,
+    success BOOLEAN NOT NULL,
+    error_message TEXT,
+    FOREIGN KEY (user_id) REFERENCES users (id),
+    INDEX idx_user_model_time (user_id, model_id, request_time),
+    INDEX idx_request_time (request_time)
+);
+
+-- Pre-calculated summaries for performance
+CREATE TABLE usage_summaries (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    model_id TEXT NOT NULL,
+    period_start DATETIME NOT NULL,
+    period_end DATETIME NOT NULL,
+    total_requests INTEGER NOT NULL,
+    total_input_tokens BIGINT NOT NULL,
+    total_output_tokens BIGINT NOT NULL,
+    total_tokens BIGINT NOT NULL,
+    avg_response_time_ms REAL NOT NULL,
+    success_rate REAL NOT NULL,
+    UNIQUE(user_id, model_id, period_start),
+    FOREIGN KEY (user_id) REFERENCES users (id)
+);
+```
+
+#### API Endpoints
+```rust
+// User usage endpoints
+GET /api/v1/usage/summary?period=day|week|month&model=*
+GET /api/v1/usage/detailed?start=date&end=date&model=*
+
+// Admin usage endpoints (requires admin privileges)
+GET /api/v1/admin/usage/users/{user_id}?period=day|week|month
+GET /api/v1/admin/usage/models/{model_id}?period=day|week|month
+GET /api/v1/admin/usage/aggregate?period=day|week|month
+```
+
+#### Usage Tracking Integration
+```rust
+// Middleware for capturing usage data
+pub async fn usage_tracking_middleware(
+    claims: Claims,
+    req: Request,
+    next: Next,
+) -> Result<Response, AppError> {
+    let start_time = Instant::now();
+    let model_id = extract_model_id(&req).unwrap_or_default();
+    let region = determine_region(&model_id);
+    
+    // Count input tokens from request body
+    let input_tokens = count_tokens_from_request(&req).await?;
+    
+    let response = next.run(req).await;
+    let response_time_ms = start_time.elapsed().as_millis() as u32;
+    
+    // Count output tokens from response
+    let output_tokens = count_tokens_from_response(&response).await?;
+    
+    // Record usage asynchronously (non-blocking)
+    tokio::spawn(async move {
+        let usage_record = UsageRecord {
+            id: None,
+            user_id: get_user_id_from_claims(&claims).await.unwrap_or(0),
+            model_id,
+            region,
+            request_time: Utc::now(),
+            input_tokens,
+            output_tokens,
+            total_tokens: input_tokens + output_tokens,
+            response_time_ms,
+            success: response.status().is_success(),
+            error_message: if response.status().is_success() { None } else { Some("Request failed".to_string()) },
+        };
+        
+        if let Err(e) = store_usage_record(&usage_record).await {
+            warn!("Failed to store usage record: {}", e);
+        }
+    });
+    
+    Ok(response)
+}
+```
+
+#### Token Counting
+```rust
+// Token counting from AWS Bedrock response headers or body analysis
+pub async fn count_tokens_from_response(response: &Response) -> Result<u32, AppError> {
+    // Method 1: Check for AWS Bedrock token count headers
+    if let Some(token_count) = response.headers().get("x-amzn-bedrock-output-token-count") {
+        return Ok(token_count.to_str()?.parse()?);
+    }
+    
+    // Method 2: Parse from response body (model-specific)
+    let body = response.body();
+    match extract_token_count_from_body(body).await {
+        Ok(count) => Ok(count),
+        Err(_) => {
+            // Method 3: Estimate based on text length
+            Ok(estimate_token_count_from_text(body).await?)
+        }
+    }
+}
+```
+
+### 3. Multi-Region Support
+
+#### Purpose
+Enable dynamic routing to different AWS regions based on model name prefixes:
+- `apac.anthropic.claude-3-sonnet-20240229-v1:0` → `ap-northeast-1`
+- `us.anthropic.claude-3-sonnet-20240229-v1:0` → `us-east-1`
+- `eu.anthropic.claude-3-sonnet-20240229-v1:0` → `eu-west-1`
+- `anthropic.claude-3-sonnet-20240229-v1:0` → `us-east-1` (default)
+
+#### Configuration Structure (Simplified with Shared Credentials)
+```yaml
+aws:
+  # Shared credentials for all regions
+  region: "us-east-1"              # Default/primary region
+  access_key_id: "AKIA..."         # Shared across regions
+  secret_access_key: "..."         # Shared across regions
+  profile: "default"               # Shared across regions
+  bearer_token: "ABSK-..."         # Or bearer token (shared)
+  
+  # Region mapping for model prefixes
+  region_mapping:
+    "us.": "us-east-1"
+    "apac.": "ap-northeast-1" 
+    "eu.": "eu-west-1"
+    "ca.": "ca-central-1"
+    "default": "us-east-1"         # For models without prefix
+```
+
+#### Multi-Region Client Architecture
+```rust
+pub struct MultiRegionAwsClient {
+    base_config: AwsConfig,        // Shared credentials
+    clients: HashMap<String, AwsHttpClient>,
+    region_mapping: HashMap<String, String>,
+    default_region: String,
+}
+
+impl MultiRegionAwsClient {
+    pub fn new(config: AwsConfig, region_mapping: HashMap<String, String>) -> Self {
+        let default_region = config.region.clone();
+        let mut clients = HashMap::new();
+        
+        // Create clients for all mapped regions using same credentials
+        let mut regions: HashSet<String> = region_mapping.values().cloned().collect();
+        regions.insert(default_region.clone());
+        
+        for region in regions {
+            let mut region_config = config.clone();
+            region_config.region = region.clone();
+            clients.insert(region.clone(), AwsHttpClient::new(region_config));
+        }
+        
+        Self {
+            base_config: config,
+            clients,
+            region_mapping,
+            default_region,
+        }
+    }
+    
+    pub fn determine_region(&self, model_id: &str) -> String {
+        // Parse model prefix
+        for (prefix, region) in &self.region_mapping {
+            if prefix != "default" && model_id.starts_with(prefix) {
+                return region.clone();
+            }
+        }
+        self.default_region.clone()
+    }
+    
+    pub fn get_client(&self, region: &str) -> Result<&AwsHttpClient, AppError> {
+        self.clients.get(region)
+            .ok_or_else(|| AppError::BadRequest(format!("Region {} not configured", region)))
+    }
+}
+```
+
+#### Model ID Processing
+```rust
+#[derive(Debug, Clone)]
+pub struct ModelRequest {
+    pub original_model_id: String,  // apac.anthropic.claude-3-sonnet-20240229-v1:0
+    pub region: String,             // ap-northeast-1
+    pub bedrock_model_id: String,   // anthropic.claude-3-sonnet-20240229-v1:0 (prefix stripped)
+}
+
+pub fn parse_model_id(model_id: &str, region_mapping: &HashMap<String, String>) -> ModelRequest {
+    for (prefix, region) in region_mapping {
+        if prefix != "default" && model_id.starts_with(prefix) {
+            let bedrock_model_id = model_id.strip_prefix(prefix).unwrap_or(model_id).to_string();
+            return ModelRequest {
+                original_model_id: model_id.to_string(),
+                region: region.clone(),
+                bedrock_model_id,
+            };
+        }
+    }
+    
+    // No prefix found, use default region
+    let default_region = region_mapping.get("default").unwrap_or(&"us-east-1".to_string()).clone();
+    ModelRequest {
+        original_model_id: model_id.to_string(),
+        region: default_region,
+        bedrock_model_id: model_id.to_string(),
+    }
+}
+```
+
+#### Updated Route Handlers
+```rust
+pub async fn invoke_model_handler(
+    Path((model_id,)): Path<(String,)>,
+    headers: HeaderMap,
+    claims: Claims,
+    Extension(client): Extension<Arc<MultiRegionAwsClient>>,
+    body: Bytes,
+) -> Result<Response, AppError> {
+    // Parse model to determine region
+    let model_request = parse_model_id(&model_id, &client.region_mapping);
+    
+    // Get region-specific client 
+    let aws_client = client.get_client(&model_request.region)?;
+    
+    // Make request with stripped model ID
+    let response = aws_client.invoke_model(
+        &model_request.bedrock_model_id,
+        headers.get("content-type").and_then(|h| h.to_str().ok()),
+        headers.get("accept").and_then(|h| h.to_str().ok()),
+        body.to_vec(),
+    ).await?;
+    
+    // Track usage with region info (if usage tracking enabled)
+    if let Err(e) = track_usage(&claims.sub, &model_id, &model_request.region, &response).await {
+        warn!("Failed to track usage: {}", e);
+    }
+    
+    // Return response
+    build_response(response)
+}
+```
+
+#### Regional Health Checks
+```rust
+pub async fn multi_region_health_check(
+    Extension(client): Extension<Arc<MultiRegionAwsClient>>,
+) -> Result<Json<Value>, AppError> {
+    let mut region_health = HashMap::new();
+    
+    for (region, aws_client) in &client.clients {
+        let health = match aws_client.health_check().await {
+            Ok(()) => json!({
+                "status": "healthy",
+                "endpoint": aws_client.base_url,
+                "credentials": if aws_client.config.bearer_token.is_some() { "bearer_token" } else { "sigv4" }
+            }),
+            Err(e) => json!({
+                "status": "unhealthy",
+                "error": e.to_string(),
+                "endpoint": aws_client.base_url
+            }),
+        };
+        region_health.insert(region.clone(), health);
+    }
+    
+    Ok(Json(json!({
+        "regions": region_health,
+        "default_region": client.default_region,
+        "region_mapping": client.region_mapping
+    })))
+}
+```
+
+#### Benefits
+- ✅ **Global Deployment**: Support users worldwide with regional endpoints
+- ✅ **Reduced Latency**: Route requests to geographically closest regions
+- ✅ **Simplified Credentials**: Single AWS credential set for all regions
+- ✅ **Easy Configuration**: Prefix-based routing with sensible defaults
+- ✅ **Usage Tracking**: Track usage by region for cost analysis
+
+### Implementation Roadmap
+
+#### Phase 8.5.1: Rate Limiting Removal (2-3 hours)
+1. **Configuration Update**: Set `rate_limit.enabled = false` as default
+2. **Middleware Removal**: Remove rate limiting middleware from routes
+3. **Cleanup**: Remove unused imports and rate limiting initialization
+4. **Testing**: Update/remove 15 rate limiting tests
+5. **Documentation**: Update configuration examples
+
+#### Phase 8.5.2: Token Usage Tracking (6-8 hours)
+1. **Database Schema**: Add usage tracking tables and migrations
+2. **Storage Layer**: Implement usage recording and querying methods
+3. **Middleware**: Add usage tracking middleware to capture request/response data
+4. **API Endpoints**: Implement usage summary and detailed reporting endpoints
+5. **Token Counting**: Implement token counting from AWS responses
+6. **Testing**: Add comprehensive usage tracking tests
+7. **Documentation**: Usage tracking API documentation
+
+#### Phase 8.5.3: Multi-Region Support (3-4 hours)
+1. **Configuration**: Update AWS config structure for region mapping
+2. **Multi-Region Client**: Implement multi-region AWS client with shared credentials
+3. **Model Parsing**: Implement model ID prefix parsing and region determination
+4. **Route Updates**: Update invoke handlers to use region-specific clients
+5. **Health Checks**: Add regional health monitoring
+6. **Testing**: Add multi-region routing and fallback tests
+7. **Documentation**: Multi-region configuration and usage guide
+
+**Total Estimated Effort**: 10-14 hours
+- **Development**: 8-12 hours
+- **Testing**: 2-3 hours  
+- **Documentation**: 1 hour
 
 ## Client Integration Guide
 

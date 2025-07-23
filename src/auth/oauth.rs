@@ -775,7 +775,7 @@ mod tests {
     async fn test_oauth_service_creation() {
         let config = create_test_config();
         let cache = OAuthCache::new(3600, 600, 86400, 1000);
-        let jwt_service = JwtService::new("test-secret".to_string(), Algorithm::HS256);
+        let jwt_service = JwtService::new("test-secret".to_string(), Algorithm::HS256).unwrap();
 
         let oauth_service = OAuthService::new(config, cache, jwt_service, None);
 
@@ -790,7 +790,7 @@ mod tests {
     async fn test_get_authorization_url() {
         let config = create_test_config();
         let cache = OAuthCache::new(3600, 600, 86400, 1000);
-        let jwt_service = JwtService::new("test-secret".to_string(), Algorithm::HS256);
+        let jwt_service = JwtService::new("test-secret".to_string(), Algorithm::HS256).unwrap();
         let oauth_service = OAuthService::new(config, cache, jwt_service, None);
 
         let result =
@@ -811,7 +811,7 @@ mod tests {
     async fn test_get_authorization_url_unknown_provider() {
         let config = create_test_config();
         let cache = OAuthCache::new(3600, 600, 86400, 1000);
-        let jwt_service = JwtService::new("test-secret".to_string(), Algorithm::HS256);
+        let jwt_service = JwtService::new("test-secret".to_string(), Algorithm::HS256).unwrap();
         let oauth_service = OAuthService::new(config, cache, jwt_service, None);
 
         let result =
@@ -823,7 +823,7 @@ mod tests {
     async fn test_list_providers() {
         let config = create_test_config();
         let cache = OAuthCache::new(3600, 600, 86400, 1000);
-        let jwt_service = JwtService::new("test-secret".to_string(), Algorithm::HS256);
+        let jwt_service = JwtService::new("test-secret".to_string(), Algorithm::HS256).unwrap();
         let oauth_service = OAuthService::new(config, cache, jwt_service, None);
 
         let providers = oauth_service.list_providers();
@@ -839,7 +839,7 @@ mod tests {
     async fn test_display_names() {
         let config = create_test_config();
         let cache = OAuthCache::new(3600, 600, 86400, 1000);
-        let jwt_service = JwtService::new("test-secret".to_string(), Algorithm::HS256);
+        let jwt_service = JwtService::new("test-secret".to_string(), Algorithm::HS256).unwrap();
         let oauth_service = OAuthService::new(config, cache, jwt_service, None);
 
         assert_eq!(oauth_service.get_display_name("google"), "Google");
@@ -855,7 +855,7 @@ mod tests {
     async fn test_validate_oauth_token() {
         let config = create_test_config();
         let cache = OAuthCache::new(3600, 600, 86400, 1000);
-        let jwt_service = JwtService::new("test-secret".to_string(), Algorithm::HS256);
+        let jwt_service = JwtService::new("test-secret".to_string(), Algorithm::HS256).unwrap();
         let oauth_service = OAuthService::new(config, cache, jwt_service.clone(), None);
 
         // Create a test OAuth token
