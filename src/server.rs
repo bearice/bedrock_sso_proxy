@@ -13,7 +13,7 @@ use crate::{
         create_auth_routes, create_bedrock_routes, create_frontend_router,
         create_protected_bedrock_routes,
     },
-    storage::{factory::StorageFactory, StorageHealthChecker},
+    storage::{StorageHealthChecker, factory::StorageFactory},
 };
 use axum::{Router, middleware};
 use std::{net::SocketAddr, sync::Arc};

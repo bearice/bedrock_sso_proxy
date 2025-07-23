@@ -5,6 +5,7 @@ use crate::{
     health::{HealthCheckResult, HealthChecker},
     storage::Storage,
 };
+use chrono::Utc;
 use oauth2::{
     AuthUrl, AuthorizationCode, ClientId, ClientSecret, CsrfToken, RedirectUrl, Scope,
     TokenResponse as OAuth2TokenResponse, TokenUrl, basic::BasicClient, reqwest::async_http_client,
@@ -12,10 +13,9 @@ use oauth2::{
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use std::{collections::HashMap, sync::Arc};
-use chrono::Utc;
-use uuid::Uuid;
 use sha2::{Digest, Sha256};
+use std::{collections::HashMap, sync::Arc};
+use uuid::Uuid;
 
 #[derive(Debug, Serialize)]
 pub struct AuthorizeResponse {
@@ -146,8 +146,14 @@ impl OAuthService {
                         created_at: Utc::now(),
                         metadata: Some({
                             let mut metadata = std::collections::HashMap::new();
-                            metadata.insert("provider".to_string(), serde_json::Value::String(request.provider.clone()));
-                            metadata.insert("redirect_uri".to_string(), serde_json::Value::String(request.redirect_uri.clone()));
+                            metadata.insert(
+                                "provider".to_string(),
+                                serde_json::Value::String(request.provider.clone()),
+                            );
+                            metadata.insert(
+                                "redirect_uri".to_string(),
+                                serde_json::Value::String(request.redirect_uri.clone()),
+                            );
                             metadata
                         }),
                     };
@@ -264,9 +270,18 @@ impl OAuthService {
                 created_at: Utc::now(),
                 metadata: Some({
                     let mut metadata = std::collections::HashMap::new();
-                    metadata.insert("provider".to_string(), serde_json::Value::String(request.provider.clone()));
-                    metadata.insert("user_id".to_string(), serde_json::Value::String(user_id.to_string()));
-                    metadata.insert("email".to_string(), serde_json::Value::String(email.to_string()));
+                    metadata.insert(
+                        "provider".to_string(),
+                        serde_json::Value::String(request.provider.clone()),
+                    );
+                    metadata.insert(
+                        "user_id".to_string(),
+                        serde_json::Value::String(user_id.to_string()),
+                    );
+                    metadata.insert(
+                        "email".to_string(),
+                        serde_json::Value::String(email.to_string()),
+                    );
                     metadata
                 }),
             };
@@ -309,7 +324,7 @@ impl OAuthService {
                         id: None,
                         user_id: None,
                         event_type: "token_refresh_failed".to_string(),
-                        provider: None, // Provider unknown at this point
+                        provider: None,   // Provider unknown at this point
                         ip_address: None, // TODO: Extract from request context
                         user_agent: None, // TODO: Extract from request context
                         success: false,
@@ -326,12 +341,15 @@ impl OAuthService {
         }
     }
 
-    async fn refresh_token_internal(&self, request: RefreshRequest) -> Result<TokenResponse, AppError> {
+    async fn refresh_token_internal(
+        &self,
+        request: RefreshRequest,
+    ) -> Result<TokenResponse, AppError> {
         // Use database storage if available, otherwise fall back to cache
         let (token_data, new_refresh_token) = if let Some(storage) = &self.storage {
             // Hash the token for database lookup
             let token_hash = self.hash_token(&request.refresh_token);
-            
+
             // Get refresh token data from database
             let token_data = storage
                 .database
@@ -365,7 +383,8 @@ impl OAuthService {
                 provider: token_data.provider.clone(),
                 email: token_data.email.clone(),
                 created_at: Utc::now(),
-                expires_at: Utc::now() + chrono::Duration::seconds(self.config.jwt.refresh_token_ttl as i64),
+                expires_at: Utc::now()
+                    + chrono::Duration::seconds(self.config.jwt.refresh_token_ttl as i64),
                 rotation_count: token_data.rotation_count + 1,
                 revoked_at: None,
             };
@@ -390,9 +409,20 @@ impl OAuthService {
                 created_at: Utc::now(),
                 metadata: Some({
                     let mut metadata = std::collections::HashMap::new();
-                    metadata.insert("provider".to_string(), serde_json::Value::String(token_data.provider.clone()));
-                    metadata.insert("user_id".to_string(), serde_json::Value::String(token_data.user_id.clone()));
-                    metadata.insert("rotation_count".to_string(), serde_json::Value::Number(serde_json::Number::from(new_token_data.rotation_count)));
+                    metadata.insert(
+                        "provider".to_string(),
+                        serde_json::Value::String(token_data.provider.clone()),
+                    );
+                    metadata.insert(
+                        "user_id".to_string(),
+                        serde_json::Value::String(token_data.user_id.clone()),
+                    );
+                    metadata.insert(
+                        "rotation_count".to_string(),
+                        serde_json::Value::Number(serde_json::Number::from(
+                            new_token_data.rotation_count,
+                        )),
+                    );
                     metadata
                 }),
             };
