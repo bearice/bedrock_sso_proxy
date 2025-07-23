@@ -31,13 +31,18 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ### Build and Development
 ```bash
-cargo build                   # Build project
-cargo build --release         # Production build
+cargo build                   # Build project (development mode)
+cargo build --release         # Production build (automatically builds frontend)
+cargo build --features frontend # Force frontend build in dev mode
 cargo run --bin bedrock_proxy # Run server
 cargo test                    # Run all tests (71 total)
 cargo clippy                  # Lint code (required before commit)
 cargo fmt                     # Format code (required before commit)
+cargo clean                   # Clean Rust build artifacts only
+./clean-all.sh                # Alternative: run cleanup script directly
 ```
+
+**Note**: Frontend is automatically built during `cargo build --release` or when using `--features frontend`.
 
 ### Frontend Development
 ```bash
@@ -116,7 +121,7 @@ Use `BEDROCK_` prefix with double underscores for nesting:
 **Backend (Rust):**
 ```bash
 cargo fmt          # Format code
-cargo clippy       # Check linting/warnings  
+cargo clippy       # Check linting/warnings
 cargo test         # Run tests
 ```
 

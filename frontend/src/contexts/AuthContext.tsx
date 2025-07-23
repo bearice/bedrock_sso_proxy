@@ -1,6 +1,7 @@
-import { useState, useEffect, useCallback } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { AuthState, TokenResponse } from '../types/auth';
 import { authApi } from '../services/api';
+import { authLogger } from '../utils/logger';
 
 const STORAGE_KEY = 'bedrock_auth';
 
@@ -15,7 +16,17 @@ function parseJwtPayload(token: string): { sub?: string; exp?: number; scopes?: 
   }
 }
 
-export function useAuth() {
+interface AuthContextType extends AuthState {
+  loading: boolean;
+  setTokens: (tokenResponse: TokenResponse, provider: string) => void;
+  refreshTokens: (refreshToken: string) => Promise<TokenResponse>;
+  logout: () => void;
+  clearAuth: () => void;
+}
+
+const AuthContext = createContext<AuthContextType | undefined>(undefined);
+
+export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [authState, setAuthState] = useState<AuthState>({
     isAuthenticated: false,
     token: null,
@@ -28,8 +39,19 @@ export function useAuth() {
 
   const [loading, setLoading] = useState(true);
 
+  // Debug log only significant state changes
+  useEffect(() => {
+    if (authState.isAuthenticated || loading === false) {
+      authLogger.debug('State updated', {
+        isAuthenticated: authState.isAuthenticated,
+        provider: authState.provider,
+        loading: loading
+      });
+    }
+  }, [authState.isAuthenticated, authState.provider, loading]);
+
   const saveAuthState = useCallback((state: AuthState) => {
-    console.log('🔍 useAuth: saveAuthState called with state:', {
+    authLogger.debug('saveAuthState called', {
       isAuthenticated: state.isAuthenticated,
       provider: state.provider,
       user: state.user
@@ -37,10 +59,10 @@ export function useAuth() {
     setAuthState(state);
     if (state.isAuthenticated) {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-      console.log('🔍 useAuth: Saved auth state to localStorage');
+      authLogger.debug('Saved auth state to localStorage');
     } else {
       localStorage.removeItem(STORAGE_KEY);
-      console.log('🔍 useAuth: Removed auth state from localStorage');
+      authLogger.debug('Removed auth state from localStorage');
     }
   }, []);
 
@@ -61,24 +83,30 @@ export function useAuth() {
       const response = await authApi.refreshToken({ refresh_token: refreshToken });
       const payload = parseJwtPayload(response.access_token);
 
-      const newAuthState: AuthState = {
-        ...authState,
-        isAuthenticated: true,
-        token: response.access_token,
-        refreshToken: response.refresh_token,
-        expiresAt: payload?.exp || null,
-        scopes: payload?.scopes || response.scope.split(' '),
-      };
+      // Use functional state update to avoid dependency on authState
+      setAuthState(currentAuthState => {
+        const newAuthState: AuthState = {
+          ...currentAuthState,
+          isAuthenticated: true,
+          token: response.access_token,
+          refreshToken: response.refresh_token,
+          expiresAt: payload?.exp || null,
+          scopes: payload?.scopes || response.scope.split(' '),
+        };
 
-      saveAuthState(newAuthState);
+        // Save to localStorage
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(newAuthState));
+        return newAuthState;
+      });
+      
       return response;
     } catch (error) {
       clearAuth();
       throw error;
     }
-  }, [authState, saveAuthState, clearAuth]);
+  }, [clearAuth]);
 
-  // Load authentication state from localStorage
+  // Load authentication state from localStorage (run only once on mount)
   useEffect(() => {
     const loadAuthState = async () => {
       try {
@@ -96,37 +124,79 @@ export function useAuth() {
           // Try to refresh token
           if (parsed.refreshToken) {
             try {
-              await refreshTokens(parsed.refreshToken);
+              const response = await authApi.refreshToken({ refresh_token: parsed.refreshToken });
+              const payload = parseJwtPayload(response.access_token);
+
+              const newAuthState: AuthState = {
+                ...parsed,
+                isAuthenticated: true,
+                token: response.access_token,
+                refreshToken: response.refresh_token,
+                expiresAt: payload?.exp || null,
+                scopes: payload?.scopes || response.scope.split(' '),
+              };
+
+              setAuthState(newAuthState);
+              localStorage.setItem(STORAGE_KEY, JSON.stringify(newAuthState));
             } catch (error) {
               console.error('Failed to refresh token:', error);
-              clearAuth();
+              // Clear auth state on refresh failure
+              setAuthState({
+                isAuthenticated: false,
+                token: null,
+                refreshToken: null,
+                provider: null,
+                user: null,
+                expiresAt: null,
+                scopes: [],
+              });
+              localStorage.removeItem(STORAGE_KEY);
             }
           } else {
-            clearAuth();
+            // No refresh token, clear auth state
+            setAuthState({
+              isAuthenticated: false,
+              token: null,
+              refreshToken: null,
+              provider: null,
+              user: null,
+              expiresAt: null,
+              scopes: [],
+            });
+            localStorage.removeItem(STORAGE_KEY);
           }
         } else {
           // Trust stored tokens without validation - they come from successful OAuth flow
-          // We only validate tokens when they're near expiry or on app startup after a long period
           setAuthState(parsed);
         }
       } catch (error) {
         console.error('Failed to load auth state:', error);
-        clearAuth();
+        // Clear auth state on error
+        setAuthState({
+          isAuthenticated: false,
+          token: null,
+          refreshToken: null,
+          provider: null,
+          user: null,
+          expiresAt: null,
+          scopes: [],
+        });
+        localStorage.removeItem(STORAGE_KEY);
       } finally {
         setLoading(false);
       }
     };
 
     loadAuthState();
-  }, [clearAuth, refreshTokens]);
+  }, []); // Empty dependency array - run only once on mount
 
   const setTokens = useCallback((
     tokenResponse: TokenResponse,
     provider: string
   ) => {
-    console.log('🔍 useAuth: setTokens called with provider:', provider);
+    authLogger.debug('setTokens called', { provider });
     const payload = parseJwtPayload(tokenResponse.access_token);
-    console.log('🔍 useAuth: JWT payload:', payload);
+    authLogger.debug('JWT payload parsed', payload);
 
     const newAuthState: AuthState = {
       isAuthenticated: true,
@@ -138,7 +208,7 @@ export function useAuth() {
       scopes: payload?.scopes || tokenResponse.scope.split(' '),
     };
 
-    console.log('🔍 useAuth: New auth state:', {
+    authLogger.debug('New auth state created', {
       isAuthenticated: newAuthState.isAuthenticated,
       provider: newAuthState.provider,
       user: newAuthState.user,
@@ -147,9 +217,8 @@ export function useAuth() {
     });
 
     saveAuthState(newAuthState);
-    console.log('🔍 useAuth: saveAuthState called');
+    authLogger.info('Authentication successful', { provider, user: newAuthState.user });
   }, [saveAuthState]);
-
 
   const logout = useCallback(() => {
     clearAuth();
@@ -180,9 +249,9 @@ export function useAuth() {
     }, (timeUntilExpiry - refreshThreshold) * 1000);
 
     return () => clearTimeout(refreshTimer);
-  }, [authState, refreshTokens, clearAuth]);
+  }, [authState, refreshTokens]);
 
-  return {
+  const contextValue: AuthContextType = {
     ...authState,
     loading,
     setTokens,
@@ -190,4 +259,18 @@ export function useAuth() {
     logout,
     clearAuth,
   };
+
+  return (
+    <AuthContext.Provider value={contextValue}>
+      {children}
+    </AuthContext.Provider>
+  );
+}
+
+export function useAuth(): AuthContextType {
+  const context = useContext(AuthContext);
+  if (context === undefined) {
+    throw new Error('useAuth must be used within an AuthProvider');
+  }
+  return context;
 }

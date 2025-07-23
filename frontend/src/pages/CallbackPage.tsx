@@ -1,21 +1,34 @@
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { useAuth } from '../hooks/useAuth';
+import { useAuth } from '../contexts/AuthContext';
 import { authApi, ApiError } from '../services/api';
 import { CheckCircle, XCircle, Loader2 } from 'lucide-react';
+import { authLogger } from '../utils/logger';
 
 export function CallbackPage() {
   const { provider } = useParams<{ provider: string }>();
   const navigate = useNavigate();
-  const { setTokens } = useAuth();
-  
+  const { setTokens, isAuthenticated } = useAuth();
+
   const [status, setStatus] = useState<'loading' | 'success' | 'error'>('loading');
   const [error, setError] = useState<string | null>(null);
   const [actualProvider, setActualProvider] = useState<string | null>(provider || null);
+  const [shouldNavigate, setShouldNavigate] = useState(false);
+
+  // Monitor authentication state and navigate when ready
+  useEffect(() => {
+    if (shouldNavigate && isAuthenticated && status === 'success') {
+      authLogger.debug('Auth state updated, navigating to dashboard');
+      setTimeout(() => {
+        navigate('/dashboard', { replace: true });
+      }, 1000);
+    }
+  }, [shouldNavigate, isAuthenticated, status, navigate]);
 
   useEffect(() => {
     const handleCallback = async () => {
       try {
+        authLogger.debug('Starting handleCallback');
         // Extract query parameters from URL
         const urlParams = new URLSearchParams(window.location.search);
         const success = urlParams.get('success');
@@ -26,6 +39,16 @@ export function CallbackPage() {
         const errorParam = urlParams.get('error');
         const errorDescription = urlParams.get('error_description');
         
+        authLogger.debug('URL params', {
+          success,
+          accessToken: accessToken ? `${accessToken.substring(0, 20)}...` : null,
+          expiresIn,
+          scope,
+          urlProvider,
+          errorParam,
+          errorDescription
+        });
+
         // Check for OAuth errors first
         if (errorParam) {
           const errorMsg = errorDescription || errorParam;
@@ -36,9 +59,10 @@ export function CallbackPage() {
 
         // Handle direct success from backend redirect
         if (success === 'true' && accessToken && expiresIn && urlProvider) {
+          authLogger.debug('Direct success flow detected');
           // Update the actual provider for display
           setActualProvider(urlProvider);
-          
+
           // Create token response object from URL parameters
           const tokenResponse = {
             access_token: accessToken,
@@ -48,14 +72,17 @@ export function CallbackPage() {
             scope: scope || '',
           };
 
-          // Store tokens in auth state
+          authLogger.debug('Calling setTokens', {
+            provider: urlProvider,
+            tokenType: tokenResponse.token_type,
+            expiresIn: tokenResponse.expires_in
+          });
+
+          // Store tokens in auth state and set up navigation
           setTokens(tokenResponse, urlProvider);
           setStatus('success');
-          
-          // Redirect to dashboard after a brief success message
-          setTimeout(() => {
-            navigate('/dashboard', { replace: true });
-          }, 2000);
+          setShouldNavigate(true);
+          authLogger.debug('Set up for navigation, waiting for auth state update');
           return;
         }
 
@@ -93,18 +120,15 @@ export function CallbackPage() {
           state,
         });
 
-        // Store tokens in auth state
+        // Store tokens in auth state and set up navigation
         setTokens(tokenResponse, provider);
         setStatus('success');
-        
-        // Redirect to dashboard after a brief success message
-        setTimeout(() => {
-          navigate('/dashboard', { replace: true });
-        }, 2000);
+        setShouldNavigate(true);
+        authLogger.debug('Set up for navigation, waiting for auth state update');
 
       } catch (err) {
         console.error('Token exchange failed:', err);
-        
+
         let errorMessage = 'Authentication failed';
         if (err instanceof ApiError) {
           if (err.status === 400) {
@@ -119,7 +143,7 @@ export function CallbackPage() {
         } else if (err instanceof Error) {
           errorMessage = err.message;
         }
-        
+
         setError(errorMessage);
         setStatus('error');
       }
@@ -132,7 +156,7 @@ export function CallbackPage() {
     const names: { [key: string]: string } = {
       google: 'Google',
       github: 'GitHub',
-      microsoft: 'Microsoft', 
+      microsoft: 'Microsoft',
       gitlab: 'GitLab',
       auth0: 'Auth0',
       okta: 'Okta'
@@ -157,7 +181,7 @@ export function CallbackPage() {
             <h2>Processing Authentication</h2>
             <p>Exchanging authorization code with {actualProvider ? getProviderDisplayName(actualProvider) : 'OAuth provider'}...</p>
             <p style={{ color: '#666', fontSize: '0.875rem', marginTop: '1.5rem' }}>
-              This should only take a few seconds. Please don't close this tab.
+              This should only take a few seconds. Please don&apos;t close this tab.
             </p>
           </div>
         </div>
@@ -199,12 +223,12 @@ export function CallbackPage() {
             <p style={{ marginBottom: '1rem' }}>
               <strong>Provider:</strong> {actualProvider ? getProviderDisplayName(actualProvider) : 'Unknown'}
             </p>
-            
+
             <div className="status-message error">
               <strong>Error Details:</strong><br />
               {error}
             </div>
-            
+
             <div style={{ marginTop: '2rem' }}>
               <h4>Possible Solutions:</h4>
               <ul style={{ textAlign: 'left', margin: '1rem 0', color: '#666' }}>
@@ -214,7 +238,7 @@ export function CallbackPage() {
                 <li>Try logging in again</li>
               </ul>
             </div>
-            
+
             <div style={{ display: 'flex', gap: '1rem', justifyContent: 'center', flexWrap: 'wrap', marginTop: '2rem' }}>
               <button onClick={handleRetry} className="btn btn-primary">
                 Try Again

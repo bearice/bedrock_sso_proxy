@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { useProviders } from '../hooks/useProviders';
 import { authApi, ApiError } from '../services/api';
 import { Shield, RefreshCw, AlertCircle } from 'lucide-react';
@@ -6,7 +6,7 @@ import { Shield, RefreshCw, AlertCircle } from 'lucide-react';
 const getProviderIcon = (name: string) => {
   switch (name) {
     case 'google': return '🔍';
-    case 'github': return '🐙';  
+    case 'github': return '🐙';
     case 'microsoft': return '🪟';
     case 'gitlab': return '🦊';
     case 'auth0': return '🔐';
@@ -27,15 +27,15 @@ export function LoginPage() {
 
       // Get the current page URL as redirect URI
       const redirectUri = `${window.location.origin}/auth/callback/${providerName}`;
-      
+
       // Get authorization URL from backend
       const authResponse = await authApi.getAuthorizationUrl(providerName, redirectUri);
-      
+
       // Redirect to OAuth provider
       window.location.href = authResponse.authorization_url;
     } catch (err) {
       console.error('OAuth initiation failed:', err);
-      
+
       let errorMessage = `Failed to start ${providerName} authentication`;
       if (err instanceof ApiError) {
         if (err.status === 400) {
@@ -44,7 +44,7 @@ export function LoginPage() {
           errorMessage = 'Server error - please try again';
         }
       }
-      
+
       setAuthError(errorMessage);
     } finally {
       setAuthLoading(null);
@@ -87,8 +87,8 @@ export function LoginPage() {
           <div className="status-message error">
             <AlertCircle size={16} style={{ marginRight: '0.5rem' }} />
             {error}
-            <button 
-              onClick={refreshProviders} 
+            <button
+              onClick={refreshProviders}
               className="btn btn-secondary"
               style={{ marginLeft: '1rem', padding: '0.5rem 1rem' }}
             >
@@ -110,9 +110,9 @@ export function LoginPage() {
             <h3>No OAuth Providers Configured</h3>
             <p>No OAuth providers are currently configured on the server.</p>
             <p>To configure OAuth providers, add them to your <code>config.yaml</code>:</p>
-            <pre style={{ 
-              background: '#f7fafc', 
-              padding: '1rem', 
+            <pre style={{
+              background: '#f7fafc',
+              padding: '1rem',
               borderRadius: '8px',
               fontSize: '0.875rem',
               color: '#2d3748'
@@ -122,7 +122,7 @@ export function LoginPage() {
       client_id: "your-google-client-id"
       client_secret: "your-google-client-secret"
     github:
-      client_id: "your-github-client-id" 
+      client_id: "your-github-client-id"
       client_secret: "your-github-client-secret"`}</pre>
             <button onClick={refreshProviders} className="btn btn-primary">
               <RefreshCw size={16} />
@@ -134,7 +134,7 @@ export function LoginPage() {
             <div className="card">
               <h2>Choose Authentication Provider</h2>
               <p>Select your preferred OAuth provider to get started:</p>
-              
+
               <div className="oauth-providers">
                 {providers.map((provider) => (
                   <button
@@ -146,18 +146,18 @@ export function LoginPage() {
                     <span className="icon">
                       {authLoading === provider.name ? '⏳' : getProviderIcon(provider.name)}
                     </span>
-                    {authLoading === provider.name 
+                    {authLoading === provider.name
                       ? `Connecting to ${provider.display_name}...`
                       : `Login with ${provider.display_name}`
                     }
                   </button>
                 ))}
               </div>
-              
+
               <div style={{ marginTop: '1.5rem', padding: '1rem', background: '#f7fafc', borderRadius: '8px' }}>
                 <h4 style={{ marginBottom: '0.5rem', color: '#4a5568' }}>What happens next?</h4>
                 <ol style={{ paddingLeft: '1.5rem', color: '#666' }}>
-                  <li>You'll be redirected to your chosen provider</li>
+                  <li>You&apos;ll be redirected to your chosen provider</li>
                   <li>Sign in with your existing account</li>
                   <li>Authorize access to Bedrock SSO Proxy</li>
                   <li>Get your JWT token for Claude Code</li>

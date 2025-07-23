@@ -3,6 +3,7 @@ name = "bedrock_sso_proxy"
 version = "0.1.0"
 edition = "2024"
 default-run = "bedrock_proxy"
+build = "build.rs"
 
 [[bin]]
 name = "bedrock_proxy"
@@ -11,6 +12,10 @@ path = "src/main.rs"
 [[bin]]
 name = "e2e"
 path = "src/bin/e2e_client.rs"
+
+[features]
+default = []
+frontend = []
 
 [dependencies]
 axum = { version = "^0.8", features = ["ws"] }

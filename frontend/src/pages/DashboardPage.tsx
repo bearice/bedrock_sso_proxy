@@ -1,5 +1,5 @@
-import React, { useState, useCallback } from 'react';
-import { useAuth } from '../hooks/useAuth';
+import { useState, useCallback } from 'react';
+import { useAuth } from '../contexts/AuthContext';
 import { 
   LogOut, 
   Copy, 
@@ -222,12 +222,12 @@ export function DashboardPage() {
         <p>Configure Claude Code to use your Bedrock proxy with these simple steps:</p>
 
         <h4>Method 1: Environment Variables (Recommended)</h4>
-        <pre>export BEDROCK_TOKEN="{token}"
-export BEDROCK_ENDPOINT="{currentDomain}"</pre>
+        <pre>export BEDROCK_TOKEN=&quot;{token}&quot;
+export BEDROCK_ENDPOINT=&quot;{currentDomain}&quot;</pre>
 
         <h4>Method 2: Claude Code Configuration</h4>
-        <pre>claude-code config set bedrock.token "{token}"
-claude-code config set bedrock.endpoint "{currentDomain}"</pre>
+        <pre>claude-code config set bedrock.token &quot;{token}&quot;
+claude-code config set bedrock.endpoint &quot;{currentDomain}&quot;</pre>
 
         <h4>Method 3: Configuration File</h4>
         <p>Add to your <code>~/.claude/config.json</code>:</p>
@@ -239,7 +239,7 @@ claude-code config set bedrock.endpoint "{currentDomain}"</pre>
 }`}</pre>
 
         <h4>Method 4: CLAUDE.md Configuration</h4>
-        <p>Add to your project's <code>CLAUDE.md</code> file:</p>
+        <p>Add to your project&apos;s <code>CLAUDE.md</code> file:</p>
         <pre>{`# Bedrock Configuration
 export BEDROCK_TOKEN="${token?.substring(0, 20)}..."
 export BEDROCK_ENDPOINT="${currentDomain}"`}</pre>
@@ -264,7 +264,7 @@ export BEDROCK_ENDPOINT="${currentDomain}"`}</pre>
   }'`}</pre>
 
         <h4>Using Claude Code:</h4>
-        <pre>claude-code "Hello, can you help me test this setup?"</pre>
+        <pre>claude-code &quot;Hello, can you help me test this setup?&quot;</pre>
 
         <div style={{ marginTop: '1rem', display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
           <button 
