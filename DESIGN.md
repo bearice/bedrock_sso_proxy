@@ -85,34 +85,38 @@
 
 ### Admin Authorization System (NEW)
 
-#### Email-Based Admin Model
+#### Email-Based Admin Model  
 - **Primary Key**: User email address (instead of composite provider:userid)
 - **Admin Detection**: Configured list of admin email addresses
-- **Scope Assignment**: Automatic based on email match
+- **Real-Time Checking**: Admin status checked at request time (not stored in JWT)
 - **Case Insensitive**: Admin email matching is case-insensitive
 
-#### Admin Scope Logic
+#### Admin Authorization Logic
 ```rust
-fn get_user_scopes(email: &str) -> Vec<String> {
-    if admin_emails.contains(email.to_lowercase()) {
-        vec!["admin".to_string()]
-    } else {
-        vec![]
+impl Config {
+    /// Check if the given email address belongs to an admin user
+    /// This performs case-insensitive matching
+    pub fn is_admin(&self, email: &str) -> bool {
+        let email_lower = email.to_lowercase();
+        self.admin.emails.iter().any(|admin_email| {
+            admin_email.to_lowercase() == email_lower
+        })
     }
 }
 ```
 
 #### Authorization Flow
 1. **OAuth Provider Returns**: User email and provider user ID
-2. **Admin Check**: Compare email against configured admin list
-3. **Scope Assignment**: `["admin"]` for admins, `[]` for regular users
-4. **JWT Generation**: Email as `sub`, appropriate scopes, original user ID preserved
+2. **JWT Generation**: Email as `sub`, no scopes stored in token
+3. **Request-Time Admin Check**: For protected routes, check `config.is_admin(&claims.email)`
+4. **Immediate Effect**: Admin changes take effect instantly without token refresh
 
 #### Security Features
 - **Email Validation**: Email must come from trusted OAuth provider
 - **Configuration Protection**: Admin emails stored in secure config file
 - **Audit Trail**: All admin actions logged with email identifier
-- **Scope Verification**: Middleware can check for admin scope on protected routes
+- **Real-Time Authorization**: Admin status checked fresh on each request
+- **No Stale Permissions**: Admin changes take effect immediately
 
 ## New OAuth API Endpoints
 
@@ -451,17 +455,15 @@ BEDROCK_LOGGING__LEVEL=info
   "exp": 1234567890,
   "provider": "google",
   "email": "user@example.com",
-  "scopes": ["admin"],
-  "refresh_token_id": "uuid-v4-here",
-  "original_user_id": "google:123456789"
+  "refresh_token_id": "uuid-v4-here"
 }
 ```
 
 **Key Changes:**
 - **Primary Key**: `sub` now contains the user's email address (was composite user ID)
-- **Admin Scopes**: Users with configured admin emails get `["admin"]` scope
-- **Regular Users**: Non-admin users get empty scopes `[]`
-- **Backward Compatibility**: `original_user_id` preserves the original provider user ID
+- **No Scopes**: Admin status is checked at request time, not stored in JWT
+- **Real-Time Authorization**: Admin changes take effect immediately
+- **Simplified Token**: Removed scopes field to prevent stale permissions
 
 #### Validation Cache Security
 - **Cache Key**: `oauth_validation:{provider}:{email}:{token_hash}`

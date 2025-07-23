@@ -76,7 +76,6 @@ pub struct OAuthClaims {
     pub exp: usize,
     pub provider: String,
     pub email: String,
-    pub scopes: Vec<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub refresh_token_id: Option<String>,
 }
@@ -86,7 +85,6 @@ impl OAuthClaims {
         user_id: String,
         provider: String,
         email: String,
-        scopes: Vec<String>,
         expires_in_seconds: u64,
         refresh_token_id: Option<String>,
     ) -> Self {
@@ -97,7 +95,6 @@ impl OAuthClaims {
             exp: now + expires_in_seconds as usize,
             provider,
             email,
-            scopes,
             refresh_token_id,
         }
     }
@@ -195,7 +192,6 @@ impl HealthChecker for JwtHealthChecker {
             "health_check_user".to_string(),
             "health_check".to_string(),
             "health@example.com".to_string(),
-            vec!["health_check".to_string()],
             60, // 1 minute expiry
             None,
         );
@@ -282,12 +278,6 @@ impl ValidatedClaims {
         }
     }
 
-    pub fn scopes(&self) -> Option<&[String]> {
-        match self {
-            ValidatedClaims::OAuth(claims) => Some(&claims.scopes),
-            ValidatedClaims::Legacy(_) => None,
-        }
-    }
 }
 
 #[cfg(test)]
@@ -376,7 +366,6 @@ mod tests {
             "google:123".to_string(),
             "google".to_string(),
             "test@example.com".to_string(),
-            vec!["email".to_string(), "profile".to_string()],
             3600,
             Some("refresh_123".to_string()),
         );
@@ -384,7 +373,6 @@ mod tests {
         assert_eq!(claims.sub, "google:123");
         assert_eq!(claims.provider, "google");
         assert_eq!(claims.email, "test@example.com");
-        assert_eq!(claims.scopes, vec!["email", "profile"]);
         assert_eq!(claims.refresh_token_id, Some("refresh_123".to_string()));
         assert!(!claims.is_expired());
     }
@@ -397,7 +385,6 @@ mod tests {
             "google:123".to_string(),
             "google".to_string(),
             "test@example.com".to_string(),
-            vec!["email".to_string()],
             3600,
             None,
         );
@@ -429,7 +416,6 @@ mod tests {
             "google:123".to_string(),
             "google".to_string(),
             "test@example.com".to_string(),
-            vec!["email".to_string()],
             3600,
             None,
         );
@@ -460,7 +446,6 @@ mod tests {
             "google:123".to_string(),
             "google".to_string(),
             "test@example.com".to_string(),
-            vec!["email".to_string(), "profile".to_string()],
             3600,
             None,
         );
@@ -469,10 +454,6 @@ mod tests {
         assert_eq!(oauth_validated.subject(), "google:123");
         assert_eq!(oauth_validated.provider(), Some("google"));
         assert_eq!(oauth_validated.email(), Some("test@example.com"));
-        assert_eq!(
-            oauth_validated.scopes(),
-            Some(&["email".to_string(), "profile".to_string()][..])
-        );
 
         let legacy_claims = Claims {
             sub: "user123".to_string(),
@@ -483,7 +464,6 @@ mod tests {
         assert_eq!(legacy_validated.subject(), "user123");
         assert_eq!(legacy_validated.provider(), None);
         assert_eq!(legacy_validated.email(), None);
-        assert_eq!(legacy_validated.scopes(), None);
     }
 
     #[test]
@@ -492,7 +472,6 @@ mod tests {
             "google:123".to_string(),
             "google".to_string(),
             "test@example.com".to_string(),
-            vec!["email".to_string()],
             3600,
             None,
         );

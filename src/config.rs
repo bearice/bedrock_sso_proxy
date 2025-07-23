@@ -15,6 +15,8 @@ pub struct Config {
     pub cache: CacheConfig,
     #[serde(default)]
     pub frontend: FrontendConfig,
+    #[serde(default)]
+    pub admin: AdminConfig,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -155,6 +157,14 @@ pub struct FrontendConfig {
     pub path: Option<String>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct AdminConfig {
+    /// List of admin email addresses
+    /// Users with these emails will have admin privileges
+    #[serde(default)]
+    pub emails: Vec<String>,
+}
+
 impl Default for Config {
     fn default() -> Self {
         Self {
@@ -179,6 +189,7 @@ impl Default for Config {
             oauth: OAuthConfig::default(),
             cache: CacheConfig::default(),
             frontend: FrontendConfig::default(),
+            admin: AdminConfig::default(),
         }
     }
 }
@@ -229,6 +240,15 @@ impl Config {
 
     pub fn list_oauth_providers(&self) -> Vec<String> {
         self.oauth.providers.keys().cloned().collect()
+    }
+
+    /// Check if the given email address belongs to an admin user
+    /// This performs case-insensitive matching
+    pub fn is_admin(&self, email: &str) -> bool {
+        let email_lower = email.to_lowercase();
+        self.admin.emails.iter().any(|admin_email| {
+            admin_email.to_lowercase() == email_lower
+        })
     }
 }
 
@@ -572,6 +592,38 @@ jwt:
 
         let result = Config::load_from_file(temp_file.path());
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_admin_config_is_admin() {
+        let mut config = Config::default();
+        config.admin.emails = vec![
+            "admin@example.com".to_string(),
+            "SUPERUSER@company.com".to_string(),
+        ];
+
+        // Test exact match
+        assert!(config.is_admin("admin@example.com"));
+        assert!(config.is_admin("SUPERUSER@company.com"));
+        
+        // Test case insensitive matching
+        assert!(config.is_admin("ADMIN@example.com"));
+        assert!(config.is_admin("superuser@company.com"));
+        assert!(config.is_admin("Admin@Example.Com"));
+        
+        // Test non-admin
+        assert!(!config.is_admin("user@example.com"));
+        assert!(!config.is_admin(""));
+        assert!(!config.is_admin("notadmin@company.com"));
+    }
+
+    #[test]
+    fn test_admin_config_empty_list() {
+        let config = Config::default();
+        
+        // No admins configured
+        assert!(!config.is_admin("admin@example.com"));
+        assert!(!config.is_admin("anyone@example.com"));
     }
 
     #[test]

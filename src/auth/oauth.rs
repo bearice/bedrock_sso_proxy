@@ -60,7 +60,6 @@ pub struct ValidationResponse {
     pub sub: String,
     pub provider: String,
     pub expires_at: i64,
-    pub scopes: Vec<String>,
 }
 
 pub struct OAuthService {
@@ -178,7 +177,6 @@ impl OAuthService {
             composite_user_id,
             request.provider.clone(),
             email.to_string(),
-            provider.scopes.clone(),
             self.config.jwt.access_token_ttl,
             None, // No refresh token - JWT is long-lived
         );
@@ -232,7 +230,6 @@ impl OAuthService {
             token_data.user_id,
             token_data.provider.clone(),
             email,
-            provider.scopes.clone(),
             self.config.jwt.access_token_ttl,
             Some(new_refresh_token.clone()),
         );
@@ -281,7 +278,6 @@ impl OAuthService {
                 sub: cached.claims.sub,
                 provider: cached.claims.provider,
                 expires_at: cached.claims.exp as i64,
-                scopes: cached.claims.scopes,
             });
         }
 
@@ -296,7 +292,6 @@ impl OAuthService {
             sub: claims.sub,
             provider: claims.provider,
             expires_at: claims.exp as i64,
-            scopes: claims.scopes,
         })
     }
 
@@ -606,7 +601,6 @@ mod tests {
             "google:123".to_string(),
             "google".to_string(),
             "test@example.com".to_string(),
-            vec!["email".to_string(), "profile".to_string()],
             3600,
             None,
         );
@@ -621,6 +615,5 @@ mod tests {
         assert!(validation.valid);
         assert_eq!(validation.sub, "google:123");
         assert_eq!(validation.provider, "google");
-        assert_eq!(validation.scopes, vec!["email", "profile"]);
     }
 }

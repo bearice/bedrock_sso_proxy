@@ -275,7 +275,6 @@ mod tests {
             "google:123".to_string(),
             "google".to_string(),
             "test@example.com".to_string(),
-            vec!["email".to_string()],
             3600, // 1 hour
             None,
         );
@@ -367,7 +366,6 @@ mod tests {
             "google:123".to_string(),
             "google".to_string(),
             "test@example.com".to_string(),
-            vec!["email".to_string()],
             1, // 1 second expiration
             None,
         );

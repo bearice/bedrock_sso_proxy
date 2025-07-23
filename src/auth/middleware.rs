@@ -144,7 +144,6 @@ mod tests {
             "google:123".to_string(),
             "google".to_string(),
             "test@example.com".to_string(),
-            vec!["email".to_string(), "profile".to_string()],
             3600,
             None,
         );
