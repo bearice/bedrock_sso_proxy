@@ -16,6 +16,10 @@ use sha2::{Digest, Sha256};
 use chrono::{Duration as ChronoDuration, Utc};
 use std::{collections::HashMap, sync::Arc};
 use uuid::Uuid;
+
+/// Default OAuth state token TTL (10 minutes)
+const OAUTH_STATE_TTL_SECONDS: i64 = 600;
+
 #[derive(Debug, Serialize)]
 pub struct AuthorizeResponse {
     pub authorization_url: String,
@@ -154,8 +158,10 @@ impl OAuthService {
                         }),
                     };
 
-                    // Store audit log (ignore errors to not mask the original error)
-                    let _ = storage.database.store_audit_log(&audit_entry).await;
+                    // Store audit log (log errors but don't mask the original error)
+                    if let Err(audit_err) = storage.database.store_audit_log(&audit_entry).await {
+                        tracing::warn!("Failed to store OAuth authorization failure audit log: {}", audit_err);
+                    }
                 }
                 Err(e)
             }
@@ -282,8 +288,10 @@ impl OAuthService {
                 }),
             };
 
-            // Store audit log (ignore errors to not block authentication)
-            let _ = storage.database.store_audit_log(&audit_entry).await;
+            // Store audit log (log errors but don't block authentication)
+            if let Err(audit_err) = storage.database.store_audit_log(&audit_entry).await {
+                tracing::warn!("Failed to store OAuth token exchange success audit log: {}", audit_err);
+            }
         }
 
         // Create composite user ID
@@ -329,8 +337,10 @@ impl OAuthService {
                         metadata: None,
                     };
 
-                    // Store audit log (ignore errors to not mask the original error)
-                    let _ = storage.database.store_audit_log(&audit_entry).await;
+                    // Store audit log (log errors but don't mask the original error)
+                    if let Err(audit_err) = storage.database.store_audit_log(&audit_entry).await {
+                        tracing::warn!("Failed to store OAuth token validation failure audit log: {}", audit_err);
+                    }
                 }
                 Err(e)
             }
@@ -424,8 +434,10 @@ impl OAuthService {
                 }),
             };
 
-            // Store audit log (ignore errors to not block token refresh)
-            let _ = storage.database.store_audit_log(&audit_entry).await;
+            // Store audit log (log errors but don't block token refresh)
+            if let Err(audit_err) = storage.database.store_audit_log(&audit_entry).await {
+                tracing::warn!("Failed to store OAuth token refresh success audit log: {}", audit_err);
+            }
 
             (token_data, new_token)
         };
@@ -711,10 +723,10 @@ impl OAuthService {
             provider,
             redirect_uri,
             created_at: now,
-            expires_at: now + ChronoDuration::seconds(600), // 10 minutes TTL
+            expires_at: now + ChronoDuration::seconds(OAUTH_STATE_TTL_SECONDS),
         };
 
-        self.storage.cache.store_state(&state, &state_data, 600).await
+        self.storage.cache.store_state(&state, &state_data, OAUTH_STATE_TTL_SECONDS as u64).await
             .map_err(|e| AppError::Internal(format!("Failed to store state: {}", e)))?;
 
         Ok(state)
