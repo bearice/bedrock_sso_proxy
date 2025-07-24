@@ -1,5 +1,5 @@
 use super::{
-    CacheStorage, CachedValidation, RateLimitData, StateData, StorageError, StorageResult,
+    CacheStorage, CachedValidation, StateData, StorageError, StorageResult,
 };
 use async_trait::async_trait;
 use redis::{AsyncCommands, Client, RedisError, aio::ConnectionManager};
@@ -43,9 +43,6 @@ impl RedisCacheStorage {
         format!("{}state:{}", self.key_prefix, key)
     }
 
-    fn rate_limit_key(&self, key: &str) -> String {
-        format!("{}rate_limit:{}", self.key_prefix, key)
-    }
 
     async fn set_with_ttl<T: Serialize>(
         &self,
@@ -148,25 +145,6 @@ impl CacheStorage for RedisCacheStorage {
         self.delete_key(&redis_key).await
     }
 
-    async fn store_rate_limit(
-        &self,
-        key: &str,
-        rate_limit: &RateLimitData,
-        ttl_seconds: u64,
-    ) -> StorageResult<()> {
-        let redis_key = self.rate_limit_key(key);
-        self.set_with_ttl(&redis_key, rate_limit, ttl_seconds).await
-    }
-
-    async fn get_rate_limit(&self, key: &str) -> StorageResult<Option<RateLimitData>> {
-        let redis_key = self.rate_limit_key(key);
-        self.get_and_deserialize(&redis_key).await
-    }
-
-    async fn delete_rate_limit(&self, key: &str) -> StorageResult<()> {
-        let redis_key = self.rate_limit_key(key);
-        self.delete_key(&redis_key).await
-    }
 
     async fn clear_all(&self) -> StorageResult<()> {
         let mut conn = self.connection.clone();
@@ -320,37 +298,4 @@ mod tests {
         cache.clear_all().await.unwrap();
     }
 
-    #[tokio::test]
-    async fn test_redis_rate_limit_storage() {
-        let Some(cache) = setup_redis().await else {
-            println!("Redis not available, skipping Redis tests");
-            return;
-        };
-
-        // Clear any existing test data
-        cache.clear_all().await.unwrap();
-
-        let rate_limit = RateLimitData {
-            attempts: 5,
-            window_start: Utc::now(),
-            blocked_until: Some(Utc::now() + chrono::Duration::minutes(15)),
-        };
-
-        // Test store and retrieve
-        cache
-            .store_rate_limit("user123", &rate_limit, 3600)
-            .await
-            .unwrap();
-        let retrieved = cache.get_rate_limit("user123").await.unwrap();
-        assert!(retrieved.is_some());
-        assert_eq!(retrieved.unwrap().attempts, 5);
-
-        // Test deletion
-        cache.delete_rate_limit("user123").await.unwrap();
-        let deleted = cache.get_rate_limit("user123").await.unwrap();
-        assert!(deleted.is_none());
-
-        // Clean up
-        cache.clear_all().await.unwrap();
-    }
 }

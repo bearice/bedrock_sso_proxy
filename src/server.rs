@@ -8,6 +8,7 @@ use crate::{
     config::Config,
     error::AppError,
     health::HealthService,
+    metrics,
     routes::{
         create_auth_routes, create_bedrock_routes, create_frontend_router,
         create_protected_bedrock_routes,
@@ -15,7 +16,7 @@ use crate::{
     shutdown::{HttpServerShutdown, ShutdownCoordinator, ShutdownManager, StorageShutdown},
     storage::{StorageHealthChecker, factory::StorageFactory},
 };
-use axum::{Router, middleware, extract::DefaultBodyLimit};
+use axum::{Router, extract::DefaultBodyLimit, middleware};
 use std::{net::SocketAddr, sync::Arc, time::Duration};
 use tokio::net::TcpListener;
 use tracing::{error, info};
@@ -37,13 +38,25 @@ impl Server {
         let shutdown_coordinator = ShutdownCoordinator::new();
         let mut shutdown_manager = ShutdownManager::new(Duration::from_secs(30));
 
-        // Initialize metrics and rate limiting (disabled for now)
-        if self.config.metrics.enabled {
-            info!("Metrics configuration found but not fully implemented yet");
-        }
-        if self.config.rate_limit.enabled {
-            info!("Rate limiting configuration found but not fully implemented yet");
-        }
+        // Initialize metrics system
+        let _metrics_handle = if self.config.metrics.enabled {
+            match metrics::init_metrics_with_port(self.config.metrics.port) {
+                Ok(handle) => {
+                    info!(
+                        "Metrics server started on port {}",
+                        self.config.metrics.port
+                    );
+                    Some(handle)
+                }
+                Err(e) => {
+                    error!("Failed to initialize metrics: {}", e);
+                    None
+                }
+            }
+        } else {
+            info!("Metrics collection is disabled");
+            None
+        };
 
         let jwt_algorithm = parse_algorithm(&self.config.jwt.algorithm)?;
         let jwt_service = JwtService::new(self.config.jwt.secret.clone(), jwt_algorithm)?;
@@ -142,7 +155,7 @@ impl Server {
         oauth_service: Arc<OAuthService>,
         health_service: Arc<HealthService>,
     ) -> Router {
-        Router::new()
+        let mut app = Router::new()
             // OAuth authentication routes (no auth required)
             .nest("/auth", create_auth_routes().with_state(oauth_service))
             // Health check (no auth required)
@@ -158,7 +171,14 @@ impl Server {
                     )),
             )
             // Frontend routes (serve last to not conflict with API routes)
-            .fallback_service(create_frontend_router(self.config.frontend.clone()))
+            .fallback_service(create_frontend_router(self.config.frontend.clone()));
+
+        // Add metrics middleware if enabled
+        if self.config.metrics.enabled {
+            app = app.layer(middleware::from_fn(metrics::metrics_middleware));
+        }
+
+        app
     }
 
     // For testing - OAuth always enabled

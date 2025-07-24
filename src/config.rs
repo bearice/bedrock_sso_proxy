@@ -21,8 +21,6 @@ pub struct Config {
     pub storage: StorageConfig,
     #[serde(default)]
     pub metrics: MetricsConfig,
-    #[serde(default)]
-    pub rate_limit: RateLimitConfig,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -265,51 +263,6 @@ impl Default for MetricsConfig {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct RateLimitConfig {
-    #[serde(default = "default_rate_limit_enabled")]
-    pub enabled: bool,
-    #[serde(default = "default_authenticated_rpm")]
-    pub authenticated_rpm: u32,
-    #[serde(default = "default_unauthenticated_rpm")]
-    pub unauthenticated_rpm: u32,
-    #[serde(default = "default_oauth_token_rpm")]
-    pub oauth_token_rpm: u32,
-    #[serde(default = "default_ip_rpm")]
-    pub ip_rpm: u32,
-}
-
-fn default_rate_limit_enabled() -> bool {
-    true
-}
-
-fn default_authenticated_rpm() -> u32 {
-    600
-}
-
-fn default_unauthenticated_rpm() -> u32 {
-    60
-}
-
-fn default_oauth_token_rpm() -> u32 {
-    10
-}
-
-fn default_ip_rpm() -> u32 {
-    1200
-}
-
-impl Default for RateLimitConfig {
-    fn default() -> Self {
-        Self {
-            enabled: default_rate_limit_enabled(),
-            authenticated_rpm: default_authenticated_rpm(),
-            unauthenticated_rpm: default_unauthenticated_rpm(),
-            oauth_token_rpm: default_oauth_token_rpm(),
-            ip_rpm: default_ip_rpm(),
-        }
-    }
-}
 
 impl Default for RedisStorageConfig {
     fn default() -> Self {
@@ -361,7 +314,6 @@ impl Default for Config {
             admin: AdminConfig::default(),
             storage: StorageConfig::default(),
             metrics: MetricsConfig::default(),
-            rate_limit: RateLimitConfig::default(),
         }
     }
 }

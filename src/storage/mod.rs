@@ -52,13 +52,6 @@ pub struct StateData {
     pub expires_at: DateTime<Utc>,
 }
 
-/// Rate limiting data structure
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct RateLimitData {
-    pub attempts: u32,
-    pub window_start: DateTime<Utc>,
-    pub blocked_until: Option<DateTime<Utc>>,
-}
 
 /// Refresh token data for database persistence
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -132,19 +125,6 @@ pub trait CacheStorage: Send + Sync {
     /// Delete CSRF state token
     async fn delete_state(&self, key: &str) -> StorageResult<()>;
 
-    /// Store rate limit data with TTL
-    async fn store_rate_limit(
-        &self,
-        key: &str,
-        rate_limit: &RateLimitData,
-        ttl_seconds: u64,
-    ) -> StorageResult<()>;
-
-    /// Get rate limit data
-    async fn get_rate_limit(&self, key: &str) -> StorageResult<Option<RateLimitData>>;
-
-    /// Delete rate limit data
-    async fn delete_rate_limit(&self, key: &str) -> StorageResult<()>;
 
     /// Clear all cache data (useful for testing)
     async fn clear_all(&self) -> StorageResult<()>;

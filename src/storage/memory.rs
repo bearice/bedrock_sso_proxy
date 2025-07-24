@@ -1,5 +1,5 @@
 use super::{
-    AuditLogEntry, CacheStorage, CachedValidation, DatabaseStorage, RateLimitData,
+    AuditLogEntry, CacheStorage, CachedValidation, DatabaseStorage,
     RefreshTokenData, StateData, StorageResult, UserRecord,
 };
 use async_trait::async_trait;
@@ -33,7 +33,6 @@ impl<T> TtlEntry<T> {
 pub struct MemoryCacheStorage {
     validations: Arc<DashMap<String, TtlEntry<CachedValidation>>>,
     states: Arc<DashMap<String, TtlEntry<StateData>>>,
-    rate_limits: Arc<DashMap<String, TtlEntry<RateLimitData>>>,
     cleanup_interval: Duration,
 }
 
@@ -42,7 +41,6 @@ impl MemoryCacheStorage {
         let storage = Self {
             validations: Arc::new(DashMap::new()),
             states: Arc::new(DashMap::new()),
-            rate_limits: Arc::new(DashMap::new()),
             cleanup_interval: Duration::from_secs(cleanup_interval_seconds),
         };
 
@@ -54,7 +52,6 @@ impl MemoryCacheStorage {
     fn start_cleanup_task(&self) {
         let validations = self.validations.clone();
         let states = self.states.clone();
-        let rate_limits = self.rate_limits.clone();
         let interval = self.cleanup_interval;
 
         tokio::spawn(async move {
@@ -66,9 +63,6 @@ impl MemoryCacheStorage {
 
                 // Clean up expired states
                 states.retain(|_, entry| !entry.is_expired());
-
-                // Clean up expired rate limits
-                rate_limits.retain(|_, entry| !entry.is_expired());
             }
         });
     }
@@ -134,32 +128,10 @@ impl CacheStorage for MemoryCacheStorage {
         Ok(())
     }
 
-    async fn store_rate_limit(
-        &self,
-        key: &str,
-        rate_limit: &RateLimitData,
-        ttl_seconds: u64,
-    ) -> StorageResult<()> {
-        self.rate_limits.insert(
-            key.to_string(),
-            TtlEntry::new(rate_limit.clone(), ttl_seconds),
-        );
-        Ok(())
-    }
-
-    async fn get_rate_limit(&self, key: &str) -> StorageResult<Option<RateLimitData>> {
-        Ok(self.get_non_expired(&self.rate_limits, key))
-    }
-
-    async fn delete_rate_limit(&self, key: &str) -> StorageResult<()> {
-        self.rate_limits.remove(key);
-        Ok(())
-    }
 
     async fn clear_all(&self) -> StorageResult<()> {
         self.validations.clear();
         self.states.clear();
-        self.rate_limits.clear();
         Ok(())
     }
 

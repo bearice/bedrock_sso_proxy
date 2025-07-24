@@ -40,7 +40,9 @@ pub async fn authorize_handler(
         build_redirect_uri_from_request(&headers, &provider)
     });
 
-    let response = oauth_service.get_authorization_url(&provider, &redirect_uri).await?;
+    let response = oauth_service
+        .get_authorization_url(&provider, &redirect_uri)
+        .await?;
     Ok(Json(response))
 }
 

@@ -12,7 +12,6 @@ use serde::Deserialize;
 use serde_json::Value;
 use std::sync::Arc;
 
-
 #[derive(Debug, Deserialize)]
 struct HealthCheckQuery {
     #[serde(default)]
@@ -346,5 +345,4 @@ mod tests {
                 || response.status() == StatusCode::FORBIDDEN
         );
     }
-
 }

@@ -3,8 +3,7 @@ pub mod aws_http;
 pub mod config;
 pub mod error;
 pub mod health;
-// pub mod metrics;     // TODO: Fix lifetime issues in Phase 9
-// pub mod rate_limit;  // TODO: Fix rate limiter implementation in Phase 9
+pub mod metrics;
 pub mod routes;
 pub mod server;
 pub mod shutdown;

@@ -1,6 +1,6 @@
 use bedrock_sso_proxy::storage::factory::{CacheBackend, DatabaseBackend, StorageFactory};
 use bedrock_sso_proxy::storage::{
-AuditLogEntry, CachedValidation, RateLimitData, RefreshTokenData, StateData, UserRecord,
+    AuditLogEntry, CachedValidation, RateLimitData, RefreshTokenData, StateData, UserRecord,
 };
 use chrono::Utc;
 use std::collections::HashMap;

@@ -5,61 +5,73 @@ use axum::{
     middleware::Next,
     response::{IntoResponse, Response},
 };
-use metrics::{counter, histogram, gauge};
+use metrics::{counter, gauge, histogram};
 use metrics_exporter_prometheus::{PrometheusBuilder, PrometheusHandle};
 use std::time::Instant;
 use tracing::info;
 
 /// Initialize Prometheus metrics exporter
-pub fn init_metrics() -> Result<PrometheusHandle, Box<dyn std::error::Error + Send + Sync>> {
+pub fn init_metrics_with_port(
+    port: u16,
+) -> Result<PrometheusHandle, Box<dyn std::error::Error + Send + Sync>> {
     let builder = PrometheusBuilder::new()
-        .with_http_listener(([0, 0, 0, 0], 9090))
+        .with_http_listener(([0, 0, 0, 0], port))
         .add_global_label("service", "bedrock_sso_proxy");
 
     let handle = builder.install_recorder()?;
-    
-    info!("Metrics server started on :9090/metrics");
+
+    info!("Metrics server started on :{}{}", port, "/metrics");
     Ok(handle)
 }
 
+/// Initialize Prometheus metrics exporter with default port
+pub fn init_metrics() -> Result<PrometheusHandle, Box<dyn std::error::Error + Send + Sync>> {
+    init_metrics_with_port(9090)
+}
+
 /// Middleware to collect HTTP request metrics
-pub async fn metrics_middleware(
-    req: Request<Body>,
-    next: Next,
-) -> Response {
+pub async fn metrics_middleware(req: Request<Body>, next: Next) -> Response {
     let start = Instant::now();
-    let method = req.method().clone();
+    let method = req.method().to_string();
     let path = req
         .extensions()
         .get::<MatchedPath>()
-        .map(|mp| mp.as_str())
-        .unwrap_or("unknown");
+        .map(|mp| mp.as_str().to_string())
+        .unwrap_or_else(|| "unknown".to_string());
 
     // Track active requests
-    let active_requests_key = format!("active_requests_total{{method=\"{}\",path=\"{}\"}}", method, path);
     gauge!("http_requests_active").increment(1.0);
 
     let response = next.run(req).await;
-    
+
     let duration = start.elapsed();
-    let status = response.status();
+    let status = response.status().to_string();
 
-    // Record metrics
-    let labels = [
-        ("method", method.as_str()),
-        ("path", path),
-        ("status", status.as_str()),
-    ];
+    // Record metrics with owned strings
+    counter!("http_requests_total",
+        "method" => method.clone(),
+        "path" => path.clone(),
+        "status" => status.clone()
+    )
+    .increment(1);
 
-    counter!("http_requests_total", &labels).increment(1);
-    histogram!("http_request_duration_seconds", &labels).record(duration.as_secs_f64());
-    
+    histogram!("http_request_duration_seconds",
+        "method" => method.clone(),
+        "path" => path.clone(),
+        "status" => status.clone()
+    )
+    .record(duration.as_secs_f64());
+
     // Track active requests
     gauge!("http_requests_active").decrement(1.0);
 
     // Track error rates
-    if status.is_server_error() {
-        counter!("http_errors_total", &labels[..2]).increment(1);
+    if response.status().is_server_error() {
+        counter!("http_errors_total",
+            "method" => method,
+            "path" => path
+        )
+        .increment(1);
     }
 
     response
@@ -74,45 +86,55 @@ pub fn track_jwt_validation(success: bool, source: String) {
 /// Track OAuth operations
 pub fn track_oauth_operation(operation: String, provider: String, success: bool) {
     let result = if success { "success" } else { "failure" };
-    counter!("oauth_operations_total", 
-        "operation" => operation, 
-        "provider" => provider, 
+    counter!("oauth_operations_total",
+        "operation" => operation,
+        "provider" => provider,
         "result" => result
-    ).increment(1);
+    )
+    .increment(1);
 }
 
 /// Track AWS Bedrock API calls
-pub fn track_bedrock_call(model_id: String, endpoint: String, status: StatusCode, duration: std::time::Duration) {
+pub fn track_bedrock_call(
+    model_id: String,
+    endpoint: String,
+    status: StatusCode,
+    duration: std::time::Duration,
+) {
     let status_str = status.as_str().to_string();
-    
-    counter!("bedrock_requests_total", 
-        "model" => model_id.clone(), 
-        "endpoint" => endpoint.clone(), 
+
+    counter!("bedrock_requests_total",
+        "model" => model_id.clone(),
+        "endpoint" => endpoint.clone(),
         "status" => status_str.clone()
-    ).increment(1);
-    
-    histogram!("bedrock_request_duration_seconds", 
-        "model" => model_id.clone(), 
-        "endpoint" => endpoint.clone(), 
+    )
+    .increment(1);
+
+    histogram!("bedrock_request_duration_seconds",
+        "model" => model_id.clone(),
+        "endpoint" => endpoint.clone(),
         "status" => status_str
-    ).record(duration.as_secs_f64());
-    
+    )
+    .record(duration.as_secs_f64());
+
     if status.is_server_error() {
-        counter!("bedrock_errors_total", 
-            "model" => model_id, 
+        counter!("bedrock_errors_total",
+            "model" => model_id,
             "endpoint" => endpoint
-        ).increment(1);
+        )
+        .increment(1);
     }
 }
 
 /// Track cache operations
 pub fn track_cache_operation(operation: String, cache_type: String, hit: bool) {
     let result = if hit { "hit" } else { "miss" };
-    counter!("cache_operations_total", 
-        "operation" => operation, 
-        "cache_type" => cache_type, 
+    counter!("cache_operations_total",
+        "operation" => operation,
+        "cache_type" => cache_type,
         "result" => result
-    ).increment(1);
+    )
+    .increment(1);
 }
 
 /// Update cache size metrics
@@ -132,7 +154,7 @@ pub async fn health_metrics() -> impl IntoResponse {
         std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap_or_default()
-            .as_secs() as f64
+            .as_secs() as f64,
     );
 
     // System metrics (basic implementation without external dependencies)
@@ -167,13 +189,13 @@ mod tests {
             "claude-3-sonnet".to_string(),
             "invoke".to_string(),
             StatusCode::OK,
-            Duration::from_millis(500)
+            Duration::from_millis(500),
         );
         track_bedrock_call(
             "claude-3-haiku".to_string(),
             "invoke-stream".to_string(),
             StatusCode::INTERNAL_SERVER_ERROR,
-            Duration::from_millis(1000)
+            Duration::from_millis(1000),
         );
         // No panics, metrics recorded
     }

@@ -3,8 +3,9 @@ use crate::{
     config::{Config, OAuthProvider},
     error::AppError,
     health::{HealthCheckResult, HealthChecker},
-    storage::{Storage, CachedValidation, StateData},
+    storage::{CachedValidation, StateData, Storage},
 };
+use chrono::{Duration as ChronoDuration, Utc};
 use oauth2::{
     AuthUrl, AuthorizationCode, ClientId, ClientSecret, CsrfToken, RedirectUrl, Scope,
     TokenResponse as OAuth2TokenResponse, TokenUrl, basic::BasicClient, reqwest::async_http_client,
@@ -13,7 +14,6 @@ use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use sha2::{Digest, Sha256};
-use chrono::{Duration as ChronoDuration, Utc};
 use std::{collections::HashMap, sync::Arc};
 use uuid::Uuid;
 
@@ -77,11 +77,7 @@ pub struct OAuthService {
 }
 
 impl OAuthService {
-    pub fn new(
-        config: Config,
-        jwt_service: JwtService,
-        storage: Arc<Storage>,
-    ) -> Self {
+    pub fn new(config: Config, jwt_service: JwtService, storage: Arc<Storage>) -> Self {
         Self {
             config,
             jwt_service,
@@ -133,7 +129,8 @@ impl OAuthService {
             Ok(response) => Ok(response),
             Err(e) => {
                 // Log authentication failure if storage is available
-                let storage = &self.storage; {
+                let storage = &self.storage;
+                {
                     let audit_entry = crate::storage::AuditLogEntry {
                         id: None,
                         user_id: None,
@@ -160,7 +157,10 @@ impl OAuthService {
 
                     // Store audit log (log errors but don't mask the original error)
                     if let Err(audit_err) = storage.database.store_audit_log(&audit_entry).await {
-                        tracing::warn!("Failed to store OAuth authorization failure audit log: {}", audit_err);
+                        tracing::warn!(
+                            "Failed to store OAuth authorization failure audit log: {}",
+                            audit_err
+                        );
                     }
                 }
                 Err(e)
@@ -233,7 +233,8 @@ impl OAuthService {
             .map(|s| s.to_string());
 
         // Store user information persistently if storage is available
-        let storage = &self.storage; {
+        let storage = &self.storage;
+        {
             let now = Utc::now();
             let user_record = crate::storage::UserRecord {
                 id: None,
@@ -290,7 +291,10 @@ impl OAuthService {
 
             // Store audit log (log errors but don't block authentication)
             if let Err(audit_err) = storage.database.store_audit_log(&audit_entry).await {
-                tracing::warn!("Failed to store OAuth token exchange success audit log: {}", audit_err);
+                tracing::warn!(
+                    "Failed to store OAuth token exchange success audit log: {}",
+                    audit_err
+                );
             }
         }
 
@@ -323,7 +327,8 @@ impl OAuthService {
             Ok(response) => Ok(response),
             Err(e) => {
                 // Log refresh token failure if storage is available
-                let storage = &self.storage; {
+                let storage = &self.storage;
+                {
                     let audit_entry = crate::storage::AuditLogEntry {
                         id: None,
                         user_id: None,
@@ -339,7 +344,10 @@ impl OAuthService {
 
                     // Store audit log (log errors but don't mask the original error)
                     if let Err(audit_err) = storage.database.store_audit_log(&audit_entry).await {
-                        tracing::warn!("Failed to store OAuth token validation failure audit log: {}", audit_err);
+                        tracing::warn!(
+                            "Failed to store OAuth token validation failure audit log: {}",
+                            audit_err
+                        );
                     }
                 }
                 Err(e)
@@ -436,7 +444,10 @@ impl OAuthService {
 
             // Store audit log (log errors but don't block token refresh)
             if let Err(audit_err) = storage.database.store_audit_log(&audit_entry).await {
-                tracing::warn!("Failed to store OAuth token refresh success audit log: {}", audit_err);
+                tracing::warn!(
+                    "Failed to store OAuth token refresh success audit log: {}",
+                    audit_err
+                );
             }
 
             (token_data, new_token)
@@ -716,7 +727,11 @@ fn hash_token(token: &str) -> String {
 
 impl OAuthService {
     // State management methods
-    async fn create_state_internal(&self, provider: String, redirect_uri: String) -> Result<String, AppError> {
+    async fn create_state_internal(
+        &self,
+        provider: String,
+        redirect_uri: String,
+    ) -> Result<String, AppError> {
         let state = Uuid::new_v4().to_string();
         let now = Utc::now();
         let state_data = StateData {
@@ -726,21 +741,33 @@ impl OAuthService {
             expires_at: now + ChronoDuration::seconds(OAUTH_STATE_TTL_SECONDS),
         };
 
-        self.storage.cache.store_state(&state, &state_data, OAUTH_STATE_TTL_SECONDS as u64).await
+        self.storage
+            .cache
+            .store_state(&state, &state_data, OAUTH_STATE_TTL_SECONDS as u64)
+            .await
             .map_err(|e| AppError::Internal(format!("Failed to store state: {}", e)))?;
 
         Ok(state)
     }
 
     async fn get_state_data_internal(&self, state: &str) -> Result<Option<StateData>, AppError> {
-        self.storage.cache.get_state(state).await
+        self.storage
+            .cache
+            .get_state(state)
+            .await
             .map_err(|e| AppError::Internal(format!("Failed to get state: {}", e)))
     }
 
-    async fn get_and_remove_state_internal(&self, state: &str) -> Result<Option<StateData>, AppError> {
+    async fn get_and_remove_state_internal(
+        &self,
+        state: &str,
+    ) -> Result<Option<StateData>, AppError> {
         let state_data = self.get_state_data_internal(state).await?;
         if state_data.is_some() {
-            self.storage.cache.delete_state(state).await
+            self.storage
+                .cache
+                .delete_state(state)
+                .await
                 .map_err(|e| AppError::Internal(format!("Failed to delete state: {}", e)))?;
         }
         Ok(state_data)
@@ -749,13 +776,23 @@ impl OAuthService {
     // Refresh token methods - removed unused internal methods
 
     // Validation cache methods
-    async fn get_validation_internal(&self, token: &str) -> Result<Option<CachedValidation>, AppError> {
+    async fn get_validation_internal(
+        &self,
+        token: &str,
+    ) -> Result<Option<CachedValidation>, AppError> {
         let token_hash = hash_token(token);
-        self.storage.cache.get_validation(&token_hash).await
+        self.storage
+            .cache
+            .get_validation(&token_hash)
+            .await
             .map_err(|e| AppError::Internal(format!("Failed to get validation: {}", e)))
     }
 
-    async fn set_validation_internal(&self, token: &str, claims: &OAuthClaims) -> Result<(), AppError> {
+    async fn set_validation_internal(
+        &self,
+        token: &str,
+        claims: &OAuthClaims,
+    ) -> Result<(), AppError> {
         let token_hash = hash_token(token);
         let validation = CachedValidation {
             user_id: claims.sub.clone(),
@@ -766,7 +803,10 @@ impl OAuthService {
             scopes: vec!["bedrock:invoke".to_string()],
         };
 
-        self.storage.cache.store_validation(&token_hash, &validation, self.config.cache.validation_ttl).await
+        self.storage
+            .cache
+            .store_validation(&token_hash, &validation, self.config.cache.validation_ttl)
+            .await
             .map_err(|e| AppError::Internal(format!("Failed to store validation: {}", e)))
     }
 }
@@ -845,8 +885,9 @@ mod tests {
         let jwt_service = JwtService::new("test-secret".to_string(), Algorithm::HS256).unwrap();
         let oauth_service = OAuthService::new(config, jwt_service, storage);
 
-        let result =
-            oauth_service.get_authorization_url("google", "http://localhost:3000/callback").await;
+        let result = oauth_service
+            .get_authorization_url("google", "http://localhost:3000/callback")
+            .await;
         assert!(result.is_ok());
 
         let response = result.unwrap();
@@ -866,8 +907,9 @@ mod tests {
         let jwt_service = JwtService::new("test-secret".to_string(), Algorithm::HS256).unwrap();
         let oauth_service = OAuthService::new(config, jwt_service, storage);
 
-        let result =
-            oauth_service.get_authorization_url("unknown", "http://localhost:3000/callback").await;
+        let result = oauth_service
+            .get_authorization_url("unknown", "http://localhost:3000/callback")
+            .await;
         assert!(result.is_err());
     }
 
