@@ -41,6 +41,8 @@ aws:
 logging:
   # Log level: trace, debug, info, warn, error
   level: "info"
+  # Enable request/response logging (logs each API request and its response)
+  log_request: true
 
 # Environment Variable Overrides:
 # You can override any configuration value using environment variables

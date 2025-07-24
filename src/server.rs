@@ -184,8 +184,8 @@ impl Server {
 
         // Add request logging middleware if enabled
         if self.config.logging.log_request {
-            // Simple request logging middleware that only logs method, path, IP, and user
-            async fn simple_request_logger(
+            // Enhanced request/response logging middleware
+            async fn request_response_logger(
                 req: Request<Body>,
                 next: Next,
             ) -> Response {
@@ -214,15 +214,35 @@ impl Server {
                         .map(|claims| claims.subject().to_string())
                         .unwrap_or_else(|| "anonymous".to_string());
 
-                    // Log with simple format - only for API routes
+                    // Log request with simple format - only for API routes
                     info!("Request: {} {} ip={} user={}", method, path, ip, user);
+                    
+                    // Track request start time for latency calculation
+                    let start = std::time::Instant::now();
+                    
+                    // Continue with the request
+                    let response = next.run(req).await;
+                    
+                    // Calculate request duration
+                    let duration = start.elapsed();
+                    
+                    // Log response
+                    info!(
+                        "Response: {} {} status={} latency={}ms",
+                        method,
+                        path,
+                        response.status().as_u16(),
+                        duration.as_millis()
+                    );
+                    
+                    response
+                } else {
+                    // Skip logging for non-API routes
+                    next.run(req).await
                 }
-
-                // Continue with the request
-                next.run(req).await
             }
 
-            app = app.layer(middleware::from_fn(simple_request_logger));
+            app = app.layer(middleware::from_fn(request_response_logger));
         }
 
         app
@@ -279,8 +299,8 @@ impl Server {
 
         // Add request logging middleware if enabled
         let app = if self.config.logging.log_request {
-            // Simple request logging middleware that only logs method, path, IP, and user
-            async fn simple_request_logger(
+            // Enhanced request/response logging middleware
+            async fn request_response_logger(
                 req: Request<Body>,
                 next: Next,
             ) -> Response {
@@ -309,15 +329,35 @@ impl Server {
                         .map(|claims| claims.subject().to_string())
                         .unwrap_or_else(|| "anonymous".to_string());
 
-                    // Log with simple format - only for API routes
+                    // Log request with simple format - only for API routes
                     trace!("Request: {} {} ip={} user={}", method, path, ip, user);
+                    
+                    // Track request start time for latency calculation
+                    let start = std::time::Instant::now();
+                    
+                    // Continue with the request
+                    let response = next.run(req).await;
+                    
+                    // Calculate request duration
+                    let duration = start.elapsed();
+                    
+                    // Log response
+                    trace!(
+                        "Response: {} {} status={} latency={}ms",
+                        method,
+                        path,
+                        response.status().as_u16(),
+                        duration.as_millis()
+                    );
+                    
+                    response
+                } else {
+                    // Skip logging for non-API routes
+                    next.run(req).await
                 }
-
-                // Continue with the request
-                next.run(req).await
             }
 
-            app.layer(middleware::from_fn(simple_request_logger))
+            app.layer(middleware::from_fn(request_response_logger))
         } else {
             app
         };
