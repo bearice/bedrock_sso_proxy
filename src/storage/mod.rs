@@ -8,7 +8,6 @@ use crate::health::{HealthCheckResult, HealthChecker};
 
 pub mod database;
 pub mod factory;
-pub mod integration_tests;
 pub mod memory;
 pub mod redis;
 
