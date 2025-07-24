@@ -10,8 +10,8 @@ use crate::{
     health::HealthService,
     metrics,
     routes::{
-        create_anthropic_routes, create_auth_routes, create_bedrock_routes, create_frontend_router,
-        create_protected_bedrock_routes,
+        create_anthropic_routes, create_auth_routes, create_frontend_router,
+        create_health_routes, create_protected_bedrock_routes,
     },
     shutdown::{HttpServerShutdown, ShutdownCoordinator, ShutdownManager, StorageShutdown},
     storage::{StorageHealthChecker, factory::StorageFactory},
@@ -171,8 +171,8 @@ impl Server {
         let mut app = Router::new()
             // OAuth authentication routes (no auth required)
             .nest("/auth", create_auth_routes().with_state(oauth_service))
-            // Health check (no auth required)
-            .merge(create_bedrock_routes().with_state((aws_http_client.clone(), health_service)))
+            // Health check routes (no auth required)
+            .merge(create_health_routes().with_state(health_service))
             // Protected Bedrock API routes
             .merge(
                 create_protected_bedrock_routes()

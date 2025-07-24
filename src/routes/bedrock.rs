@@ -1,26 +1,13 @@
-use crate::{aws_http::AwsHttpClient, error::AppError, health::HealthService};
+use crate::{aws_http::AwsHttpClient, error::AppError};
 use axum::{
     Router,
     body::{Body, Bytes},
-    extract::{Path, Query, State},
+    extract::{Path, State},
     http::{HeaderMap, StatusCode},
-    response::{Json, Response},
-    routing::{get, post},
+    response::Response,
+    routing::post,
 };
 use futures_util::StreamExt;
-use serde::Deserialize;
-use serde_json::Value;
-use std::sync::Arc;
-
-#[derive(Debug, Deserialize)]
-struct HealthCheckQuery {
-    #[serde(default)]
-    check: Option<String>,
-}
-
-pub fn create_bedrock_routes() -> Router<(AwsHttpClient, Arc<HealthService>)> {
-    Router::new().route("/health", get(health_check))
-}
 
 pub fn create_protected_bedrock_routes() -> Router<AwsHttpClient> {
     Router::new()
@@ -31,20 +18,6 @@ pub fn create_protected_bedrock_routes() -> Router<AwsHttpClient> {
         )
 }
 
-async fn health_check(
-    State((_, health_service)): State<(AwsHttpClient, Arc<HealthService>)>,
-    Query(params): Query<HealthCheckQuery>,
-) -> Result<Json<Value>, AppError> {
-    // Use the centralized health service
-    let filter = params.check.as_deref();
-    let health_response = health_service.check_health(filter).await;
-
-    // Convert the health response to the expected JSON format
-    let response_json = serde_json::to_value(&health_response)
-        .map_err(|e| AppError::Internal(format!("Failed to serialize health response: {}", e)))?;
-
-    Ok(Json(response_json))
-}
 
 async fn invoke_model(
     Path(model_id): Path<String>,
@@ -181,59 +154,6 @@ mod tests {
     };
     use tower::ServiceExt;
 
-    async fn create_test_health_service() -> Arc<HealthService> {
-        let health_service = Arc::new(HealthService::new());
-        let aws_client = AwsHttpClient::new_test();
-        health_service
-            .register(Arc::new(aws_client.health_checker()))
-            .await;
-        health_service
-    }
-
-    #[tokio::test]
-    async fn test_health_check_basic() {
-        let aws_http_client = AwsHttpClient::new_test();
-        let health_service = create_test_health_service().await;
-        let app = create_bedrock_routes().with_state((aws_http_client, health_service));
-
-        let request = Request::builder()
-            .uri("/health")
-            .body(Body::empty())
-            .unwrap();
-
-        let response = app.oneshot(request).await.unwrap();
-        assert_eq!(response.status(), StatusCode::OK);
-    }
-
-    #[tokio::test]
-    async fn test_health_check_with_aws_query() {
-        let aws_http_client = AwsHttpClient::new_test();
-        let health_service = create_test_health_service().await;
-        let app = create_bedrock_routes().with_state((aws_http_client, health_service));
-
-        let request = Request::builder()
-            .uri("/health?check=aws_bedrock")
-            .body(Body::empty())
-            .unwrap();
-
-        let response = app.oneshot(request).await.unwrap();
-        assert_eq!(response.status(), StatusCode::OK);
-    }
-
-    #[tokio::test]
-    async fn test_health_check_with_unknown_query() {
-        let aws_http_client = AwsHttpClient::new_test();
-        let health_service = create_test_health_service().await;
-        let app = create_bedrock_routes().with_state((aws_http_client, health_service));
-
-        let request = Request::builder()
-            .uri("/health?check=unknown")
-            .body(Body::empty())
-            .unwrap();
-
-        let response = app.oneshot(request).await.unwrap();
-        assert_eq!(response.status(), StatusCode::OK);
-    }
 
     #[tokio::test]
     async fn test_invoke_model_empty_model_id() {
