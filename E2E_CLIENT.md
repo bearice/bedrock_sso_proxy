@@ -86,8 +86,8 @@ In interactive mode:
 ## Features
 
 - **JWT Authentication**: Automatically generates JWT tokens using the secret from config.yaml
-- **Standard API**: Tests the `/model/{model_id}/invoke` endpoint
-- **Streaming API**: Tests the `/model/{model_id}/invoke-with-response-stream` endpoint
+- **Standard API**: Tests the `/bedrock/model/{model_id}/invoke` endpoint
+- **Streaming API**: Tests the `/bedrock/model/{model_id}/invoke-with-response-stream` endpoint
 - **Health Checks**: Tests the `/health` endpoint
 - **Interactive Chat**: Continuous conversation with models
 - **Error Handling**: Displays detailed error messages and status codes

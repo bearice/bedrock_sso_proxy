@@ -282,7 +282,7 @@ impl E2EClient {
         model: &str,
         message: &str,
     ) -> Result<(), Box<dyn std::error::Error>> {
-        let url = format!("{}/model/{}/invoke", self.server_url, model);
+        let url = format!("{}/bedrock/model/{}/invoke", self.server_url, model);
         let payload = Self::create_bedrock_payload(message);
 
         let response = self
@@ -361,7 +361,7 @@ impl E2EClient {
         message: &str,
     ) -> Result<(), Box<dyn std::error::Error>> {
         let url = format!(
-            "{}/model/{}/invoke-with-response-stream",
+            "{}/bedrock/model/{}/invoke-with-response-stream",
             self.server_url, model
         );
         let payload = Self::create_bedrock_payload(message);

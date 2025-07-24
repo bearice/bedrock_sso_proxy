@@ -153,8 +153,8 @@ frontend/
 - `POST /auth/refresh` - Refresh JWT token
 
 ### Bedrock Proxy
-- `POST /model/{model_id}/invoke` - Standard model invocation
-- `POST /model/{model_id}/invoke-with-response-stream` - Streaming responses
+- `POST /bedrock/model/{model_id}/invoke` - Standard model invocation
+- `POST /bedrock/model/{model_id}/invoke-with-response-stream` - Streaming responses
 
 ### Utilities
 - `GET /health` - Health check

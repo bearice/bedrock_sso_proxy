@@ -110,10 +110,10 @@ npm run type-check            # TypeScript type checking
 ### E2E Testing
 ```bash
 # Build and run the test client
-cargo build --bin bedrock_e2e_client
-cargo run --bin bedrock_e2e_client -- health         # Health check
-cargo run --bin bedrock_e2e_client -- chat           # Interactive chat
-cargo run --bin bedrock_e2e_client -- message --text "Hello" # Single message
+cargo build --bin e2e
+cargo run --bin e2e -- health         # Health check
+cargo run --bin e2e -- chat           # Interactive chat
+cargo run --bin e2e -- message --text "Hello" # Single message
 ```
 
 ### Testing
