@@ -16,10 +16,10 @@ use crate::{
     shutdown::{HttpServerShutdown, ShutdownCoordinator, ShutdownManager, StorageShutdown},
     storage::{StorageHealthChecker, factory::StorageFactory},
 };
-use axum::{Router, extract::DefaultBodyLimit, middleware};
+use axum::{Router, extract::DefaultBodyLimit, middleware, body::Body, http::Request, middleware::Next, response::Response};
 use std::{net::SocketAddr, sync::Arc, time::Duration};
 use tokio::net::TcpListener;
-use tracing::{error, info};
+use tracing::{error, info, trace};
 
 /// Maximum request body size (10MB) to prevent DoS attacks
 const MAX_BODY_SIZE: usize = 10 * 1024 * 1024;
@@ -127,7 +127,11 @@ impl Server {
 
         // Run server with graceful shutdown
         let shutdown_rx = shutdown_coordinator.subscribe();
-        let serve_future = axum::serve(listener, app).with_graceful_shutdown(async move {
+        let serve_future = axum::serve(
+            listener,
+            // Use socket addresses in the app
+            app.into_make_service_with_connect_info::<SocketAddr>()
+        ).with_graceful_shutdown(async move {
             let mut rx = shutdown_rx;
             let _ = rx.changed().await;
             info!("Graceful shutdown initiated");
@@ -178,6 +182,49 @@ impl Server {
             app = app.layer(middleware::from_fn(metrics::metrics_middleware));
         }
 
+        // Add request logging middleware if enabled
+        if self.config.logging.log_request {
+            // Simple request logging middleware that only logs method, path, IP, and user
+            async fn simple_request_logger(
+                req: Request<Body>,
+                next: Next,
+            ) -> Response {
+                // Get method and path
+                let method = req.method().to_string();
+                let path = req.uri().path().to_string();
+
+                // Skip logging for static files and frontend routes
+                // Only log API routes that start with /model, /auth, or /health
+                let is_api_route = path.starts_with("/model") ||
+                                   path.starts_with("/auth") ||
+                                   path.starts_with("/health");
+
+                if is_api_route {
+                    // Get IP from extensions if available (from ConnectInfo)
+                    let ip = req
+                        .extensions()
+                        .get::<axum::extract::ConnectInfo<SocketAddr>>()
+                        .map(|connect_info| connect_info.0.ip().to_string())
+                        .unwrap_or_else(|| "unknown".to_string());
+
+                    // Get user from JWT claims if available
+                    let user = req
+                        .extensions()
+                        .get::<crate::auth::jwt::ValidatedClaims>()
+                        .map(|claims| claims.subject().to_string())
+                        .unwrap_or_else(|| "anonymous".to_string());
+
+                    // Log with simple format - only for API routes
+                    info!("Request: {} {} ip={} user={}", method, path, ip, user);
+                }
+
+                // Continue with the request
+                next.run(req).await
+            }
+
+            app = app.layer(middleware::from_fn(simple_request_logger));
+        }
+
         app
     }
 
@@ -216,7 +263,7 @@ impl Server {
             .register(Arc::new(jwt_service.health_checker()))
             .await;
 
-        Ok(Router::new()
+        let app = Router::new()
             .nest("/auth", create_auth_routes().with_state(oauth_service))
             .merge(create_bedrock_routes().with_state((aws_http_client.clone(), health_service)))
             .merge(
@@ -228,7 +275,55 @@ impl Server {
                         jwt_auth_middleware,
                     )),
             )
-            .fallback_service(create_frontend_router(self.config.frontend.clone())))
+            .fallback_service(create_frontend_router(self.config.frontend.clone()));
+
+        // Add request logging middleware if enabled
+        let app = if self.config.logging.log_request {
+            // Simple request logging middleware that only logs method, path, IP, and user
+            async fn simple_request_logger(
+                req: Request<Body>,
+                next: Next,
+            ) -> Response {
+                // Get method and path
+                let method = req.method().to_string();
+                let path = req.uri().path().to_string();
+
+                // Skip logging for static files and frontend routes
+                // Only log API routes that start with /model, /auth, or /health
+                let is_api_route = path.starts_with("/model") ||
+                                   path.starts_with("/auth") ||
+                                   path.starts_with("/health");
+
+                if is_api_route {
+                    // Get IP from extensions if available (from ConnectInfo)
+                    let ip = req
+                        .extensions()
+                        .get::<axum::extract::ConnectInfo<SocketAddr>>()
+                        .map(|connect_info| connect_info.0.ip().to_string())
+                        .unwrap_or_else(|| "unknown".to_string());
+
+                    // Get user from JWT claims if available
+                    let user = req
+                        .extensions()
+                        .get::<crate::auth::jwt::ValidatedClaims>()
+                        .map(|claims| claims.subject().to_string())
+                        .unwrap_or_else(|| "anonymous".to_string());
+
+                    // Log with simple format - only for API routes
+                    trace!("Request: {} {} ip={} user={}", method, path, ip, user);
+                }
+
+                // Continue with the request
+                next.run(req).await
+            }
+
+            app.layer(middleware::from_fn(simple_request_logger))
+        } else {
+            app
+        };
+
+        // For tests, just return the router
+        Ok(app)
     }
 }
 

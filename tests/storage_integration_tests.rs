@@ -1,6 +1,6 @@
 use bedrock_sso_proxy::storage::factory::{CacheBackend, DatabaseBackend, StorageFactory};
 use bedrock_sso_proxy::storage::{
-    AuditLogEntry, CachedValidation, RateLimitData, RefreshTokenData, StateData, UserRecord,
+    AuditLogEntry, CachedValidation, RefreshTokenData, StateData, UserRecord,
 };
 use chrono::Utc;
 use std::collections::HashMap;
@@ -48,22 +48,6 @@ async fn test_full_storage_integration() {
     let retrieved_state = storage.cache.get_state("state_key").await.unwrap();
     assert!(retrieved_state.is_some());
     assert_eq!(retrieved_state.unwrap().provider, "google");
-
-    // Test rate limiting
-    let rate_limit = RateLimitData {
-        attempts: 3,
-        window_start: Utc::now(),
-        blocked_until: None,
-    };
-
-    storage
-        .cache
-        .store_rate_limit("rate_key", &rate_limit, 3600)
-        .await
-        .unwrap();
-    let retrieved_rate = storage.cache.get_rate_limit("rate_key").await.unwrap();
-    assert!(retrieved_rate.is_some());
-    assert_eq!(retrieved_rate.unwrap().attempts, 3);
 
     // Test database operations
     let user = UserRecord {

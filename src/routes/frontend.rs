@@ -8,7 +8,7 @@ use axum::{
 use rust_embed::RustEmbed;
 use std::path::PathBuf;
 use tokio::fs;
-use tracing::{debug, warn};
+use tracing::{debug, trace, warn};
 
 // Production assets
 #[cfg(not(test))]
@@ -53,11 +53,11 @@ async fn serve_static_file(
 
     if let Some(frontend_path) = config.path {
         // Serve from filesystem directory
-        debug!("Serving from filesystem: {}", frontend_path);
+        trace!("Serving from filesystem: {}", frontend_path);
         serve_from_filesystem(&path, &frontend_path).await
     } else {
         // Serve from embedded assets
-        debug!("Serving from embedded assets");
+        trace!("Serving from embedded assets");
         serve_from_embedded(&path).await
     }
 }
@@ -68,7 +68,7 @@ async fn serve_from_filesystem(path: &str, frontend_path: &str) -> Response {
 
     match fs::read(&file_path).await {
         Ok(content) => {
-            debug!("Serving from filesystem: {}/{}", frontend_path, path);
+            trace!("Serving from filesystem: {}/{}", frontend_path, path);
             serve_file_content(path, content)
         }
         Err(_) => {
@@ -77,7 +77,7 @@ async fn serve_from_filesystem(path: &str, frontend_path: &str) -> Response {
                 let index_path = PathBuf::from(frontend_path).join("index.html");
                 match fs::read(&index_path).await {
                     Ok(content) => {
-                        debug!(
+                        trace!(
                             "Serving SPA fallback from filesystem: {}/index.html",
                             frontend_path
                         );
@@ -95,13 +95,13 @@ async fn serve_from_filesystem(path: &str, frontend_path: &str) -> Response {
 /// Serve files from embedded assets
 async fn serve_from_embedded(path: &str) -> Response {
     if let Some(embedded_file) = Assets::get(path) {
-        debug!("Serving from embedded assets: {}", path);
+        trace!("Serving from embedded assets: {}", path);
         serve_file_content(path, embedded_file.data.into_owned())
     } else {
         // File not found - try index.html for SPA routing
         if !path.contains('.') {
             if let Some(index_file) = Assets::get("index.html") {
-                debug!("Serving SPA fallback from embedded: index.html");
+                trace!("Serving SPA fallback from embedded: index.html");
                 Html(String::from_utf8_lossy(&index_file.data).to_string()).into_response()
             } else {
                 (

@@ -166,7 +166,6 @@ pub async fn health_metrics() -> impl IntoResponse {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use axum::{body::Body, http::Method};
     use std::time::Duration;
 
     #[test]

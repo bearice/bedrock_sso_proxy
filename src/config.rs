@@ -65,18 +65,25 @@ pub struct AwsConfig {
 pub struct LoggingConfig {
     #[serde(default = "default_log_level")]
     pub level: String,
+    #[serde(default = "default_log_request")]
+    pub log_request: bool,
 }
 
 impl Default for LoggingConfig {
     fn default() -> Self {
         Self {
             level: default_log_level(),
+            log_request: default_log_request(),
         }
     }
 }
 
 fn default_log_level() -> String {
     "info".to_string()
+}
+
+fn default_log_request() -> bool {
+    true
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -799,6 +806,32 @@ logging:
 
         assert_eq!(config.jwt.secret, "test-secret");
         assert_eq!(config.jwt.algorithm, "RS256");
+    }
+    
+    #[test]
+    fn test_logging_config_default_extended() {
+        let logging_config = LoggingConfig::default();
+        assert_eq!(logging_config.level, "info");
+        assert_eq!(logging_config.log_request, true);
+    }
+    
+    #[test]
+    #[serial]
+    fn test_config_with_custom_logging() {
+        let _guard = EnvGuard::new();
+
+        let yaml_content = r#"
+logging:
+  level: "debug"
+  log_request: false
+"#;
+        let mut temp_file = NamedTempFile::with_suffix(".yaml").unwrap();
+        temp_file.write_all(yaml_content.as_bytes()).unwrap();
+
+        let config = Config::load_from_file(temp_file.path()).unwrap();
+
+        assert_eq!(config.logging.level, "debug");
+        assert_eq!(config.logging.log_request, false);
     }
 
     #[test]
