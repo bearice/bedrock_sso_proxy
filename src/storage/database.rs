@@ -4,6 +4,7 @@ use super::{
 use async_trait::async_trait;
 use chrono::Utc;
 use sqlx::{Pool, Postgres, Row, Sqlite, migrate::MigrateDatabase};
+use std::collections::HashSet;
 #[cfg(test)]
 use std::collections::HashMap;
 
@@ -35,91 +36,71 @@ impl PostgresStorage {
 #[async_trait]
 impl DatabaseStorage for PostgresStorage {
     async fn migrate(&self) -> StorageResult<()> {
-        // Users table
-        sqlx::query(
-            r#"
-            CREATE TABLE IF NOT EXISTS users (
-                id SERIAL PRIMARY KEY,
-                provider_user_id VARCHAR(255) NOT NULL,
-                provider VARCHAR(100) NOT NULL,
-                email VARCHAR(255) NOT NULL,
-                display_name VARCHAR(255),
-                created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
-                updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
-                last_login TIMESTAMPTZ,
-                UNIQUE(provider, provider_user_id)
+        use crate::storage::migrations::{
+            get_migration_sql, get_pending_migrations,
+            calculate_migration_checksum, DatabaseType
+        };
+        use std::time::Instant;
+        
+        // First, ensure migration tracking table exists
+        let tracking_sql = get_migration_sql(DatabaseType::Postgres, "000_migration_tracking.sql")?;
+        let tracking_statements = crate::storage::migrations::parse_sql_statements(&tracking_sql);
+        for statement in tracking_statements {
+            sqlx::query(&statement)
+                .execute(&self.pool)
+                .await
+                .map_err(|e| StorageError::Database(format!("Failed to create migration tracking table: {}", e)))?;
+        }
+        
+        // Get list of already executed migrations
+        let executed_rows = sqlx::query("SELECT migration_name FROM migration_tracking ORDER BY executed_at")
+            .fetch_all(&self.pool)
+            .await
+            .map_err(|e| StorageError::Database(format!("Failed to get executed migrations: {}", e)))?;
+        
+        let executed_migrations: HashSet<String> = executed_rows
+            .iter()
+            .map(|row| row.get::<String, _>("migration_name"))
+            .collect();
+        
+        // Get pending migrations
+        let pending_migrations = get_pending_migrations(DatabaseType::Postgres, &executed_migrations);
+        
+        // Execute pending migrations
+        for migration_name in pending_migrations {
+            let start_time = Instant::now();
+            let sql = get_migration_sql(DatabaseType::Postgres, &migration_name)?;
+            let checksum = calculate_migration_checksum(&sql);
+            
+            // Parse and execute migration statements
+            let statements = crate::storage::migrations::parse_sql_statements(&sql);
+            for statement in &statements {
+                sqlx::query(statement)
+                    .execute(&self.pool)
+                    .await
+                    .map_err(|e| StorageError::Database(format!("Failed to execute migration '{}' statement '{}': {}", migration_name, statement, e)))?;
+            }
+            
+            let execution_time = start_time.elapsed().as_millis() as i32;
+            
+            // Record migration as executed
+            sqlx::query(
+                "INSERT INTO migration_tracking (migration_name, checksum, execution_time_ms) VALUES ($1, $2, $3)"
             )
-            "#,
-        )
-        .execute(&self.pool)
-        .await
-        .map_err(|e| StorageError::Database(format!("Failed to create users table: {}", e)))?;
-
-        // Refresh tokens table
-        sqlx::query(
-            r#"
-            CREATE TABLE IF NOT EXISTS refresh_tokens (
-                id SERIAL PRIMARY KEY,
-                token_hash VARCHAR(64) NOT NULL UNIQUE,
-                user_id INTEGER NOT NULL,
-                provider VARCHAR(100) NOT NULL,
-                email VARCHAR(255) NOT NULL,
-                created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
-                expires_at TIMESTAMPTZ NOT NULL,
-                rotation_count INTEGER DEFAULT 0,
-                revoked_at TIMESTAMPTZ
-            )
-            "#,
-        )
-        .execute(&self.pool)
-        .await
-        .map_err(|e| {
-            StorageError::Database(format!("Failed to create refresh_tokens table: {}", e))
-        })?;
-
-        // Audit logs table
-        sqlx::query(
-            r#"
-            CREATE TABLE IF NOT EXISTS audit_logs (
-                id SERIAL PRIMARY KEY,
-                user_id INTEGER,
-                event_type VARCHAR(50) NOT NULL,
-                provider VARCHAR(100),
-                ip_address TEXT,
-                user_agent TEXT,
-                success BOOLEAN NOT NULL,
-                error_message TEXT,
-                created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
-                metadata JSONB
-            )
-            "#,
-        )
-        .execute(&self.pool)
-        .await
-        .map_err(|e| StorageError::Database(format!("Failed to create audit_logs table: {}", e)))?;
-
-        // Create indexes
-        sqlx::query("CREATE INDEX IF NOT EXISTS idx_users_email ON users(email)")
+            .bind(&migration_name)
+            .bind(&checksum)
+            .bind(execution_time)
             .execute(&self.pool)
             .await
-            .map_err(|e| StorageError::Database(format!("Failed to create index: {}", e)))?;
-
-        sqlx::query("CREATE INDEX IF NOT EXISTS idx_refresh_tokens_expires_at ON refresh_tokens(expires_at)")
-            .execute(&self.pool)
-            .await
-            .map_err(|e| StorageError::Database(format!("Failed to create index: {}", e)))?;
-
-        sqlx::query("CREATE INDEX IF NOT EXISTS idx_audit_logs_user_id ON audit_logs(user_id)")
-            .execute(&self.pool)
-            .await
-            .map_err(|e| StorageError::Database(format!("Failed to create index: {}", e)))?;
-
-        sqlx::query(
-            "CREATE INDEX IF NOT EXISTS idx_audit_logs_created_at ON audit_logs(created_at)",
-        )
-        .execute(&self.pool)
-        .await
-        .map_err(|e| StorageError::Database(format!("Failed to create index: {}", e)))?;
+            .map_err(|e| StorageError::Database(format!("Failed to record migration '{}': {}", migration_name, e)))?;
+            
+            tracing::info!(
+                "Executed migration '{}' in {}ms with {} statements",
+                migration_name,
+                execution_time,
+                statements.len()
+            );
+        }
 
         Ok(())
     }
@@ -411,84 +392,71 @@ impl SqliteStorage {
 #[async_trait]
 impl DatabaseStorage for SqliteStorage {
     async fn migrate(&self) -> StorageResult<()> {
-        // Users table
-        sqlx::query(
-            r#"
-            CREATE TABLE IF NOT EXISTS users (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                provider_user_id TEXT NOT NULL,
-                provider TEXT NOT NULL,
-                email TEXT NOT NULL,
-                display_name TEXT,
-                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-                updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-                last_login DATETIME,
-                UNIQUE(provider, provider_user_id)
+        use crate::storage::migrations::{
+            get_migration_sql, get_pending_migrations,
+            calculate_migration_checksum, DatabaseType
+        };
+        use std::time::Instant;
+        
+        // First, ensure migration tracking table exists
+        let tracking_sql = get_migration_sql(DatabaseType::Sqlite, "000_migration_tracking.sql")?;
+        let tracking_statements = crate::storage::migrations::parse_sql_statements(&tracking_sql);
+        for statement in tracking_statements {
+            sqlx::query(&statement)
+                .execute(&self.pool)
+                .await
+                .map_err(|e| StorageError::Database(format!("Failed to create migration tracking table: {}", e)))?;
+        }
+        
+        // Get list of already executed migrations
+        let executed_rows = sqlx::query("SELECT migration_name FROM migration_tracking ORDER BY executed_at")
+            .fetch_all(&self.pool)
+            .await
+            .map_err(|e| StorageError::Database(format!("Failed to get executed migrations: {}", e)))?;
+        
+        let executed_migrations: HashSet<String> = executed_rows
+            .iter()
+            .map(|row| row.get::<String, _>("migration_name"))
+            .collect();
+        
+        // Get pending migrations
+        let pending_migrations = get_pending_migrations(DatabaseType::Sqlite, &executed_migrations);
+        
+        // Execute pending migrations
+        for migration_name in pending_migrations {
+            let start_time = Instant::now();
+            let sql = get_migration_sql(DatabaseType::Sqlite, &migration_name)?;
+            let checksum = calculate_migration_checksum(&sql);
+            
+            // Parse and execute migration statements
+            let statements = crate::storage::migrations::parse_sql_statements(&sql);
+            for statement in &statements {
+                sqlx::query(statement)
+                    .execute(&self.pool)
+                    .await
+                    .map_err(|e| StorageError::Database(format!("Failed to execute migration '{}' statement '{}': {}", migration_name, statement, e)))?;
+            }
+            
+            let execution_time = start_time.elapsed().as_millis() as i32;
+            
+            // Record migration as executed
+            sqlx::query(
+                "INSERT INTO migration_tracking (migration_name, checksum, execution_time_ms) VALUES (?1, ?2, ?3)"
             )
-            "#,
-        )
-        .execute(&self.pool)
-        .await
-        .map_err(|e| StorageError::Database(format!("Failed to create users table: {}", e)))?;
-
-        // Refresh tokens table
-        sqlx::query(
-            r#"
-            CREATE TABLE IF NOT EXISTS refresh_tokens (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                token_hash TEXT NOT NULL UNIQUE,
-                user_id TEXT NOT NULL,
-                provider TEXT NOT NULL,
-                email TEXT NOT NULL,
-                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-                expires_at DATETIME NOT NULL,
-                rotation_count INTEGER DEFAULT 0,
-                revoked_at DATETIME
-            )
-            "#,
-        )
-        .execute(&self.pool)
-        .await
-        .map_err(|e| {
-            StorageError::Database(format!("Failed to create refresh_tokens table: {}", e))
-        })?;
-
-        // Audit logs table
-        sqlx::query(
-            r#"
-            CREATE TABLE IF NOT EXISTS audit_logs (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                user_id INTEGER,
-                event_type TEXT NOT NULL,
-                provider TEXT,
-                ip_address TEXT,
-                user_agent TEXT,
-                success BOOLEAN NOT NULL,
-                error_message TEXT,
-                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-                metadata TEXT
-            )
-            "#,
-        )
-        .execute(&self.pool)
-        .await
-        .map_err(|e| StorageError::Database(format!("Failed to create audit_logs table: {}", e)))?;
-
-        // Create indexes
-        sqlx::query("CREATE INDEX IF NOT EXISTS idx_users_email ON users(email)")
+            .bind(&migration_name)
+            .bind(&checksum)
+            .bind(execution_time)
             .execute(&self.pool)
             .await
-            .map_err(|e| StorageError::Database(format!("Failed to create index: {}", e)))?;
-
-        sqlx::query("CREATE INDEX IF NOT EXISTS idx_refresh_tokens_expires_at ON refresh_tokens(expires_at)")
-            .execute(&self.pool)
-            .await
-            .map_err(|e| StorageError::Database(format!("Failed to create index: {}", e)))?;
-
-        sqlx::query("CREATE INDEX IF NOT EXISTS idx_audit_logs_user_id ON audit_logs(user_id)")
-            .execute(&self.pool)
-            .await
-            .map_err(|e| StorageError::Database(format!("Failed to create index: {}", e)))?;
+            .map_err(|e| StorageError::Database(format!("Failed to record migration '{}': {}", migration_name, e)))?;
+            
+            tracing::info!(
+                "Executed migration '{}' in {}ms with {} statements",
+                migration_name,
+                execution_time,
+                statements.len()
+            );
+        }
 
         Ok(())
     }
@@ -883,5 +851,47 @@ mod tests {
         // Test cleanup old audit logs
         let cleaned = db.cleanup_old_audit_logs(0).await.unwrap();
         assert!(cleaned > 0);
+    }
+
+    #[tokio::test]
+    async fn test_migration_tracking() {
+        let db = SqliteStorage::new("sqlite::memory:").await.unwrap();
+        
+        // Run migrations first time
+        db.migrate().await.unwrap();
+        
+        // Verify migration tracking table exists and has records
+        let migration_count = sqlx::query("SELECT COUNT(*) as count FROM migration_tracking")
+            .fetch_one(&db.pool)
+            .await
+            .unwrap();
+        
+        let count: i64 = migration_count.get("count");
+        assert!(count >= 2); // Should have at least 000_migration_tracking.sql and 001_initial_schema.sql
+        
+        // Verify specific migrations are recorded
+        let tracking_migration = sqlx::query(
+            "SELECT migration_name, checksum, execution_time_ms FROM migration_tracking WHERE migration_name = ?1"
+        )
+        .bind("000_migration_tracking.sql")
+        .fetch_one(&db.pool)
+        .await
+        .unwrap();
+        
+        assert_eq!(tracking_migration.get::<String, _>("migration_name"), "000_migration_tracking.sql");
+        assert!(tracking_migration.get::<String, _>("checksum").len() == 64); // SHA256 hex length
+        assert!(tracking_migration.get::<i32, _>("execution_time_ms") >= 0);
+        
+        // Run migrations again - should not re-run existing migrations
+        let initial_count = count;
+        db.migrate().await.unwrap();
+        
+        let migration_count_after = sqlx::query("SELECT COUNT(*) as count FROM migration_tracking")
+            .fetch_one(&db.pool)
+            .await
+            .unwrap();
+        
+        let count_after: i64 = migration_count_after.get("count");
+        assert_eq!(count_after, initial_count); // Should be same count, no re-runs
     }
 }
