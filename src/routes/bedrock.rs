@@ -12,6 +12,7 @@ use serde::Deserialize;
 use serde_json::Value;
 use std::sync::Arc;
 
+
 #[derive(Debug, Deserialize)]
 struct HealthCheckQuery {
     #[serde(default)]
@@ -104,6 +105,11 @@ async fn invoke_model_with_response_stream(
     body: Bytes,
 ) -> Result<Response, AppError> {
     tracing::info!("Handling streaming invoke request for model: {}", model_id);
+
+    // Validate model ID
+    if model_id.trim().is_empty() {
+        return Err(AppError::BadRequest("Model ID cannot be empty".to_string()));
+    }
 
     // Extract content type and accept headers
     let content_type = headers.get("content-type").and_then(|v| v.to_str().ok());
@@ -284,8 +290,8 @@ mod tests {
             .unwrap();
 
         let response = app.oneshot(request).await.unwrap();
-        // Should handle empty model ID in streaming endpoint
-        assert_eq!(response.status(), StatusCode::OK); // Mock response for test client
+        // Should return Bad Request for empty model ID in streaming endpoint
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
     }
 
     #[tokio::test]
@@ -340,4 +346,5 @@ mod tests {
                 || response.status() == StatusCode::FORBIDDEN
         );
     }
+
 }

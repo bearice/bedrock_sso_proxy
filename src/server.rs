@@ -15,10 +15,13 @@ use crate::{
     shutdown::{HttpServerShutdown, ShutdownCoordinator, ShutdownManager, StorageShutdown},
     storage::{StorageHealthChecker, factory::StorageFactory},
 };
-use axum::{Router, middleware};
+use axum::{Router, middleware, extract::DefaultBodyLimit};
 use std::{net::SocketAddr, sync::Arc, time::Duration};
 use tokio::net::TcpListener;
 use tracing::{error, info};
+
+/// Maximum request body size (10MB) to prevent DoS attacks
+const MAX_BODY_SIZE: usize = 10 * 1024 * 1024;
 
 pub struct Server {
     config: Config,
@@ -148,6 +151,7 @@ impl Server {
             .merge(
                 create_protected_bedrock_routes()
                     .with_state(aws_http_client)
+                    .layer(DefaultBodyLimit::max(MAX_BODY_SIZE))
                     .layer(middleware::from_fn_with_state(
                         auth_config,
                         jwt_auth_middleware,
@@ -198,6 +202,7 @@ impl Server {
             .merge(
                 create_protected_bedrock_routes()
                     .with_state(aws_http_client)
+                    .layer(DefaultBodyLimit::max(MAX_BODY_SIZE))
                     .layer(middleware::from_fn_with_state(
                         auth_config,
                         jwt_auth_middleware,
