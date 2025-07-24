@@ -106,8 +106,14 @@ impl Server {
             .register(Arc::new(StorageHealthChecker::new(storage_health_checker)))
             .await;
 
-        let app =
-            self.create_oauth_app(auth_config, aws_http_client, oauth_service, health_service);
+        let app = self.create_app(
+            auth_config,
+            aws_http_client,
+            oauth_service,
+            health_service,
+            self.config.metrics.enabled,
+            tracing::Level::INFO,
+        );
 
         let addr = SocketAddr::from(([0, 0, 0, 0], self.config.server.port));
         let listener = TcpListener::bind(addr)
@@ -152,12 +158,15 @@ impl Server {
         Ok(())
     }
 
-    fn create_oauth_app(
+    // Creates an application router with common routes and middleware
+    fn create_app(
         &self,
         auth_config: Arc<AuthConfig>,
         aws_http_client: AwsHttpClient,
         oauth_service: Arc<OAuthService>,
         health_service: Arc<HealthService>,
+        use_metrics: bool,
+        log_level: tracing::Level,
     ) -> Router {
         let mut app = Router::new()
             // OAuth authentication routes (no auth required)
@@ -178,16 +187,17 @@ impl Server {
             .fallback_service(create_frontend_router(self.config.frontend.clone()));
 
         // Add metrics middleware if enabled
-        if self.config.metrics.enabled {
+        if use_metrics {
             app = app.layer(middleware::from_fn(metrics::metrics_middleware));
         }
 
         // Add request logging middleware if enabled
         if self.config.logging.log_request {
             // Enhanced request/response logging middleware
-            async fn request_response_logger(
+            async fn request_response_logger_with_level(
                 req: Request<Body>,
                 next: Next,
+                log_level: tracing::Level,
             ) -> Response {
                 // Get method and path
                 let method = req.method().to_string();
@@ -215,7 +225,14 @@ impl Server {
                         .unwrap_or_else(|| "anonymous".to_string());
 
                     // Log request with simple format - only for API routes
-                    info!("Request: {} {} ip={} user={}", method, path, ip, user);
+                    match log_level {
+                        tracing::Level::TRACE => {
+                            trace!("Request: {} {} ip={} user={}", method, path, ip, user);
+                        }
+                        _ => {
+                            info!("Request: {} {} ip={} user={}", method, path, ip, user);
+                        }
+                    }
                     
                     // Track request start time for latency calculation
                     let start = std::time::Instant::now();
@@ -227,13 +244,26 @@ impl Server {
                     let duration = start.elapsed();
                     
                     // Log response
-                    info!(
-                        "Response: {} {} status={} latency={}ms",
-                        method,
-                        path,
-                        response.status().as_u16(),
-                        duration.as_millis()
-                    );
+                    match log_level {
+                        tracing::Level::TRACE => {
+                            trace!(
+                                "Response: {} {} status={} latency={}ms",
+                                method,
+                                path,
+                                response.status().as_u16(),
+                                duration.as_millis()
+                            );
+                        }
+                        _ => {
+                            info!(
+                                "Response: {} {} status={} latency={}ms",
+                                method,
+                                path,
+                                response.status().as_u16(),
+                                duration.as_millis()
+                            );
+                        }
+                    }
                     
                     response
                 } else {
@@ -242,14 +272,20 @@ impl Server {
                 }
             }
 
-            app = app.layer(middleware::from_fn(request_response_logger));
+            // Create a closure that captures the log level
+            let log_level_clone = log_level;
+            app = app.layer(middleware::from_fn(move |req, next| {
+                request_response_logger_with_level(req, next, log_level_clone)
+            }));
         }
 
         app
     }
 
-    // For testing - OAuth always enabled
-    pub async fn create_app(
+
+    // For testing - OAuth always enabled with in-memory storage
+    #[cfg(any(test, feature = "tests"))]
+    pub async fn create_test_app(
         &self,
         auth_config: Arc<AuthConfig>,
         aws_http_client: AwsHttpClient,
@@ -283,86 +319,20 @@ impl Server {
             .register(Arc::new(jwt_service.health_checker()))
             .await;
 
-        let app = Router::new()
-            .nest("/auth", create_auth_routes().with_state(oauth_service))
-            .merge(create_bedrock_routes().with_state((aws_http_client.clone(), health_service)))
-            .merge(
-                create_protected_bedrock_routes()
-                    .with_state(aws_http_client)
-                    .layer(DefaultBodyLimit::max(MAX_BODY_SIZE))
-                    .layer(middleware::from_fn_with_state(
-                        auth_config,
-                        jwt_auth_middleware,
-                    )),
-            )
-            .fallback_service(create_frontend_router(self.config.frontend.clone()));
+        // Create router with test-specific settings:
+        // - No metrics middleware
+        // - TRACE-level logging instead of INFO
+        // - Using memory storage instead of configured storage
+        let app = self.create_app(
+            auth_config, 
+            aws_http_client, 
+            oauth_service, 
+            health_service, 
+            false, // no metrics in tests
+            tracing::Level::TRACE, // use trace level in tests
+        );
 
-        // Add request logging middleware if enabled
-        let app = if self.config.logging.log_request {
-            // Enhanced request/response logging middleware
-            async fn request_response_logger(
-                req: Request<Body>,
-                next: Next,
-            ) -> Response {
-                // Get method and path
-                let method = req.method().to_string();
-                let path = req.uri().path().to_string();
-
-                // Skip logging for static files and frontend routes
-                // Only log API routes that start with /model, /auth, or /health
-                let is_api_route = path.starts_with("/model") ||
-                                   path.starts_with("/auth") ||
-                                   path.starts_with("/health");
-
-                if is_api_route {
-                    // Get IP from extensions if available (from ConnectInfo)
-                    let ip = req
-                        .extensions()
-                        .get::<axum::extract::ConnectInfo<SocketAddr>>()
-                        .map(|connect_info| connect_info.0.ip().to_string())
-                        .unwrap_or_else(|| "unknown".to_string());
-
-                    // Get user from JWT claims if available
-                    let user = req
-                        .extensions()
-                        .get::<crate::auth::jwt::ValidatedClaims>()
-                        .map(|claims| claims.subject().to_string())
-                        .unwrap_or_else(|| "anonymous".to_string());
-
-                    // Log request with simple format - only for API routes
-                    trace!("Request: {} {} ip={} user={}", method, path, ip, user);
-                    
-                    // Track request start time for latency calculation
-                    let start = std::time::Instant::now();
-                    
-                    // Continue with the request
-                    let response = next.run(req).await;
-                    
-                    // Calculate request duration
-                    let duration = start.elapsed();
-                    
-                    // Log response
-                    trace!(
-                        "Response: {} {} status={} latency={}ms",
-                        method,
-                        path,
-                        response.status().as_u16(),
-                        duration.as_millis()
-                    );
-                    
-                    response
-                } else {
-                    // Skip logging for non-API routes
-                    next.run(req).await
-                }
-            }
-
-            app.layer(middleware::from_fn(request_response_logger))
-        } else {
-            app
-        };
-
-        // For tests, just return the router
+        // For tests, return the router wrapped in Result
         Ok(app)
     }
 }
@@ -418,7 +388,7 @@ mod tests {
 
         let server = Server::new(config.clone());
         let app = server
-            .create_app(auth_config, aws_http_client)
+            .create_test_app(auth_config, aws_http_client)
             .await
             .unwrap();
 
@@ -442,7 +412,7 @@ mod tests {
 
         let server = Server::new(config);
         let app = server
-            .create_app(auth_config, aws_http_client)
+            .create_test_app(auth_config, aws_http_client)
             .await
             .unwrap();
 
@@ -471,7 +441,7 @@ mod tests {
 
         let server = Server::new(config.clone());
         let app = server
-            .create_app(auth_config, aws_http_client)
+            .create_test_app(auth_config, aws_http_client)
             .await
             .unwrap();
 
@@ -507,7 +477,7 @@ mod tests {
 
         let server = Server::new(config);
         let app = server
-            .create_app(auth_config, aws_http_client)
+            .create_test_app(auth_config, aws_http_client)
             .await
             .unwrap();
 

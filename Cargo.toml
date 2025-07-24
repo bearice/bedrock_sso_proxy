@@ -16,6 +16,7 @@ path = "src/bin/e2e_client.rs"
 [features]
 default = []
 frontend = []
+tests = []
 
 [dependencies]
 axum = "^0.8"
@@ -64,3 +65,15 @@ axum-test = "^17.3"
 serial_test = "^3.0"
 tempfile = "^3.0"
 urlencoding = "^2.1"
+
+[[test]]
+name = "integration_tests"
+required-features = ["tests"]
+
+[[test]]
+name = "security_tests"
+required-features = ["tests"]
+
+[[test]]
+name = "storage_integration_tests"
+required-features = ["tests"]

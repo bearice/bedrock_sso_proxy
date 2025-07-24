@@ -132,7 +132,7 @@ impl TestHarness {
 
         let server = Server::new(config.clone());
         let app = server
-            .create_app(auth_config, aws_http_client)
+            .create_test_app(auth_config, aws_http_client)
             .await
             .unwrap();
 
