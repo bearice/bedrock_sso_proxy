@@ -64,7 +64,7 @@ mod tests {
         let app = create_health_routes().with_state(health_service);
 
         let request = Request::builder()
-            .uri("/health")
+            .uri("/")
             .body(Body::empty())
             .unwrap();
 
@@ -78,7 +78,7 @@ mod tests {
         let app = create_health_routes().with_state(health_service);
 
         let request = Request::builder()
-            .uri("/health?check=all")
+            .uri("/?check=all")
             .body(Body::empty())
             .unwrap();
 
@@ -92,7 +92,7 @@ mod tests {
         let app = create_health_routes().with_state(health_service);
 
         let request = Request::builder()
-            .uri("/health?check=aws_bedrock")
+            .uri("/?check=aws_bedrock")
             .body(Body::empty())
             .unwrap();
 
@@ -106,7 +106,7 @@ mod tests {
         let app = create_health_routes().with_state(health_service);
 
         let request = Request::builder()
-            .uri("/health?check=unknown")
+            .uri("/?check=unknown")
             .body(Body::empty())
             .unwrap();
 
