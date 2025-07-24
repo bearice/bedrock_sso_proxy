@@ -21,7 +21,7 @@ struct HealthCheckQuery {
 /// across all services. The health service aggregates checks from all
 /// registered components (AWS, OAuth, JWT, Storage, etc.)
 pub fn create_health_routes() -> Router<Arc<HealthService>> {
-    Router::new().route("/health", get(health_check))
+    Router::new().route("/", get(health_check))
 }
 
 async fn health_check(
