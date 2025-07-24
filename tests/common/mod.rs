@@ -222,7 +222,7 @@ impl RequestBuilder {
     #[allow(dead_code)]
     pub fn health_with_check_and_auth(check_type: &str, token: &str) -> Request<Body> {
         Request::builder()
-            .uri(&format!("/health?check={}", check_type))
+            .uri(format!("/health?check={}", check_type))
             .header("Authorization", format!("Bearer {}", token))
             .body(Body::empty())
             .unwrap()
@@ -231,7 +231,7 @@ impl RequestBuilder {
     /// Model invoke with auth
     pub fn invoke_model_with_auth(model_id: &str, token: &str, body: &str) -> Request<Body> {
         Request::builder()
-            .uri(&format!("/model/{}/invoke", model_id))
+            .uri(format!("/model/{}/invoke", model_id))
             .method("POST")
             .header("Authorization", format!("Bearer {}", token))
             .header("Content-Type", "application/json")
@@ -243,7 +243,7 @@ impl RequestBuilder {
     #[allow(dead_code)]
     pub fn invoke_streaming_with_auth(model_id: &str, token: &str, body: &str) -> Request<Body> {
         Request::builder()
-            .uri(&format!("/model/{}/invoke-with-response-stream", model_id))
+            .uri(format!("/model/{}/invoke-with-response-stream", model_id))
             .method("POST")
             .header("Authorization", format!("Bearer {}", token))
             .header("Content-Type", "application/json")

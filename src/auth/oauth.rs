@@ -3,7 +3,7 @@ use crate::{
     config::{Config, OAuthProvider},
     error::AppError,
     health::{HealthCheckResult, HealthChecker},
-    storage::{Storage, CachedValidation, StateData, RefreshTokenData},
+    storage::{Storage, CachedValidation, StateData},
 };
 use oauth2::{
     AuthUrl, AuthorizationCode, ClientId, ClientSecret, CsrfToken, RedirectUrl, Scope,
@@ -713,18 +713,18 @@ impl OAuthService {
             created_at: now,
             expires_at: now + ChronoDuration::seconds(600), // 10 minutes TTL
         };
-        
+
         self.storage.cache.store_state(&state, &state_data, 600).await
             .map_err(|e| AppError::Internal(format!("Failed to store state: {}", e)))?;
-        
+
         Ok(state)
     }
-    
+
     async fn get_state_data_internal(&self, state: &str) -> Result<Option<StateData>, AppError> {
         self.storage.cache.get_state(state).await
             .map_err(|e| AppError::Internal(format!("Failed to get state: {}", e)))
     }
-    
+
     async fn get_and_remove_state_internal(&self, state: &str) -> Result<Option<StateData>, AppError> {
         let state_data = self.get_state_data_internal(state).await?;
         if state_data.is_some() {
@@ -733,88 +733,16 @@ impl OAuthService {
         }
         Ok(state_data)
     }
-    
-    // Refresh token methods
-    async fn create_refresh_token_internal(&self, user_id: String, provider: String) -> Result<String, AppError> {
-        let token = Uuid::new_v4().to_string();
-        let token_hash = hash_token(&token);
-        let now = Utc::now();
-        let token_data = RefreshTokenData {
-            token_hash: token_hash.clone(),
-            user_id,
-            provider,
-            email: "".to_string(), // Will be populated by caller
-            created_at: now,
-            expires_at: now + ChronoDuration::seconds(self.config.jwt.refresh_token_ttl as i64),
-            rotation_count: 0,
-            revoked_at: None,
-        };
-        
-        self.storage.database.store_refresh_token(&token_data).await
-            .map_err(|e| AppError::Internal(format!("Failed to store refresh token: {}", e)))?;
-        
-        Ok(token)
-    }
-    
-    async fn get_refresh_token_data_internal(&self, token: &str) -> Result<Option<RefreshTokenData>, AppError> {
-        let token_hash = hash_token(token);
-        self.storage.database.get_refresh_token(&token_hash).await
-            .map_err(|e| AppError::Internal(format!("Failed to get refresh token: {}", e)))
-    }
-    
-    async fn rotate_refresh_token_internal(&self, old_token: &str, user_id: String, provider: String) -> Result<Option<String>, AppError> {
-        let old_token_hash = hash_token(old_token);
-        
-        // Get old token data
-        let old_data = self.storage.database.get_refresh_token(&old_token_hash).await
-            .map_err(|e| AppError::Internal(format!("Failed to get old refresh token: {}", e)))?;
-        
-        if let Some(old_data) = old_data {
-            if old_data.expires_at > Utc::now() {
-                // Revoke old token
-                self.storage.database.revoke_refresh_token(&old_token_hash).await
-                    .map_err(|e| AppError::Internal(format!("Failed to revoke old refresh token: {}", e)))?;
-                
-                // Create new token
-                let new_token = Uuid::new_v4().to_string();
-                let new_token_hash = hash_token(&new_token);
-                let now = Utc::now();
-                let new_token_data = RefreshTokenData {
-                    token_hash: new_token_hash,
-                    user_id,
-                    provider,
-                    email: old_data.email,
-                    created_at: now,
-                    expires_at: now + ChronoDuration::seconds(self.config.jwt.refresh_token_ttl as i64),
-                    rotation_count: old_data.rotation_count + 1,
-                    revoked_at: None,
-                };
-                
-                self.storage.database.store_refresh_token(&new_token_data).await
-                    .map_err(|e| AppError::Internal(format!("Failed to store new refresh token: {}", e)))?;
-                
-                Ok(Some(new_token))
-            } else {
-                Ok(None)
-            }
-        } else {
-            Ok(None)
-        }
-    }
-    
-    async fn revoke_refresh_token_internal(&self, token: &str) -> Result<(), AppError> {
-        let token_hash = hash_token(token);
-        self.storage.database.revoke_refresh_token(&token_hash).await
-            .map_err(|e| AppError::Internal(format!("Failed to revoke refresh token: {}", e)))
-    }
-    
+
+    // Refresh token methods - removed unused internal methods
+
     // Validation cache methods
     async fn get_validation_internal(&self, token: &str) -> Result<Option<CachedValidation>, AppError> {
         let token_hash = hash_token(token);
         self.storage.cache.get_validation(&token_hash).await
             .map_err(|e| AppError::Internal(format!("Failed to get validation: {}", e)))
     }
-    
+
     async fn set_validation_internal(&self, token: &str, claims: &OAuthClaims) -> Result<(), AppError> {
         let token_hash = hash_token(token);
         let validation = CachedValidation {
@@ -825,7 +753,7 @@ impl OAuthService {
             expires_at: Utc::now() + ChronoDuration::seconds(claims.exp as i64),
             scopes: vec!["bedrock:invoke".to_string()],
         };
-        
+
         self.storage.cache.store_validation(&token_hash, &validation, self.config.cache.validation_ttl).await
             .map_err(|e| AppError::Internal(format!("Failed to store validation: {}", e)))
     }
@@ -859,20 +787,21 @@ mod tests {
             },
         );
 
-        let mut config = Config::default();
-        config.oauth = OAuthConfig { providers };
-        config.jwt = JwtConfig {
-            secret: "test-secret".to_string(),
-            algorithm: "HS256".to_string(),
-            access_token_ttl: 3600,
-            refresh_token_ttl: 86400,
-        };
-        config.cache = CacheConfig {
-            validation_ttl: 3600,
-            max_entries: 1000,
-            cleanup_interval: 300,
-        };
-        config
+        Config {
+            oauth: OAuthConfig { providers },
+            jwt: JwtConfig {
+                secret: "test-secret".to_string(),
+                algorithm: "HS256".to_string(),
+                access_token_ttl: 3600,
+                refresh_token_ttl: 86400,
+            },
+            cache: CacheConfig {
+                validation_ttl: 3600,
+                max_entries: 1000,
+                cleanup_interval: 300,
+            },
+            ..Default::default()
+        }
     }
 
     fn create_test_storage() -> Arc<Storage> {

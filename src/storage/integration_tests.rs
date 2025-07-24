@@ -1,5 +1,5 @@
 #[cfg(test)]
-mod integration_tests {
+mod storage_integration_tests {
     use crate::storage::factory::{CacheBackend, DatabaseBackend, StorageFactory};
     use crate::storage::{
         AuditLogEntry, CachedValidation, RateLimitData, RefreshTokenData, StateData, UserRecord,

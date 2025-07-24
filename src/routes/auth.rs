@@ -340,18 +340,20 @@ mod tests {
             },
         );
 
-        let mut config = Config::default();
-        config.oauth = OAuthConfig { providers };
-        config.jwt = JwtConfig {
-            secret: "test-secret".to_string(),
-            algorithm: "HS256".to_string(),
-            access_token_ttl: 3600,
-            refresh_token_ttl: 86400,
-        };
-        config.cache = CacheConfig {
-            validation_ttl: 3600,
-            max_entries: 1000,
-            cleanup_interval: 300,
+        let config = Config {
+            oauth: OAuthConfig { providers },
+            jwt: JwtConfig {
+                secret: "test-secret".to_string(),
+                algorithm: "HS256".to_string(),
+                access_token_ttl: 3600,
+                refresh_token_ttl: 86400,
+            },
+            cache: CacheConfig {
+                validation_ttl: 3600,
+                max_entries: 1000,
+                cleanup_interval: 300,
+            },
+            ..Default::default()
         };
 
         let storage = Arc::new(crate::storage::Storage::new(

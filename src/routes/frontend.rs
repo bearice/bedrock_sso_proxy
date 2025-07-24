@@ -167,8 +167,9 @@ mod tests {
         let fixtures_dir = std::path::Path::new("tests/fixtures/frontend");
 
         // Configure to serve from filesystem (test fixtures)
-        let mut config = FrontendConfig::default();
-        config.path = Some(fixtures_dir.to_string_lossy().to_string());
+        let config = FrontendConfig {
+            path: Some(fixtures_dir.to_string_lossy().to_string()),
+        };
 
         let app = create_frontend_router(config);
         let server = TestServer::new(app).unwrap();
@@ -276,8 +277,9 @@ mod tests {
         // Use the existing test fixtures directory
         let fixtures_dir = std::path::Path::new("tests/fixtures/frontend");
 
-        let mut config = FrontendConfig::default();
-        config.path = Some(fixtures_dir.to_string_lossy().to_string());
+        let config = FrontendConfig {
+            path: Some(fixtures_dir.to_string_lossy().to_string()),
+        };
         let app = create_frontend_router(config);
         let server = TestServer::new(app).unwrap();
 
