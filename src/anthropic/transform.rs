@@ -1,5 +1,5 @@
 use super::{
-    model_mapping::ModelMapper, AnthropicError, AnthropicRequest, AnthropicResponse, 
+    model_mapping::ModelMapper, AnthropicError, AnthropicRequest, AnthropicResponse,
     ContentBlock, Usage,
 };
 
@@ -14,7 +14,7 @@ pub fn transform_anthropic_to_bedrock(
 ) -> Result<(Value, String), AnthropicError> {
     // Validate and normalize the model name
     let normalized_model = model_mapper.validate_anthropic_model(&request.model)?;
-    
+
     // Convert to Bedrock model ID
     let bedrock_model_id = model_mapper.anthropic_to_bedrock(&normalized_model)?;
 
@@ -47,7 +47,7 @@ pub fn transform_anthropic_to_bedrock(
     }
 
     // Note: 'stream' parameter is handled at the HTTP level, not in the request body
-    
+
     Ok((bedrock_request, bedrock_model_id))
 }
 
@@ -176,9 +176,8 @@ pub fn transform_streaming_event(
         .map_err(|e| AnthropicError::TransformationError(format!("Invalid UTF-8: {}", e)))?;
 
     // Handle Server-Sent Events format
-    if chunk_str.starts_with("data: ") {
-        let data_part = &chunk_str[6..]; // Remove "data: " prefix
-        
+    if let Some(data_part) = chunk_str.strip_prefix("data: ") {
+
         // Handle special cases
         if data_part.trim() == "[DONE]" {
             return Ok(Some("data: [DONE]\n\n".to_string()));
@@ -190,7 +189,7 @@ pub fn transform_streaming_event(
             let anthropic_event = transform_bedrock_event_to_anthropic(bedrock_data, original_model)?;
             let event_json = serde_json::to_string(&anthropic_event)
                 .map_err(|e| AnthropicError::TransformationError(format!("JSON serialization failed: {}", e)))?;
-            
+
             return Ok(Some(format!("data: {}\n\n", event_json)));
         }
     }
@@ -208,7 +207,7 @@ fn transform_bedrock_event_to_anthropic(
     // This is a simplified transformation for streaming events
     // In practice, you would need to handle different event types:
     // - message_start
-    // - content_block_start  
+    // - content_block_start
     // - content_block_delta
     // - content_block_stop
     // - message_delta
@@ -216,13 +215,13 @@ fn transform_bedrock_event_to_anthropic(
 
     // For now, we'll pass through most fields and ensure model consistency
     let mut anthropic_event = bedrock_event.clone();
-    
+
     // Ensure the model field uses the original Anthropic model name
     if let Some(event_obj) = anthropic_event.as_object_mut() {
         if event_obj.contains_key("model") {
             event_obj.insert("model".to_string(), json!(original_model));
         }
-        
+
         // Handle message events that might contain model information
         if let Some(message) = event_obj.get_mut("message") {
             if let Some(message_obj) = message.as_object_mut() {
@@ -251,14 +250,14 @@ pub fn validate_anthropic_request(request: &AnthropicRequest) -> Result<(), Anth
 
     // Validate temperature range
     if let Some(temp) = request.temperature {
-        if temp < 0.0 || temp > 1.0 {
+        if !(0.0..=1.0).contains(&temp) {
             return Err(AnthropicError::InvalidRequest("temperature must be between 0.0 and 1.0".to_string()));
         }
     }
 
     // Validate top_p range
     if let Some(top_p) = request.top_p {
-        if top_p < 0.0 || top_p > 1.0 {
+        if !(0.0..=1.0).contains(&top_p) {
             return Err(AnthropicError::InvalidRequest("top_p must be between 0.0 and 1.0".to_string()));
         }
     }
@@ -421,7 +420,7 @@ mod tests {
 
         let result = transform_streaming_event(chunk, &mapper, "claude-3-sonnet-20240229");
         assert!(result.is_ok());
-        
+
         let transformed = result.unwrap();
         assert!(transformed.is_some());
         assert!(transformed.unwrap().starts_with("data: "));
@@ -434,7 +433,7 @@ mod tests {
 
         let result = transform_streaming_event(chunk, &mapper, "claude-3-sonnet-20240229");
         assert!(result.is_ok());
-        
+
         let transformed = result.unwrap();
         assert_eq!(transformed, Some("data: [DONE]\n\n".to_string()));
     }
@@ -457,10 +456,10 @@ mod tests {
 
         let content_blocks = transform_content_blocks(&content_json).unwrap();
         assert_eq!(content_blocks.len(), 2);
-        
+
         assert_eq!(content_blocks[0].type_, "text");
         assert_eq!(content_blocks[0].text, Some("Hello world".to_string()));
-        
+
         assert_eq!(content_blocks[1].type_, "image");
         assert!(content_blocks[1].extra.contains_key("source"));
     }
@@ -484,7 +483,7 @@ mod tests {
         request.model = "claude-3-sonnet".to_string(); // Using alias
 
         let (_bedrock_request, model_id) = transform_anthropic_to_bedrock(request, &mapper).unwrap();
-        
+
         // Should resolve to the actual model ID
         assert_eq!(model_id, "anthropic.claude-3-sonnet-20240229-v1:0");
     }

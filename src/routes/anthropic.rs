@@ -40,7 +40,7 @@ pub async fn create_message(
 
     // Validate the request format
     validate_anthropic_request(&anthropic_request)
-        .map_err(|e| AppError::from(e))?;
+        .map_err(AppError::from)?;
 
     // Create model mapper for transformations
     let model_mapper = ModelMapper::new();
@@ -49,7 +49,7 @@ pub async fn create_message(
     let (bedrock_request, bedrock_model_id) = transform_anthropic_to_bedrock(
         anthropic_request.clone(),
         &model_mapper,
-    ).map_err(|e| AppError::from(e))?;
+    ).map_err(AppError::from)?;
 
     // Convert bedrock_request to bytes for AWS call
     let bedrock_body = serde_json::to_vec(&bedrock_request)
@@ -124,7 +124,7 @@ async fn handle_non_streaming_message(
                 bedrock_response,
                 &original_model,
                 &model_mapper,
-            ).map_err(|e| AppError::from(e))?;
+            ).map_err(AppError::from)?;
 
             // Return JSON response
             Ok(Response::builder()

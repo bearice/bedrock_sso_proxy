@@ -11,7 +11,7 @@ pub enum DatabaseType {
 
 impl DatabaseType {
     /// Convert from string representation
-    pub fn from_str(s: &str) -> Result<Self, crate::storage::StorageError> {
+    pub fn from_database_type_str(s: &str) -> Result<Self, crate::storage::StorageError> {
         match s.to_lowercase().as_str() {
             "sqlite" => Ok(DatabaseType::Sqlite),
             "postgres" | "postgresql" => Ok(DatabaseType::Postgres),
@@ -195,18 +195,18 @@ mod tests {
     #[test]
     fn test_database_type_from_str() {
         assert_eq!(
-            DatabaseType::from_str("sqlite").unwrap(),
+            DatabaseType::from_database_type_str("sqlite").unwrap(),
             DatabaseType::Sqlite
         );
         assert_eq!(
-            DatabaseType::from_str("postgres").unwrap(),
+            DatabaseType::from_database_type_str("postgres").unwrap(),
             DatabaseType::Postgres
         );
         assert_eq!(
-            DatabaseType::from_str("postgresql").unwrap(),
+            DatabaseType::from_database_type_str("postgresql").unwrap(),
             DatabaseType::Postgres
         );
-        assert!(DatabaseType::from_str("invalid").is_err());
+        assert!(DatabaseType::from_database_type_str("invalid").is_err());
     }
 
     #[test]
