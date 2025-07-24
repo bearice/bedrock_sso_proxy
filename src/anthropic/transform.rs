@@ -291,7 +291,7 @@ mod tests {
     use super::*;
 
     fn create_test_mapper() -> ModelMapper {
-        ModelMapper::new()
+        ModelMapper::default()
     }
 
     fn create_test_anthropic_request() -> AnthropicRequest {

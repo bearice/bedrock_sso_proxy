@@ -43,7 +43,7 @@ pub async fn create_message(
     validate_anthropic_request(&anthropic_request).map_err(AppError::from)?;
 
     // Create model mapper for transformations
-    let model_mapper = ModelMapper::new();
+    let model_mapper = ModelMapper::default();
 
     // Transform Anthropic request to Bedrock format
     let (bedrock_request, bedrock_model_id) =

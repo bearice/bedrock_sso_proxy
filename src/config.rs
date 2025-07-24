@@ -21,6 +21,8 @@ pub struct Config {
     pub storage: StorageConfig,
     #[serde(default)]
     pub metrics: MetricsConfig,
+    #[serde(default)]
+    pub model_mapping: ModelMappingConfig,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -270,6 +272,15 @@ impl Default for MetricsConfig {
     }
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct ModelMappingConfig {
+    /// Custom model mappings that override default mappings
+    /// Maps Anthropic API model names to AWS Bedrock model IDs
+    /// Example: "claude-custom-model" -> "anthropic.claude-custom-model-v1:0"
+    #[serde(default)]
+    pub custom_mappings: HashMap<String, String>,
+}
+
 impl Default for RedisStorageConfig {
     fn default() -> Self {
         Self {
@@ -320,6 +331,7 @@ impl Default for Config {
             admin: AdminConfig::default(),
             storage: StorageConfig::default(),
             metrics: MetricsConfig::default(),
+            model_mapping: ModelMappingConfig::default(),
         }
     }
 }
@@ -380,6 +392,13 @@ impl Config {
             .emails
             .iter()
             .any(|admin_email| admin_email.to_lowercase() == email_lower)
+    }
+
+    /// Create a ModelMapper instance from the configuration
+    pub fn create_model_mapper(&self) -> crate::anthropic::model_mapping::ModelMapper {
+        crate::anthropic::model_mapping::ModelMapper::new(
+            self.model_mapping.custom_mappings.clone()
+        )
     }
 }
 
