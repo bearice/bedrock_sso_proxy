@@ -10,7 +10,7 @@ use crate::{
     health::HealthService,
     metrics,
     routes::{
-        create_auth_routes, create_bedrock_routes, create_frontend_router,
+        create_anthropic_routes, create_auth_routes, create_bedrock_routes, create_frontend_router,
         create_protected_bedrock_routes,
     },
     shutdown::{HttpServerShutdown, ShutdownCoordinator, ShutdownManager, StorageShutdown},
@@ -176,6 +176,16 @@ impl Server {
             // Protected Bedrock API routes
             .merge(
                 create_protected_bedrock_routes()
+                    .with_state(aws_http_client.clone())
+                    .layer(DefaultBodyLimit::max(MAX_BODY_SIZE))
+                    .layer(middleware::from_fn_with_state(
+                        auth_config.clone(),
+                        jwt_auth_middleware,
+                    )),
+            )
+            // Protected Anthropic API routes
+            .merge(
+                create_anthropic_routes()
                     .with_state(aws_http_client)
                     .layer(DefaultBodyLimit::max(MAX_BODY_SIZE))
                     .layer(middleware::from_fn_with_state(
@@ -233,16 +243,16 @@ impl Server {
                             info!("Request: {} {} ip={} user={}", method, path, ip, user);
                         }
                     }
-                    
+
                     // Track request start time for latency calculation
                     let start = std::time::Instant::now();
-                    
+
                     // Continue with the request
                     let response = next.run(req).await;
-                    
+
                     // Calculate request duration
                     let duration = start.elapsed();
-                    
+
                     // Log response
                     match log_level {
                         tracing::Level::TRACE => {
@@ -264,7 +274,7 @@ impl Server {
                             );
                         }
                     }
-                    
+
                     response
                 } else {
                     // Skip logging for non-API routes
@@ -324,10 +334,10 @@ impl Server {
         // - TRACE-level logging instead of INFO
         // - Using memory storage instead of configured storage
         let app = self.create_app(
-            auth_config, 
-            aws_http_client, 
-            oauth_service, 
-            health_service, 
+            auth_config,
+            aws_http_client,
+            oauth_service,
+            health_service,
             false, // no metrics in tests
             tracing::Level::TRACE, // use trace level in tests
         );

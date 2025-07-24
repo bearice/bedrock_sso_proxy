@@ -219,15 +219,41 @@ export function DashboardPage() {
         </div>
 
         <h4>API Usage</h4>
-        <p>This proxy provides Bedrock-compatible endpoints. Use the token as a Bearer token in the Authorization header:</p>
+        <p>This proxy supports both Bedrock and Anthropic API formats for maximum compatibility. Use the token as a Bearer token in the Authorization header:</p>
         <pre>{`Authorization: Bearer ${token?.substring(0, 30)}...`}</pre>
+        
+        <div style={{ background: '#e8f5e8', padding: '1rem', borderRadius: '8px', marginTop: '1rem', border: '1px solid #b8d4b8' }}>
+          <strong>✨ New:</strong> Anthropic API format support! Use <code>/v1/messages</code> with standard Anthropic request format for better compatibility with Anthropic SDKs and LLM gateways.
+        </div>
 
         <h4>Available Endpoints</h4>
-        <ul>
-          <li><code>GET /health</code> - Health check (no auth required)</li>
-          <li><code>POST /model/{"{"}{"{"}model_id{"}"}/invoke</code> - Standard invocation</li>
-          <li><code>POST /model/{"{"}{"{"}model_id{"}"}/invoke-with-response-stream</code> - Streaming responses</li>
-        </ul>
+        <div style={{ marginBottom: '1rem' }}>
+          <strong>Health & Status:</strong>
+          <ul>
+            <li><code>GET /health</code> - Health check (no auth required)</li>
+          </ul>
+        </div>
+        
+        <div style={{ marginBottom: '1rem' }}>
+          <strong>Bedrock Format (AWS Native):</strong>
+          <ul>
+            <li><code>POST /model/{"{"}{"{"}model_id{"}"}/invoke</code> - Standard invocation</li>
+            <li><code>POST /model/{"{"}{"{"}model_id{"}"}/invoke-with-response-stream</code> - Streaming responses</li>
+          </ul>
+          <p style={{ fontSize: '0.9rem', color: '#666', margin: '0.5rem 0 0 1rem' }}>
+            Uses AWS model IDs like <code>anthropic.claude-3-sonnet-20240229-v1:0</code> in the URL path
+          </p>
+        </div>
+        
+        <div style={{ marginBottom: '1rem' }}>
+          <strong>Anthropic Format (Standard API):</strong>
+          <ul>
+            <li><code>POST /v1/messages</code> - Standard Anthropic API (supports streaming)</li>
+          </ul>
+          <p style={{ fontSize: '0.9rem', color: '#666', margin: '0.5rem 0 0 1rem' }}>
+            Uses standard model names like <code>claude-3-sonnet-20240229</code> in the request body
+          </p>
+        </div>
 
         <h4>Claude Code Integration (LLM Gateway)</h4>
         <p>Configure Claude Code to use this proxy as an LLM gateway:</p>
@@ -261,10 +287,13 @@ export CLAUDE_CODE_USE_BEDROCK=1`}</pre>
           <Shield size={20} style={{ marginRight: '0.5rem', verticalAlign: 'text-bottom' }} />
           🧪 Test Your Setup
         </h3>
-        <p>Verify your authentication is working with a test request:</p>
+        <p>Verify your authentication is working with test requests. Choose your preferred API format:</p>
 
-        <h4>Using curl:</h4>
-        <pre>{`curl -X POST "${currentDomain}/model/anthropic.claude-3-sonnet-20240229-v1:0/invoke" \\
+        <div style={{ display: 'grid', gap: '1.5rem', marginTop: '1rem' }}>
+          {/* Bedrock Format Example */}
+          <div>
+            <h4>Bedrock Format (AWS Native):</h4>
+            <pre>{`curl -X POST "${currentDomain}/model/anthropic.claude-3-sonnet-20240229-v1:0/invoke" \\
   -H "Authorization: Bearer ${token?.substring(0, 30)}..." \\
   -H "Content-Type: application/json" \\
   -d '{
@@ -272,8 +301,38 @@ export CLAUDE_CODE_USE_BEDROCK=1`}</pre>
     "max_tokens": 1000,
     "messages": [{"role": "user", "content": "Hello!"}]
   }'`}</pre>
+          </div>
 
-        <h4>Using Claude Code:</h4>
+          {/* Anthropic Format Example */}
+          <div>
+            <h4>Anthropic Format (Standard API):</h4>
+            <pre>{`curl -X POST "${currentDomain}/v1/messages" \\
+  -H "Authorization: Bearer ${token?.substring(0, 30)}..." \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "model": "claude-3-sonnet-20240229",
+    "max_tokens": 1000,
+    "messages": [{"role": "user", "content": "Hello!"}]
+  }'`}</pre>
+          </div>
+
+          {/* Anthropic Streaming Example */}
+          <div>
+            <h4>Anthropic Format (Streaming):</h4>
+            <pre>{`curl -X POST "${currentDomain}/v1/messages" \\
+  -H "Authorization: Bearer ${token?.substring(0, 30)}..." \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "model": "claude-3-sonnet-20240229",
+    "max_tokens": 1000,
+    "messages": [{"role": "user", "content": "Hello!"}],
+    "stream": true
+  }'`}</pre>
+          </div>
+        </div>
+
+        <h4 style={{ marginTop: '1.5rem' }}>Using Claude Code:</h4>
+        <p>With ANTHROPIC_BEDROCK_BASE_URL configured, Claude Code will automatically use the Anthropic format:</p>
         <pre>claude-code &quot;Hello, can you help me test this setup?&quot;</pre>
 
         <div style={{ marginTop: '1rem', display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
@@ -281,13 +340,26 @@ export CLAUDE_CODE_USE_BEDROCK=1`}</pre>
             onClick={() =>
               copyToClipboard(
                 `curl -X POST "${currentDomain}/model/anthropic.claude-3-sonnet-20240229-v1:0/invoke" -H "Authorization: Bearer ${token}" -H "Content-Type: application/json" -d '{"anthropic_version": "bedrock-2023-05-31", "max_tokens": 1000, "messages": [{"role": "user", "content": "Hello!"}]}'`,
-                'curl'
+                'curl-bedrock'
               )
             }
             className="btn btn-secondary"
           >
             <Copy size={16} />
-            {copied === 'curl' ? 'Copied!' : 'Copy curl Command'}
+            {copied === 'curl-bedrock' ? 'Copied!' : 'Copy Bedrock Command'}
+          </button>
+
+          <button
+            onClick={() =>
+              copyToClipboard(
+                `curl -X POST "${currentDomain}/v1/messages" -H "Authorization: Bearer ${token}" -H "Content-Type: application/json" -d '{"model": "claude-3-sonnet-20240229", "max_tokens": 1000, "messages": [{"role": "user", "content": "Hello!"}]}'`,
+                'curl-anthropic'
+              )
+            }
+            className="btn btn-secondary"
+          >
+            <Copy size={16} />
+            {copied === 'curl-anthropic' ? 'Copied!' : 'Copy Anthropic Command'}
           </button>
 
           <a href="/health" target="_blank" rel="noopener noreferrer" className="btn btn-primary">

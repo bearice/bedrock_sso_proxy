@@ -23,9 +23,56 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ### Key Routes
 
+**Health & Status:**
 - `GET /health` - Public health check endpoint
+
+**Bedrock Format (AWS Native):**
 - `POST /model/{model_id}/invoke` - Standard model invocation (JWT protected)
 - `POST /model/{model_id}/invoke-with-response-stream` - Streaming responses (JWT protected)
+
+**Anthropic Format (Standard API):**
+- `POST /v1/messages` - Standard Anthropic API with streaming support (JWT protected)
+
+The proxy now supports both AWS Bedrock and standard Anthropic API formats for maximum compatibility.
+
+### API Usage Examples
+
+**Bedrock Format:**
+```bash
+curl -X POST "http://localhost:3000/model/anthropic.claude-3-sonnet-20240229-v1:0/invoke" \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "anthropic_version": "bedrock-2023-05-31",
+    "max_tokens": 1000,
+    "messages": [{"role": "user", "content": "Hello!"}]
+  }'
+```
+
+**Anthropic Format:**
+```bash
+curl -X POST "http://localhost:3000/v1/messages" \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "claude-3-sonnet-20240229",
+    "max_tokens": 1000,
+    "messages": [{"role": "user", "content": "Hello!"}]
+  }'
+```
+
+**Anthropic Format (Streaming):**
+```bash
+curl -X POST "http://localhost:3000/v1/messages" \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "claude-3-sonnet-20240229",
+    "max_tokens": 1000,
+    "messages": [{"role": "user", "content": "Hello!"}],
+    "stream": true
+  }'
+```
 
 ## Development Commands
 
@@ -140,7 +187,7 @@ npm run type-check # TypeScript validation
 
 ## Project Status
 
-**Completed Phases (7/9)**:
+**Completed Phases (8/9)**:
 - ✅ Phase 1: Core infrastructure and configuration
 - ✅ Phase 2: JWT authentication layer
 - ✅ Phase 3: AWS Bedrock integration with credential handling
@@ -148,9 +195,10 @@ npm run type-check # TypeScript validation
 - ✅ Phase 5: Streaming API implementation (SSE)
 - ✅ Phase 6: Comprehensive testing suite (117 tests)
 - ✅ Phase 7: OAuth integration with React frontend
+- ✅ Phase 8.1: Anthropic API format support (dual format compatibility)
 
 **In Progress Phases**:
-- 🔄 Phase 8: Production readiness (metrics, rate limiting, graceful shutdown)
+- 🔄 Phase 8: Production readiness (metrics, graceful shutdown - mostly complete)
 
 **Remaining Phases**:
 - ❌ Phase 9: Deployment (Docker, CI/CD, Kubernetes)
