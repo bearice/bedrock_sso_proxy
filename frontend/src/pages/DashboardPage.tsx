@@ -237,8 +237,8 @@ export function DashboardPage() {
         <div style={{ marginBottom: '1rem' }}>
           <strong>Bedrock Format (AWS Native):</strong>
           <ul>
-            <li><code>POST /model/{"{"}{"{"}model_id{"}"}/invoke</code> - Standard invocation</li>
-            <li><code>POST /model/{"{"}{"{"}model_id{"}"}/invoke-with-response-stream</code> - Streaming responses</li>
+            <li><code>POST /bedrock/model/{"{"}{"{"}model_id{"}"}/invoke</code> - Standard invocation</li>
+            <li><code>POST /bedrock/model/{"{"}{"{"}model_id{"}"}/invoke-with-response-stream</code> - Streaming responses</li>
           </ul>
           <p style={{ fontSize: '0.9rem', color: '#666', margin: '0.5rem 0 0 1rem' }}>
             Uses AWS model IDs like <code>anthropic.claude-3-sonnet-20240229-v1:0</code> in the URL path
@@ -248,7 +248,7 @@ export function DashboardPage() {
         <div style={{ marginBottom: '1rem' }}>
           <strong>Anthropic Format (Standard API):</strong>
           <ul>
-            <li><code>POST /v1/messages</code> - Standard Anthropic API (supports streaming)</li>
+            <li><code>POST /anthropic/v1/messages</code> - Standard Anthropic API (supports streaming)</li>
           </ul>
           <p style={{ fontSize: '0.9rem', color: '#666', margin: '0.5rem 0 0 1rem' }}>
             Uses standard model names like <code>claude-3-sonnet-20240229</code> in the request body
@@ -293,7 +293,7 @@ export CLAUDE_CODE_USE_BEDROCK=1`}</pre>
           {/* Bedrock Format Example */}
           <div>
             <h4>Bedrock Format (AWS Native):</h4>
-            <pre>{`curl -X POST "${currentDomain}/model/anthropic.claude-3-sonnet-20240229-v1:0/invoke" \\
+            <pre>{`curl -X POST "${currentDomain}/bedrock/model/anthropic.claude-3-sonnet-20240229-v1:0/invoke" \\
   -H "Authorization: Bearer ${token?.substring(0, 30)}..." \\
   -H "Content-Type: application/json" \\
   -d '{
@@ -306,7 +306,7 @@ export CLAUDE_CODE_USE_BEDROCK=1`}</pre>
           {/* Anthropic Format Example */}
           <div>
             <h4>Anthropic Format (Standard API):</h4>
-            <pre>{`curl -X POST "${currentDomain}/v1/messages" \\
+            <pre>{`curl -X POST "${currentDomain}/anthropic/v1/messages" \\
   -H "Authorization: Bearer ${token?.substring(0, 30)}..." \\
   -H "Content-Type: application/json" \\
   -d '{
@@ -319,7 +319,7 @@ export CLAUDE_CODE_USE_BEDROCK=1`}</pre>
           {/* Anthropic Streaming Example */}
           <div>
             <h4>Anthropic Format (Streaming):</h4>
-            <pre>{`curl -X POST "${currentDomain}/v1/messages" \\
+            <pre>{`curl -X POST "${currentDomain}/anthropic/v1/messages" \\
   -H "Authorization: Bearer ${token?.substring(0, 30)}..." \\
   -H "Content-Type: application/json" \\
   -d '{
@@ -339,7 +339,7 @@ export CLAUDE_CODE_USE_BEDROCK=1`}</pre>
           <button
             onClick={() =>
               copyToClipboard(
-                `curl -X POST "${currentDomain}/model/anthropic.claude-3-sonnet-20240229-v1:0/invoke" -H "Authorization: Bearer ${token}" -H "Content-Type: application/json" -d '{"anthropic_version": "bedrock-2023-05-31", "max_tokens": 1000, "messages": [{"role": "user", "content": "Hello!"}]}'`,
+                `curl -X POST "${currentDomain}/bedrock/model/anthropic.claude-3-sonnet-20240229-v1:0/invoke" -H "Authorization: Bearer ${token}" -H "Content-Type: application/json" -d '{"anthropic_version": "bedrock-2023-05-31", "max_tokens": 1000, "messages": [{"role": "user", "content": "Hello!"}]}'`,
                 'curl-bedrock'
               )
             }
@@ -352,7 +352,7 @@ export CLAUDE_CODE_USE_BEDROCK=1`}</pre>
           <button
             onClick={() =>
               copyToClipboard(
-                `curl -X POST "${currentDomain}/v1/messages" -H "Authorization: Bearer ${token}" -H "Content-Type: application/json" -d '{"model": "claude-3-sonnet-20240229", "max_tokens": 1000, "messages": [{"role": "user", "content": "Hello!"}]}'`,
+                `curl -X POST "${currentDomain}/anthropic/v1/messages" -H "Authorization: Bearer ${token}" -H "Content-Type: application/json" -d '{"model": "claude-3-sonnet-20240229", "max_tokens": 1000, "messages": [{"role": "user", "content": "Hello!"}]}'`,
                 'curl-anthropic'
               )
             }

@@ -16,7 +16,7 @@ struct HealthCheckQuery {
 }
 
 /// Create health check routes
-/// 
+///
 /// This module provides system-wide health check endpoints that are shared
 /// across all services. The health service aggregates checks from all
 /// registered components (AWS, OAuth, JWT, Storage, etc.)

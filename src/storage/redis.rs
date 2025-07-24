@@ -1,6 +1,4 @@
-use super::{
-    CacheStorage, CachedValidation, StateData, StorageError, StorageResult,
-};
+use super::{CacheStorage, CachedValidation, StateData, StorageError, StorageResult};
 use async_trait::async_trait;
 use redis::{AsyncCommands, Client, RedisError, aio::ConnectionManager};
 use serde::{Deserialize, Serialize};
@@ -42,7 +40,6 @@ impl RedisCacheStorage {
     fn state_key(&self, key: &str) -> String {
         format!("{}state:{}", self.key_prefix, key)
     }
-
 
     async fn set_with_ttl<T: Serialize>(
         &self,
@@ -144,7 +141,6 @@ impl CacheStorage for RedisCacheStorage {
         let redis_key = self.state_key(key);
         self.delete_key(&redis_key).await
     }
-
 
     async fn clear_all(&self) -> StorageResult<()> {
         let mut conn = self.connection.clone();
@@ -297,5 +293,4 @@ mod tests {
         // Clean up
         cache.clear_all().await.unwrap();
     }
-
 }

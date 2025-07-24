@@ -17,13 +17,31 @@ impl ModelMapper {
 
         // Claude 3 models (as per DESIGN.md)
         let mappings = vec![
-            ("claude-3-sonnet-20240229", "anthropic.claude-3-sonnet-20240229-v1:0"),
-            ("claude-3-haiku-20240307", "anthropic.claude-3-haiku-20240307-v1:0"),
-            ("claude-3-opus-20240229", "anthropic.claude-3-opus-20240229-v1:0"),
-            ("claude-3-5-sonnet-20240620", "anthropic.claude-3-5-sonnet-20240620-v1:0"),
-            ("claude-3-5-haiku-20241022", "anthropic.claude-3-5-haiku-20241022-v1:0"),
+            (
+                "claude-3-sonnet-20240229",
+                "anthropic.claude-3-sonnet-20240229-v1:0",
+            ),
+            (
+                "claude-3-haiku-20240307",
+                "anthropic.claude-3-haiku-20240307-v1:0",
+            ),
+            (
+                "claude-3-opus-20240229",
+                "anthropic.claude-3-opus-20240229-v1:0",
+            ),
+            (
+                "claude-3-5-sonnet-20240620",
+                "anthropic.claude-3-5-sonnet-20240620-v1:0",
+            ),
+            (
+                "claude-3-5-haiku-20241022",
+                "anthropic.claude-3-5-haiku-20241022-v1:0",
+            ),
             // Add more recent models as they become available
-            ("claude-3-5-sonnet-20241022", "anthropic.claude-3-5-sonnet-20241022-v1:0"),
+            (
+                "claude-3-5-sonnet-20241022",
+                "anthropic.claude-3-5-sonnet-20241022-v1:0",
+            ),
         ];
 
         for (anthropic, bedrock) in mappings {
@@ -85,7 +103,7 @@ impl ModelMapper {
         let normalized = match model {
             // Handle version aliases
             "claude-3-sonnet" | "claude-3-sonnet-latest" => "claude-3-sonnet-20240229",
-            "claude-3-haiku" | "claude-3-haiku-latest" => "claude-3-haiku-20240307", 
+            "claude-3-haiku" | "claude-3-haiku-latest" => "claude-3-haiku-20240307",
             "claude-3-opus" | "claude-3-opus-latest" => "claude-3-opus-20240229",
             "claude-3-5-sonnet" | "claude-3-5-sonnet-latest" => "claude-3-5-sonnet-20241022", // Latest version
             "claude-3-5-haiku" | "claude-3-5-haiku-latest" => "claude-3-5-haiku-20241022",
@@ -124,44 +142,59 @@ mod tests {
     #[test]
     fn test_anthropic_to_bedrock_mapping() {
         let mapper = ModelMapper::new();
-        
-        let result = mapper.anthropic_to_bedrock("claude-3-sonnet-20240229").unwrap();
+
+        let result = mapper
+            .anthropic_to_bedrock("claude-3-sonnet-20240229")
+            .unwrap();
         assert_eq!(result, "anthropic.claude-3-sonnet-20240229-v1:0");
 
-        let result = mapper.anthropic_to_bedrock("claude-3-haiku-20240307").unwrap();
+        let result = mapper
+            .anthropic_to_bedrock("claude-3-haiku-20240307")
+            .unwrap();
         assert_eq!(result, "anthropic.claude-3-haiku-20240307-v1:0");
 
-        let result = mapper.anthropic_to_bedrock("claude-3-opus-20240229").unwrap();
+        let result = mapper
+            .anthropic_to_bedrock("claude-3-opus-20240229")
+            .unwrap();
         assert_eq!(result, "anthropic.claude-3-opus-20240229-v1:0");
     }
 
     #[test]
     fn test_bedrock_to_anthropic_mapping() {
         let mapper = ModelMapper::new();
-        
-        let result = mapper.bedrock_to_anthropic("anthropic.claude-3-sonnet-20240229-v1:0").unwrap();
+
+        let result = mapper
+            .bedrock_to_anthropic("anthropic.claude-3-sonnet-20240229-v1:0")
+            .unwrap();
         assert_eq!(result, "claude-3-sonnet-20240229");
 
-        let result = mapper.bedrock_to_anthropic("anthropic.claude-3-5-sonnet-20240620-v1:0").unwrap();
+        let result = mapper
+            .bedrock_to_anthropic("anthropic.claude-3-5-sonnet-20240620-v1:0")
+            .unwrap();
         assert_eq!(result, "claude-3-5-sonnet-20240620");
     }
 
     #[test]
     fn test_unsupported_model() {
         let mapper = ModelMapper::new();
-        
+
         let result = mapper.anthropic_to_bedrock("unsupported-model");
         assert!(result.is_err());
-        assert!(matches!(result.unwrap_err(), AnthropicError::UnsupportedModel(_)));
+        assert!(matches!(
+            result.unwrap_err(),
+            AnthropicError::UnsupportedModel(_)
+        ));
     }
 
     #[test]
     fn test_model_validation_with_aliases() {
         let mapper = ModelMapper::new();
-        
+
         // Test direct model names
         assert_eq!(
-            mapper.validate_anthropic_model("claude-3-sonnet-20240229").unwrap(),
+            mapper
+                .validate_anthropic_model("claude-3-sonnet-20240229")
+                .unwrap(),
             "claude-3-sonnet-20240229"
         );
 
@@ -170,14 +203,18 @@ mod tests {
             mapper.validate_anthropic_model("claude-3-sonnet").unwrap(),
             "claude-3-sonnet-20240229"
         );
-        
+
         assert_eq!(
-            mapper.validate_anthropic_model("claude-3-sonnet-latest").unwrap(),
+            mapper
+                .validate_anthropic_model("claude-3-sonnet-latest")
+                .unwrap(),
             "claude-3-sonnet-20240229"
         );
 
         assert_eq!(
-            mapper.validate_anthropic_model("claude-3-5-sonnet").unwrap(),
+            mapper
+                .validate_anthropic_model("claude-3-5-sonnet")
+                .unwrap(),
             "claude-3-5-sonnet-20241022"
         );
     }
@@ -185,15 +222,19 @@ mod tests {
     #[test]
     fn test_case_insensitive_validation() {
         let mapper = ModelMapper::new();
-        
+
         // Test case variations
         assert_eq!(
-            mapper.validate_anthropic_model("CLAUDE-3-SONNET-20240229").unwrap(),
+            mapper
+                .validate_anthropic_model("CLAUDE-3-SONNET-20240229")
+                .unwrap(),
             "claude-3-sonnet-20240229"
         );
-        
+
         assert_eq!(
-            mapper.validate_anthropic_model("Claude-3-Haiku-20240307").unwrap(),
+            mapper
+                .validate_anthropic_model("Claude-3-Haiku-20240307")
+                .unwrap(),
             "claude-3-haiku-20240307"
         );
     }
@@ -201,10 +242,10 @@ mod tests {
     #[test]
     fn test_model_support_checks() {
         let mapper = ModelMapper::new();
-        
+
         assert!(mapper.is_anthropic_model_supported("claude-3-sonnet-20240229"));
         assert!(mapper.is_bedrock_model_supported("anthropic.claude-3-sonnet-20240229-v1:0"));
-        
+
         assert!(!mapper.is_anthropic_model_supported("unsupported-model"));
         assert!(!mapper.is_bedrock_model_supported("unsupported.model"));
     }
@@ -212,11 +253,11 @@ mod tests {
     #[test]
     fn test_get_supported_models() {
         let mapper = ModelMapper::new();
-        
+
         let anthropic_models = mapper.get_supported_anthropic_models();
         assert!(!anthropic_models.is_empty());
         assert!(anthropic_models.contains(&"claude-3-sonnet-20240229".to_string()));
-        
+
         let bedrock_models = mapper.get_supported_bedrock_models();
         assert!(!bedrock_models.is_empty());
         assert!(bedrock_models.contains(&"anthropic.claude-3-sonnet-20240229-v1:0".to_string()));
@@ -225,12 +266,14 @@ mod tests {
     #[test]
     fn test_latest_model_aliases() {
         let mapper = ModelMapper::new();
-        
+
         // Test that latest aliases resolve to actual models
-        let result = mapper.validate_anthropic_model("claude-3-5-sonnet-latest").unwrap();
+        let result = mapper
+            .validate_anthropic_model("claude-3-5-sonnet-latest")
+            .unwrap();
         assert_eq!(result, "claude-3-5-sonnet-20241022");
         assert!(mapper.is_anthropic_model_supported(&result));
-        
+
         // Verify the mapping works
         let bedrock_id = mapper.anthropic_to_bedrock(&result).unwrap();
         assert_eq!(bedrock_id, "anthropic.claude-3-5-sonnet-20241022-v1:0");
@@ -239,7 +282,7 @@ mod tests {
     #[test]
     fn test_bidirectional_mapping_consistency() {
         let mapper = ModelMapper::new();
-        
+
         // Test that mapping is bidirectional and consistent
         for anthropic_model in mapper.get_supported_anthropic_models() {
             let bedrock_model = mapper.anthropic_to_bedrock(&anthropic_model).unwrap();

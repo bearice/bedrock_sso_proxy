@@ -1,11 +1,11 @@
 use super::{
-    model_mapping::ModelMapper, AnthropicError, AnthropicRequest, AnthropicResponse,
-    ContentBlock, Usage,
+    AnthropicError, AnthropicRequest, AnthropicResponse, ContentBlock, Usage,
+    model_mapping::ModelMapper,
 };
 
 #[cfg(test)]
 use super::Message;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 /// Transforms an Anthropic API request to Bedrock format
 pub fn transform_anthropic_to_bedrock(
@@ -114,20 +114,16 @@ pub fn transform_bedrock_to_anthropic(
 
 /// Transforms content blocks from Bedrock to Anthropic format
 fn transform_content_blocks(content_value: &Value) -> Result<Vec<ContentBlock>, AnthropicError> {
-    let content_array = content_value.as_array()
-        .ok_or_else(|| AnthropicError::TransformationError("Content must be an array".to_string()))?;
+    let content_array = content_value.as_array().ok_or_else(|| {
+        AnthropicError::TransformationError("Content must be an array".to_string())
+    })?;
 
     let mut content_blocks = Vec::new();
 
     for block in content_array {
-        let type_ = block["type"]
-            .as_str()
-            .unwrap_or("text")
-            .to_string();
+        let type_ = block["type"].as_str().unwrap_or("text").to_string();
 
-        let text = block["text"]
-            .as_str()
-            .map(|s| s.to_string());
+        let text = block["text"].as_str().map(|s| s.to_string());
 
         // Extract any additional fields
         let mut extra = serde_json::Map::new();
@@ -139,11 +135,7 @@ fn transform_content_blocks(content_value: &Value) -> Result<Vec<ContentBlock>, 
             }
         }
 
-        content_blocks.push(ContentBlock {
-            type_,
-            text,
-            extra,
-        });
+        content_blocks.push(ContentBlock { type_, text, extra });
     }
 
     Ok(content_blocks)
@@ -151,13 +143,9 @@ fn transform_content_blocks(content_value: &Value) -> Result<Vec<ContentBlock>, 
 
 /// Transforms usage information from Bedrock to Anthropic format
 fn transform_usage(usage_value: &Value) -> Result<Usage, AnthropicError> {
-    let input_tokens = usage_value["input_tokens"]
-        .as_u64()
-        .unwrap_or(0) as u32;
+    let input_tokens = usage_value["input_tokens"].as_u64().unwrap_or(0) as u32;
 
-    let output_tokens = usage_value["output_tokens"]
-        .as_u64()
-        .unwrap_or(0) as u32;
+    let output_tokens = usage_value["output_tokens"].as_u64().unwrap_or(0) as u32;
 
     Ok(Usage {
         input_tokens,
@@ -177,7 +165,6 @@ pub fn transform_streaming_event(
 
     // Handle Server-Sent Events format
     if let Some(data_part) = chunk_str.strip_prefix("data: ") {
-
         // Handle special cases
         if data_part.trim() == "[DONE]" {
             return Ok(Some("data: [DONE]\n\n".to_string()));
@@ -186,9 +173,11 @@ pub fn transform_streaming_event(
         // Try to parse as JSON
         if let Ok(bedrock_data) = serde_json::from_str::<Value>(data_part) {
             // Transform the event data to Anthropic format
-            let anthropic_event = transform_bedrock_event_to_anthropic(bedrock_data, original_model)?;
-            let event_json = serde_json::to_string(&anthropic_event)
-                .map_err(|e| AnthropicError::TransformationError(format!("JSON serialization failed: {}", e)))?;
+            let anthropic_event =
+                transform_bedrock_event_to_anthropic(bedrock_data, original_model)?;
+            let event_json = serde_json::to_string(&anthropic_event).map_err(|e| {
+                AnthropicError::TransformationError(format!("JSON serialization failed: {}", e))
+            })?;
 
             return Ok(Some(format!("data: {}\n\n", event_json)));
         }
@@ -245,38 +234,52 @@ pub fn validate_anthropic_request(request: &AnthropicRequest) -> Result<(), Anth
     }
 
     if request.max_tokens == 0 {
-        return Err(AnthropicError::InvalidRequest("max_tokens must be greater than 0".to_string()));
+        return Err(AnthropicError::InvalidRequest(
+            "max_tokens must be greater than 0".to_string(),
+        ));
     }
 
     // Validate temperature range
     if let Some(temp) = request.temperature {
         if !(0.0..=1.0).contains(&temp) {
-            return Err(AnthropicError::InvalidRequest("temperature must be between 0.0 and 1.0".to_string()));
+            return Err(AnthropicError::InvalidRequest(
+                "temperature must be between 0.0 and 1.0".to_string(),
+            ));
         }
     }
 
     // Validate top_p range
     if let Some(top_p) = request.top_p {
         if !(0.0..=1.0).contains(&top_p) {
-            return Err(AnthropicError::InvalidRequest("top_p must be between 0.0 and 1.0".to_string()));
+            return Err(AnthropicError::InvalidRequest(
+                "top_p must be between 0.0 and 1.0".to_string(),
+            ));
         }
     }
 
     // Validate top_k range
     if let Some(top_k) = request.top_k {
         if top_k == 0 {
-            return Err(AnthropicError::InvalidRequest("top_k must be greater than 0".to_string()));
+            return Err(AnthropicError::InvalidRequest(
+                "top_k must be greater than 0".to_string(),
+            ));
         }
     }
 
     // Validate messages
     for (i, message) in request.messages.iter().enumerate() {
         if message.role.is_empty() {
-            return Err(AnthropicError::InvalidRequest(format!("message[{}] role cannot be empty", i)));
+            return Err(AnthropicError::InvalidRequest(format!(
+                "message[{}] role cannot be empty",
+                i
+            )));
         }
 
         if !["user", "assistant", "system"].contains(&message.role.as_str()) {
-            return Err(AnthropicError::InvalidRequest(format!("message[{}] role must be 'user', 'assistant', or 'system'", i)));
+            return Err(AnthropicError::InvalidRequest(format!(
+                "message[{}] role must be 'user', 'assistant', or 'system'",
+                i
+            )));
         }
     }
 
@@ -334,7 +337,8 @@ mod tests {
         let mapper = create_test_mapper();
         let anthropic_request = create_test_anthropic_request();
 
-        let (bedrock_request, model_id) = transform_anthropic_to_bedrock(anthropic_request, &mapper).unwrap();
+        let (bedrock_request, model_id) =
+            transform_anthropic_to_bedrock(anthropic_request, &mapper).unwrap();
 
         assert_eq!(model_id, "anthropic.claude-3-sonnet-20240229-v1:0");
         assert_eq!(bedrock_request["anthropic_version"], "bedrock-2023-05-31");
@@ -349,11 +353,9 @@ mod tests {
         let mapper = create_test_mapper();
         let bedrock_response = create_test_bedrock_response();
 
-        let anthropic_response = transform_bedrock_to_anthropic(
-            bedrock_response,
-            "claude-3-sonnet-20240229",
-            &mapper,
-        ).unwrap();
+        let anthropic_response =
+            transform_bedrock_to_anthropic(bedrock_response, "claude-3-sonnet-20240229", &mapper)
+                .unwrap();
 
         assert_eq!(anthropic_response.id, "msg_01ABC123");
         assert_eq!(anthropic_response.type_, "message");
@@ -362,7 +364,10 @@ mod tests {
         assert_eq!(anthropic_response.stop_reason, "end_turn");
         assert_eq!(anthropic_response.content.len(), 1);
         assert_eq!(anthropic_response.content[0].type_, "text");
-        assert_eq!(anthropic_response.content[0].text, Some("Hello! I'm Claude, an AI assistant.".to_string()));
+        assert_eq!(
+            anthropic_response.content[0].text,
+            Some("Hello! I'm Claude, an AI assistant.".to_string())
+        );
         assert_eq!(anthropic_response.usage.input_tokens, 12);
         assert_eq!(anthropic_response.usage.output_tokens, 35);
     }
@@ -410,7 +415,10 @@ mod tests {
 
         let result = transform_anthropic_to_bedrock(request, &mapper);
         assert!(result.is_err());
-        assert!(matches!(result.unwrap_err(), AnthropicError::UnsupportedModel(_)));
+        assert!(matches!(
+            result.unwrap_err(),
+            AnthropicError::UnsupportedModel(_)
+        ));
     }
 
     #[test]
@@ -482,7 +490,8 @@ mod tests {
         let mut request = create_test_anthropic_request();
         request.model = "claude-3-sonnet".to_string(); // Using alias
 
-        let (_bedrock_request, model_id) = transform_anthropic_to_bedrock(request, &mapper).unwrap();
+        let (_bedrock_request, model_id) =
+            transform_anthropic_to_bedrock(request, &mapper).unwrap();
 
         // Should resolve to the actual model ID
         assert_eq!(model_id, "anthropic.claude-3-sonnet-20240229-v1:0");

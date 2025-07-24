@@ -9,13 +9,13 @@ use thiserror::Error;
 pub enum AnthropicError {
     #[error("Unsupported model: {0}")]
     UnsupportedModel(String),
-    
+
     #[error("Invalid request format: {0}")]
     InvalidRequest(String),
-    
+
     #[error("Transformation failed: {0}")]
     TransformationError(String),
-    
+
     #[error("Missing required field: {0}")]
     MissingField(String),
 }
@@ -25,33 +25,33 @@ pub enum AnthropicError {
 pub struct AnthropicRequest {
     /// The model ID in Anthropic format (e.g., "claude-3-sonnet-20240229")
     pub model: String,
-    
+
     /// Array of message objects
     pub messages: Vec<Message>,
-    
+
     /// Maximum number of tokens to generate
     pub max_tokens: u32,
-    
+
     /// Controls randomness: 0.0 is deterministic, 1.0 is maximum randomness
     #[serde(skip_serializing_if = "Option::is_none")]
     pub temperature: Option<f32>,
-    
+
     /// Alternative to temperature for nucleus sampling
     #[serde(skip_serializing_if = "Option::is_none")]
     pub top_p: Option<f32>,
-    
+
     /// Only sample from top K options
     #[serde(skip_serializing_if = "Option::is_none")]
     pub top_k: Option<u32>,
-    
+
     /// Sequences where the API will stop generating
     #[serde(skip_serializing_if = "Option::is_none")]
     pub stop_sequences: Option<Vec<String>>,
-    
+
     /// Whether to stream the response
     #[serde(skip_serializing_if = "Option::is_none")]
     pub stream: Option<bool>,
-    
+
     /// System prompt to provide context
     #[serde(skip_serializing_if = "Option::is_none")]
     pub system: Option<String>,
@@ -62,26 +62,26 @@ pub struct AnthropicRequest {
 pub struct AnthropicResponse {
     /// Unique identifier for this particular message
     pub id: String,
-    
+
     /// Object type, will be "message"
     #[serde(rename = "type")]
     pub type_: String,
-    
+
     /// Role of the message sender (should be "assistant")
     pub role: String,
-    
+
     /// Array of content blocks
     pub content: Vec<ContentBlock>,
-    
+
     /// The model that generated this response
     pub model: String,
-    
+
     /// Reason why the model stopped generating
     pub stop_reason: String,
-    
+
     /// The stop sequence that caused generation to stop, if any
     pub stop_sequence: Option<String>,
-    
+
     /// Token usage information
     pub usage: Usage,
 }
@@ -91,7 +91,7 @@ pub struct AnthropicResponse {
 pub struct Message {
     /// Role of the message sender ("user", "assistant", or "system")
     pub role: String,
-    
+
     /// Content of the message (can be string or array of content blocks)
     pub content: serde_json::Value,
 }
@@ -102,11 +102,11 @@ pub struct ContentBlock {
     /// Type of content block ("text", "image", etc.)
     #[serde(rename = "type")]
     pub type_: String,
-    
+
     /// Text content (present when type is "text")
     #[serde(skip_serializing_if = "Option::is_none")]
     pub text: Option<String>,
-    
+
     /// Additional fields for other content types can be added here
     #[serde(flatten)]
     pub extra: serde_json::Map<String, serde_json::Value>,
@@ -117,7 +117,7 @@ pub struct ContentBlock {
 pub struct Usage {
     /// Number of input tokens
     pub input_tokens: u32,
-    
+
     /// Number of output tokens
     pub output_tokens: u32,
 }
@@ -128,7 +128,7 @@ pub struct StreamEvent {
     /// Type of event ("message_start", "content_block_delta", "message_delta", "message_stop")
     #[serde(rename = "type")]
     pub event_type: String,
-    
+
     /// Event data (varies by event type)
     #[serde(flatten)]
     pub data: serde_json::Value,
@@ -209,7 +209,7 @@ mod tests {
     fn test_anthropic_error_conversion() {
         let anthropic_err = AnthropicError::UnsupportedModel("invalid-model".to_string());
         let app_err: crate::error::AppError = anthropic_err.into();
-        
+
         match app_err {
             crate::error::AppError::BadRequest(msg) => {
                 assert!(msg.contains("Unsupported model: invalid-model"));
@@ -241,7 +241,7 @@ mod tests {
         let message: Message = serde_json::from_str(json).unwrap();
         assert_eq!(message.role, "user");
         assert!(message.content.is_array());
-        
+
         let content_array = message.content.as_array().unwrap();
         assert_eq!(content_array.len(), 2);
         assert_eq!(content_array[0]["type"], "text");

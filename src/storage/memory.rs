@@ -1,6 +1,6 @@
 use super::{
-    AuditLogEntry, CacheStorage, CachedValidation, DatabaseStorage,
-    RefreshTokenData, StateData, StorageResult, UserRecord,
+    AuditLogEntry, CacheStorage, CachedValidation, DatabaseStorage, RefreshTokenData, StateData,
+    StorageResult, UserRecord,
 };
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
@@ -127,7 +127,6 @@ impl CacheStorage for MemoryCacheStorage {
         self.states.remove(key);
         Ok(())
     }
-
 
     async fn clear_all(&self) -> StorageResult<()> {
         self.validations.clear();

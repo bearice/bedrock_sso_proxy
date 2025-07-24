@@ -1,9 +1,11 @@
 use crate::{
     anthropic::{
-        model_mapping::ModelMapper,
-        transform::{transform_anthropic_to_bedrock, transform_bedrock_to_anthropic, 
-                   transform_streaming_event, validate_anthropic_request},
         AnthropicRequest,
+        model_mapping::ModelMapper,
+        transform::{
+            transform_anthropic_to_bedrock, transform_bedrock_to_anthropic,
+            transform_streaming_event, validate_anthropic_request,
+        },
     },
     aws_http::AwsHttpClient,
     error::AppError,
@@ -21,8 +23,7 @@ use tracing::{error, info, warn};
 
 /// Create routes for Anthropic API endpoints
 pub fn create_anthropic_routes() -> Router<AwsHttpClient> {
-    Router::new()
-        .route("/v1/messages", post(create_message))
+    Router::new().route("/v1/messages", post(create_message))
 }
 
 /// Handle POST /v1/messages - Anthropic API format message creation
@@ -39,17 +40,15 @@ pub async fn create_message(
         .map_err(|e| AppError::BadRequest(format!("Invalid JSON request: {}", e)))?;
 
     // Validate the request format
-    validate_anthropic_request(&anthropic_request)
-        .map_err(AppError::from)?;
+    validate_anthropic_request(&anthropic_request).map_err(AppError::from)?;
 
     // Create model mapper for transformations
     let model_mapper = ModelMapper::new();
 
     // Transform Anthropic request to Bedrock format
-    let (bedrock_request, bedrock_model_id) = transform_anthropic_to_bedrock(
-        anthropic_request.clone(),
-        &model_mapper,
-    ).map_err(AppError::from)?;
+    let (bedrock_request, bedrock_model_id) =
+        transform_anthropic_to_bedrock(anthropic_request.clone(), &model_mapper)
+            .map_err(AppError::from)?;
 
     // Convert bedrock_request to bytes for AWS call
     let bedrock_body = serde_json::to_vec(&bedrock_request)
@@ -66,7 +65,8 @@ pub async fn create_message(
             bedrock_body,
             anthropic_request.model,
             model_mapper,
-        ).await
+        )
+        .await
     } else {
         handle_non_streaming_message(
             aws_http_client,
@@ -75,7 +75,8 @@ pub async fn create_message(
             bedrock_body,
             anthropic_request.model,
             model_mapper,
-        ).await
+        )
+        .await
     }
 }
 
@@ -88,7 +89,10 @@ async fn handle_non_streaming_message(
     original_model: String,
     model_mapper: ModelMapper,
 ) -> Result<Response, AppError> {
-    info!("Processing non-streaming Anthropic request for model: {}", bedrock_model_id);
+    info!(
+        "Processing non-streaming Anthropic request for model: {}",
+        bedrock_model_id
+    );
 
     // Process headers for AWS (remove authorization, etc.)
     let aws_headers = AwsHttpClient::process_headers_for_aws(&headers);
@@ -105,26 +109,30 @@ async fn handle_non_streaming_message(
 
     // Make the AWS Bedrock API call
     match aws_http_client
-        .invoke_model(&bedrock_model_id, Some(content_type), Some(accept), bedrock_body)
+        .invoke_model(
+            &bedrock_model_id,
+            Some(content_type),
+            Some(accept),
+            bedrock_body,
+        )
         .await
     {
         Ok(aws_response) => {
             info!(
                 "Successfully invoked Bedrock model {} with status {}",
-                bedrock_model_id,
-                aws_response.status
+                bedrock_model_id, aws_response.status
             );
 
             // Parse AWS response body as JSON
             let bedrock_response: serde_json::Value = serde_json::from_slice(&aws_response.body)
-                .map_err(|e| AppError::Internal(format!("Failed to parse Bedrock response: {}", e)))?;
+                .map_err(|e| {
+                    AppError::Internal(format!("Failed to parse Bedrock response: {}", e))
+                })?;
 
             // Transform Bedrock response to Anthropic format
-            let anthropic_response = transform_bedrock_to_anthropic(
-                bedrock_response,
-                &original_model,
-                &model_mapper,
-            ).map_err(AppError::from)?;
+            let anthropic_response =
+                transform_bedrock_to_anthropic(bedrock_response, &original_model, &model_mapper)
+                    .map_err(AppError::from)?;
 
             // Return JSON response
             Ok(Response::builder()
@@ -134,7 +142,10 @@ async fn handle_non_streaming_message(
                 .unwrap())
         }
         Err(err) => {
-            error!("AWS Bedrock API error for model {}: {}", bedrock_model_id, err);
+            error!(
+                "AWS Bedrock API error for model {}: {}",
+                bedrock_model_id, err
+            );
             Err(err)
         }
     }
@@ -149,7 +160,10 @@ async fn handle_streaming_message(
     original_model: String,
     model_mapper: ModelMapper,
 ) -> Result<Response, AppError> {
-    info!("Processing streaming Anthropic request for model: {}", bedrock_model_id);
+    info!(
+        "Processing streaming Anthropic request for model: {}",
+        bedrock_model_id
+    );
 
     // Extract content type and accept headers
     let content_type = headers.get("content-type").and_then(|v| v.to_str().ok());
@@ -157,7 +171,13 @@ async fn handle_streaming_message(
 
     // Call AWS Bedrock streaming API
     match aws_http_client
-        .invoke_model_with_response_stream(&bedrock_model_id, &headers, content_type, accept, bedrock_body)
+        .invoke_model_with_response_stream(
+            &bedrock_model_id,
+            &headers,
+            content_type,
+            accept,
+            bedrock_body,
+        )
         .await
     {
         Ok(aws_response) => {
@@ -207,11 +227,12 @@ async fn handle_streaming_message(
             // Add important headers from AWS response (except problematic ones)
             for (name, value) in aws_response.headers.iter() {
                 let name_str = name.as_str();
-                if name_str != "content-length" 
-                   && name_str != "transfer-encoding" 
-                   && name_str != "content-type" 
-                   && name_str != "cache-control" 
-                   && name_str != "connection" {
+                if name_str != "content-length"
+                    && name_str != "transfer-encoding"
+                    && name_str != "content-type"
+                    && name_str != "cache-control"
+                    && name_str != "connection"
+                {
                     response.headers_mut().insert(name, value.clone());
                 }
             }
@@ -221,8 +242,7 @@ async fn handle_streaming_message(
         Err(err) => {
             error!(
                 "AWS Bedrock streaming API error for model {}: {}",
-                bedrock_model_id,
-                err
+                bedrock_model_id, err
             );
             Err(err)
         }
@@ -249,7 +269,8 @@ mod tests {
             ],
             "max_tokens": 1000,
             "temperature": 0.7
-        })).unwrap()
+        }))
+        .unwrap()
     }
 
     fn create_test_streaming_request_json() -> String {
@@ -263,7 +284,8 @@ mod tests {
             ],
             "max_tokens": 1000,
             "stream": true
-        })).unwrap()
+        }))
+        .unwrap()
     }
 
     #[tokio::test]
@@ -279,7 +301,7 @@ mod tests {
             .unwrap();
 
         let response = app.oneshot(request).await.unwrap();
-        
+
         // In test mode, we expect either success or a handled error
         assert!(
             response.status() == StatusCode::OK
@@ -302,7 +324,7 @@ mod tests {
             .unwrap();
 
         let response = app.oneshot(request).await.unwrap();
-        
+
         // For streaming requests, we expect either OK with SSE headers or an error
         if response.status() == StatusCode::OK {
             assert_eq!(
@@ -344,7 +366,8 @@ mod tests {
         let incomplete_request = serde_json::to_string(&serde_json::json!({
             "model": "claude-3-sonnet-20240229",
             // Missing messages and max_tokens
-        })).unwrap();
+        }))
+        .unwrap();
 
         let request = Request::builder()
             .uri("/v1/messages")
@@ -371,7 +394,8 @@ mod tests {
                 }
             ],
             "max_tokens": 1000
-        })).unwrap();
+        }))
+        .unwrap();
 
         let request = Request::builder()
             .uri("/v1/messages")
@@ -399,7 +423,8 @@ mod tests {
             ],
             "max_tokens": 100,
             "system": "You are a helpful math tutor."
-        })).unwrap();
+        }))
+        .unwrap();
 
         let request = Request::builder()
             .uri("/v1/messages")
@@ -409,7 +434,7 @@ mod tests {
             .unwrap();
 
         let response = app.oneshot(request).await.unwrap();
-        
+
         // Should handle system prompts correctly
         assert!(
             response.status() == StatusCode::OK
@@ -438,7 +463,8 @@ mod tests {
             "top_k": 50,
             "stop_sequences": ["END"],
             "system": "You are a creative storyteller."
-        })).unwrap();
+        }))
+        .unwrap();
 
         let request = Request::builder()
             .uri("/v1/messages")
@@ -448,7 +474,7 @@ mod tests {
             .unwrap();
 
         let response = app.oneshot(request).await.unwrap();
-        
+
         // Should handle all parameters correctly
         assert!(
             response.status() == StatusCode::OK
@@ -472,7 +498,8 @@ mod tests {
                 }
             ],
             "max_tokens": 100
-        })).unwrap();
+        }))
+        .unwrap();
 
         let request = Request::builder()
             .uri("/v1/messages")
@@ -482,7 +509,7 @@ mod tests {
             .unwrap();
 
         let response = app.oneshot(request).await.unwrap();
-        
+
         // Should resolve aliases correctly
         assert!(
             response.status() == StatusCode::OK
@@ -508,7 +535,8 @@ mod tests {
                 }
             ],
             "max_tokens": 1000
-        })).unwrap();
+        }))
+        .unwrap();
 
         let request = Request::builder()
             .uri("/v1/messages")
@@ -518,7 +546,7 @@ mod tests {
             .unwrap();
 
         let response = app.oneshot(request).await.unwrap();
-        
+
         // Should handle large requests appropriately
         assert!(
             response.status() == StatusCode::OK

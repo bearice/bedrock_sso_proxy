@@ -26,7 +26,7 @@ async fn test_security_sql_injection_attempts() {
     for model_id in malicious_model_ids {
         let encoded_model_id = urlencoding::encode(model_id);
         let request = Request::builder()
-            .uri(format!("/model/{}/invoke", encoded_model_id))
+            .uri(format!("/bedrock/model/{}/invoke", encoded_model_id))
             .method("POST")
             .header("Authorization", format!("Bearer {}", token))
             .header("Content-Type", "application/json")
@@ -135,7 +135,7 @@ async fn test_security_header_injection() {
     for (header_name, header_value) in malicious_headers {
         // Note: Most HTTP libraries will reject headers with CRLF, but we test anyway
         let request_result = Request::builder()
-            .uri("/model/test-model/invoke")
+            .uri("/bedrock/model/test-model/invoke")
             .method("POST")
             .header("Authorization", format!("Bearer {}", token))
             .header("Content-Type", "application/json")
@@ -176,7 +176,7 @@ async fn test_security_invalid_content_types() {
 
     for content_type in invalid_content_types {
         let request_result = RequestBuilder::with_content_type(
-            "/model/test-model/invoke",
+            "/bedrock/model/test-model/invoke",
             Method::POST,
             &token,
             content_type,
@@ -301,7 +301,7 @@ async fn test_security_http_method_tampering() {
 
     for method in methods {
         let request = RequestBuilder::custom_request(
-            "/model/test-model/invoke",
+            "/bedrock/model/test-model/invoke",
             method.clone(),
             &token,
             &[],

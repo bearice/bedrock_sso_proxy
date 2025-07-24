@@ -270,7 +270,6 @@ impl Default for MetricsConfig {
     }
 }
 
-
 impl Default for RedisStorageConfig {
     fn default() -> Self {
         Self {
@@ -807,14 +806,14 @@ logging:
         assert_eq!(config.jwt.secret, "test-secret");
         assert_eq!(config.jwt.algorithm, "RS256");
     }
-    
+
     #[test]
     fn test_logging_config_default_extended() {
         let logging_config = LoggingConfig::default();
         assert_eq!(logging_config.level, "info");
-        assert_eq!(logging_config.log_request, true);
+        assert!(logging_config.log_request);
     }
-    
+
     #[test]
     #[serial]
     fn test_config_with_custom_logging() {
@@ -831,7 +830,7 @@ logging:
         let config = Config::load_from_file(temp_file.path()).unwrap();
 
         assert_eq!(config.logging.level, "debug");
-        assert_eq!(config.logging.log_request, false);
+        assert!(!config.logging.log_request);
     }
 
     #[test]

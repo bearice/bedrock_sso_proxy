@@ -27,11 +27,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - `GET /health` - Public health check endpoint
 
 **Bedrock Format (AWS Native):**
-- `POST /model/{model_id}/invoke` - Standard model invocation (JWT protected)
-- `POST /model/{model_id}/invoke-with-response-stream` - Streaming responses (JWT protected)
+- `POST /bedrock/model/{model_id}/invoke` - Standard model invocation (JWT protected)
+- `POST /bedrock/model/{model_id}/invoke-with-response-stream` - Streaming responses (JWT protected)
 
 **Anthropic Format (Standard API):**
-- `POST /v1/messages` - Standard Anthropic API with streaming support (JWT protected)
+- `POST /anthropic/v1/messages` - Standard Anthropic API with streaming support (JWT protected)
 
 The proxy now supports both AWS Bedrock and standard Anthropic API formats for maximum compatibility.
 
@@ -39,7 +39,7 @@ The proxy now supports both AWS Bedrock and standard Anthropic API formats for m
 
 **Bedrock Format:**
 ```bash
-curl -X POST "http://localhost:3000/model/anthropic.claude-3-sonnet-20240229-v1:0/invoke" \
+curl -X POST "http://localhost:3000/bedrock/model/anthropic.claude-3-sonnet-20240229-v1:0/invoke" \
   -H "Authorization: Bearer YOUR_JWT_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
@@ -51,7 +51,7 @@ curl -X POST "http://localhost:3000/model/anthropic.claude-3-sonnet-20240229-v1:
 
 **Anthropic Format:**
 ```bash
-curl -X POST "http://localhost:3000/v1/messages" \
+curl -X POST "http://localhost:3000/anthropic/v1/messages" \
   -H "Authorization: Bearer YOUR_JWT_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
@@ -63,7 +63,7 @@ curl -X POST "http://localhost:3000/v1/messages" \
 
 **Anthropic Format (Streaming):**
 ```bash
-curl -X POST "http://localhost:3000/v1/messages" \
+curl -X POST "http://localhost:3000/anthropic/v1/messages" \
   -H "Authorization: Bearer YOUR_JWT_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{

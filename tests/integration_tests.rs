@@ -93,7 +93,7 @@ async fn test_integration_malformed_authorization_header() {
 
     for header_value in malformed_headers {
         let request = Request::builder()
-            .uri("/model/test-model/invoke")
+            .uri("/bedrock/model/test-model/invoke")
             .method("POST")
             .header("Authorization", header_value)
             .header("Content-Type", "application/json")

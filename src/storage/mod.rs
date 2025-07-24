@@ -52,7 +52,6 @@ pub struct StateData {
     pub expires_at: DateTime<Utc>,
 }
 
-
 /// Refresh token data for database persistence
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct RefreshTokenData {
@@ -124,7 +123,6 @@ pub trait CacheStorage: Send + Sync {
 
     /// Delete CSRF state token
     async fn delete_state(&self, key: &str) -> StorageResult<()>;
-
 
     /// Clear all cache data (useful for testing)
     async fn clear_all(&self) -> StorageResult<()>;

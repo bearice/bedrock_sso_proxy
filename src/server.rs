@@ -10,13 +10,16 @@ use crate::{
     health::HealthService,
     metrics,
     routes::{
-        create_anthropic_routes, create_auth_routes, create_frontend_router,
-        create_health_routes, create_protected_bedrock_routes,
+        create_anthropic_routes, create_auth_routes, create_bedrock_routes, create_frontend_router,
+        create_health_routes,
     },
     shutdown::{HttpServerShutdown, ShutdownCoordinator, ShutdownManager, StorageShutdown},
     storage::{StorageHealthChecker, factory::StorageFactory},
 };
-use axum::{Router, extract::DefaultBodyLimit, middleware, body::Body, http::Request, middleware::Next, response::Response};
+use axum::{
+    Router, body::Body, extract::DefaultBodyLimit, http::Request, middleware, middleware::Next,
+    response::Response,
+};
 use std::{net::SocketAddr, sync::Arc, time::Duration};
 use tokio::net::TcpListener;
 use tracing::{error, info, trace};
@@ -136,8 +139,9 @@ impl Server {
         let serve_future = axum::serve(
             listener,
             // Use socket addresses in the app
-            app.into_make_service_with_connect_info::<SocketAddr>()
-        ).with_graceful_shutdown(async move {
+            app.into_make_service_with_connect_info::<SocketAddr>(),
+        )
+        .with_graceful_shutdown(async move {
             let mut rx = shutdown_rx;
             let _ = rx.changed().await;
             info!("Graceful shutdown initiated");
@@ -174,8 +178,9 @@ impl Server {
             // Health check routes (no auth required)
             .merge(create_health_routes().with_state(health_service))
             // Protected Bedrock API routes
-            .merge(
-                create_protected_bedrock_routes()
+            .nest(
+                "/bedrock",
+                create_bedrock_routes()
                     .with_state(aws_http_client.clone())
                     .layer(DefaultBodyLimit::max(MAX_BODY_SIZE))
                     .layer(middleware::from_fn_with_state(
@@ -184,7 +189,8 @@ impl Server {
                     )),
             )
             // Protected Anthropic API routes
-            .merge(
+            .nest(
+                "/anthropic",
                 create_anthropic_routes()
                     .with_state(aws_http_client)
                     .layer(DefaultBodyLimit::max(MAX_BODY_SIZE))
@@ -214,10 +220,11 @@ impl Server {
                 let path = req.uri().path().to_string();
 
                 // Skip logging for static files and frontend routes
-                // Only log API routes that start with /model, /auth, or /health
-                let is_api_route = path.starts_with("/model") ||
-                                   path.starts_with("/auth") ||
-                                   path.starts_with("/health");
+                // Only log API routes that start with /bedrock, /anthropic, /auth, or /health
+                let is_api_route = path.starts_with("/bedrock")
+                    || path.starts_with("/anthropic")
+                    || path.starts_with("/auth")
+                    || path.starts_with("/health");
 
                 if is_api_route {
                     // Get IP from extensions if available (from ConnectInfo)
@@ -292,7 +299,6 @@ impl Server {
         app
     }
 
-
     // For testing - OAuth always enabled with in-memory storage
     #[cfg(any(test, feature = "tests"))]
     pub async fn create_test_app(
@@ -338,7 +344,7 @@ impl Server {
             aws_http_client,
             oauth_service,
             health_service,
-            false, // no metrics in tests
+            false,                 // no metrics in tests
             tracing::Level::TRACE, // use trace level in tests
         );
 
@@ -457,7 +463,7 @@ mod tests {
 
         let token = create_test_token(&config.jwt.secret, "user123", 3600);
         let request = Request::builder()
-            .uri("/model/anthropic.claude-v2/invoke")
+            .uri("/bedrock/model/anthropic.claude-v2/invoke")
             .method("POST")
             .header("Authorization", format!("Bearer {}", token))
             .header("Content-Type", "application/json")
@@ -492,7 +498,7 @@ mod tests {
             .unwrap();
 
         let request = Request::builder()
-            .uri("/model/anthropic.claude-v2/invoke")
+            .uri("/bedrock/model/anthropic.claude-v2/invoke")
             .method("POST")
             .header("Content-Type", "application/json")
             .body(Body::from(

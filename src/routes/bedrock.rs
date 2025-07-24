@@ -9,7 +9,7 @@ use axum::{
 };
 use futures_util::StreamExt;
 
-pub fn create_protected_bedrock_routes() -> Router<AwsHttpClient> {
+pub fn create_bedrock_routes() -> Router<AwsHttpClient> {
     Router::new()
         .route("/model/{model_id}/invoke", post(invoke_model))
         .route(
@@ -17,7 +17,6 @@ pub fn create_protected_bedrock_routes() -> Router<AwsHttpClient> {
             post(invoke_model_with_response_stream),
         )
 }
-
 
 async fn invoke_model(
     Path(model_id): Path<String>,
@@ -154,11 +153,10 @@ mod tests {
     };
     use tower::ServiceExt;
 
-
     #[tokio::test]
     async fn test_invoke_model_empty_model_id() {
         let aws_http_client = AwsHttpClient::new_test();
-        let app = create_protected_bedrock_routes().with_state(aws_http_client);
+        let app = create_bedrock_routes().with_state(aws_http_client);
 
         let request = Request::builder()
             .uri("/model/%20/invoke") // URL-encoded space
@@ -174,7 +172,7 @@ mod tests {
     #[tokio::test]
     async fn test_invoke_model_with_custom_headers() {
         let aws_http_client = AwsHttpClient::new_test();
-        let app = create_protected_bedrock_routes().with_state(aws_http_client);
+        let app = create_bedrock_routes().with_state(aws_http_client);
 
         let request = Request::builder()
             .uri("/model/anthropic.claude-v2/invoke")
@@ -199,7 +197,7 @@ mod tests {
     #[tokio::test]
     async fn test_invoke_model_streaming_with_empty_model_id() {
         let aws_http_client = AwsHttpClient::new_test();
-        let app = create_protected_bedrock_routes().with_state(aws_http_client);
+        let app = create_bedrock_routes().with_state(aws_http_client);
 
         let request = Request::builder()
             .uri("/model//invoke-with-response-stream") // Empty model ID
@@ -216,7 +214,7 @@ mod tests {
     #[tokio::test]
     async fn test_invoke_model_with_response_stream_success() {
         let aws_http_client = AwsHttpClient::new_test();
-        let app = create_protected_bedrock_routes().with_state(aws_http_client);
+        let app = create_bedrock_routes().with_state(aws_http_client);
 
         let request = Request::builder()
             .uri("/model/anthropic.claude-v2/invoke-with-response-stream")
@@ -239,7 +237,7 @@ mod tests {
     #[tokio::test]
     async fn test_invoke_model_with_large_body() {
         let aws_http_client = AwsHttpClient::new_test();
-        let app = create_protected_bedrock_routes().with_state(aws_http_client);
+        let app = create_bedrock_routes().with_state(aws_http_client);
 
         // Create a large JSON body (simulating large input)
         let large_content = "A".repeat(1000);
