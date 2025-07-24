@@ -9,6 +9,7 @@ use crate::health::{HealthCheckResult, HealthChecker};
 pub mod database;
 pub mod factory;
 pub mod memory;
+pub mod migrations;
 pub mod redis;
 
 pub use factory::StorageFactory;
