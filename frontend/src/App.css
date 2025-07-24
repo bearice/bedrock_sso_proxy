@@ -186,8 +186,10 @@ body {
 }
 
 .oauth-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
   padding: 1rem 1.5rem;
-  text-align: center;
   font-weight: 600;
   border-radius: 12px;
   transition: all 0.2s ease;
@@ -195,6 +197,8 @@ body {
   color: white;
   position: relative;
   overflow: hidden;
+  border: none;
+  cursor: pointer;
 }
 
 .oauth-btn:hover {
@@ -203,6 +207,8 @@ body {
 }
 
 .oauth-btn .icon {
+  display: flex;
+  align-items: center;
   font-size: 1.25rem;
   margin-right: 0.5rem;
 }
