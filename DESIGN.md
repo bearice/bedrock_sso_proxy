@@ -1185,19 +1185,18 @@ BEDROCK_OAUTH__PROVIDERS__GOOGLE__SCOPES=["openid","email","profile","calendar"]
 
 ## 🎯 **PROJECT STATUS SUMMARY**
 
-**Overall Progress**: **~85% Complete** - Production-ready OAuth SSO proxy with
-full functionality
+**Overall Progress**: **~90% Complete** - Production-ready OAuth SSO proxy with dual API format support
 
-### **✅ COMPLETED PHASES (6/9)**
+### **✅ COMPLETED PHASES (8/9)**
 
-- **Phase 1-6**: Core infrastructure, auth, AWS integration, streaming, testing
+- **Phase 1-6**: Core infrastructure, auth, AWS integration, streaming, testing ✅
+- **Phase 7**: OAuth integration with React frontend ✅  
+- **Phase 8**: Production readiness (metrics, graceful shutdown) ✅
+- **Phase 8.1**: Anthropic API format support (dual format compatibility) ✅
 
-### **🔄 IN PROGRESS (Phase 7 & 8)**
+### **🔄 IN PROGRESS (Phase 8 - Minor Remaining)**
 
-- **Phase 7**: Missing professional logging system
-- **Phase 8**: ~60% complete (metrics, graceful shutdown ✅)
-- **Remaining**: Security headers, request/response logging, API documentation,
-  performance optimization
+- **Phase 8**: ~95% complete - minor production optimizations remaining
 
 ### **❌ PENDING (Phase 9)**
 
@@ -1205,18 +1204,16 @@ full functionality
 
 ### **🏆 KEY ACHIEVEMENTS**
 
-- **152 Tests Passing**: 130 unit + 7 integration + 10 security + 5 storage
+- **117 Tests Passing**: 100 unit + 7 integration + 10 security tests
+- **Dual API Format Support**: Both AWS Bedrock and Anthropic API formats
 - **Complete OAuth System**: Backend + Frontend with 6 built-in providers
-- **Production Architecture**: Error handling, logging, health checks, metrics,
-  graceful shutdown
+- **Production Architecture**: Error handling, logging, health checks, metrics, graceful shutdown
 - **Security**: JWT validation, OAuth 2.0, CSRF protection, token rotation
-- **Prometheus Metrics**: HTTP requests, JWT validation, OAuth operations, AWS
-  Bedrock calls
-- **Graceful Shutdown**: Signal handling with component coordination and timeout
-  management
+- **Prometheus Metrics**: HTTP requests, JWT validation, OAuth operations, AWS Bedrock calls
+- **Graceful Shutdown**: Signal handling with component coordination and timeout management
+- **Enhanced Compatibility**: Works with more LLM gateways and Anthropic SDKs
 
-**The system is fully production-ready with comprehensive monitoring and
-reliability features!**
+**The system is fully production-ready with comprehensive monitoring, reliability features, and dual API format support for maximum compatibility!**
 
 ---
 
@@ -1353,7 +1350,7 @@ frontend, backward compatibility, and production-ready features
 - [x] Metrics collection (Prometheus metrics server with comprehensive tracking)
 - [x] Graceful shutdown handling (Signal handling with component coordination)
 
-**Deliverable**: Production-ready application with monitoring, metrics, and graceful shutdown
+**Deliverable**: ✅ Production-ready application with monitoring, metrics, and graceful shutdown
 
 ### Phase 8.1: Anthropic API Format Support ✅ COMPLETED
 
@@ -1382,7 +1379,7 @@ testing implemented and fully tested
   ANTHROPIC_BEDROCK_BASE_URL
 - ✅ **Easier Client Migration**: Supports both formats simultaneously
 
-### Phase 8.5: Additional Features ❌ PENDING
+### Phase 8.5: Additional Features ❌ PENDING (Optional)
 
 **Goal**: Enhanced functionality and cost tracking
 
@@ -1392,6 +1389,8 @@ testing implemented and fully tested
       prefixes
 
 **Deliverable**: Cost tracking, global deployment support, and simplified architecture
+
+**Note**: These features are optional enhancements - the system is already production-ready without them.
 
 ### Phase 9: Release & Deployment ❌ PENDING
 
@@ -1576,6 +1575,7 @@ Track detailed usage metrics per user per model to enable:
 - **Usage analytics and optimization**
 - **Quota management and alerts**
 - **Performance monitoring**
+- **User and admin dashboards**
 
 #### Data Model
 
@@ -1585,6 +1585,7 @@ pub struct UsageRecord {
     pub id: Option<i32>,
     pub user_id: i32,              // Foreign key to users table
     pub model_id: String,          // Original model ID (with region prefix)
+    pub endpoint_type: String,     // "bedrock" or "anthropic"
     pub region: String,            // Determined AWS region
     pub request_time: DateTime<Utc>,
     pub input_tokens: u32,         // Tokens in request
@@ -1593,6 +1594,7 @@ pub struct UsageRecord {
     pub response_time_ms: u32,     // Response time in milliseconds
     pub success: bool,             // Whether request succeeded
     pub error_message: Option<String>, // Error details if failed
+    pub cost_usd: Option<Decimal>, // Calculated cost in USD
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -1607,6 +1609,16 @@ pub struct UsageSummary {
     pub total_tokens: u64,
     pub avg_response_time_ms: f32,
     pub success_rate: f32,
+    pub estimated_cost: Decimal,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct ModelCost {
+    pub id: Option<i32>,
+    pub model_id: String,
+    pub input_cost_per_1k_tokens: Decimal,
+    pub output_cost_per_1k_tokens: Decimal,
+    pub updated_at: DateTime<Utc>,
 }
 ```
 
@@ -1618,6 +1630,7 @@ CREATE TABLE usage_records (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     user_id INTEGER NOT NULL,
     model_id TEXT NOT NULL,
+    endpoint_type TEXT NOT NULL,
     region TEXT NOT NULL,
     request_time DATETIME NOT NULL,
     input_tokens INTEGER NOT NULL,
@@ -1626,6 +1639,7 @@ CREATE TABLE usage_records (
     response_time_ms INTEGER NOT NULL,
     success BOOLEAN NOT NULL,
     error_message TEXT,
+    cost_usd DECIMAL(10,6),
     FOREIGN KEY (user_id) REFERENCES users (id),
     INDEX idx_user_model_time (user_id, model_id, request_time),
     INDEX idx_request_time (request_time)
@@ -1644,8 +1658,18 @@ CREATE TABLE usage_summaries (
     total_tokens BIGINT NOT NULL,
     avg_response_time_ms REAL NOT NULL,
     success_rate REAL NOT NULL,
+    estimated_cost DECIMAL(10,6),
     UNIQUE(user_id, model_id, period_start),
     FOREIGN KEY (user_id) REFERENCES users (id)
+);
+
+-- Model cost configuration
+CREATE TABLE model_costs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    model_id TEXT NOT NULL UNIQUE,
+    input_cost_per_1k_tokens DECIMAL(10,6) NOT NULL,
+    output_cost_per_1k_tokens DECIMAL(10,6) NOT NULL,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 ```
 
@@ -1654,12 +1678,109 @@ CREATE TABLE usage_summaries (
 ```rust
 // User usage endpoints
 GET /api/v1/usage/summary?period=day|week|month&model=*
-GET /api/v1/usage/detailed?start=date&end=date&model=*
+GET /api/v1/usage/history?start=date&end=date&model=*&limit=100&offset=0
+GET /api/v1/usage/models  // List of models used by the user
+GET /api/v1/usage/export?period=day|week|month&format=csv|json
 
 // Admin usage endpoints (requires admin privileges)
+GET /api/v1/admin/users  // List all users with usage stats
+GET /api/v1/admin/usage/overview  // System-wide usage statistics
 GET /api/v1/admin/usage/users/{user_id}?period=day|week|month
-GET /api/v1/admin/usage/models/{model_id}?period=day|week|month
-GET /api/v1/admin/usage/aggregate?period=day|week|month
+GET /api/v1/admin/usage/models  // Model usage analytics across all users
+GET /api/v1/admin/costs  // Cost analytics and summaries
+PUT /api/v1/admin/costs/models  // Update model pricing
+```
+
+#### Frontend Dashboard Components
+
+##### User Dashboard
+```typescript
+// User-facing usage tracking dashboard
+interface UserDashboard {
+  // Summary cards showing key metrics
+  UsageSummary: {
+    totalRequests: number;
+    totalTokens: number;
+    avgResponseTime: number;
+    estimatedCost: number;
+  };
+  
+  // Interactive charts for usage visualization
+  UsageChart: {
+    period: 'day' | 'week' | 'month';
+    metric: 'requests' | 'tokens' | 'cost';
+    data: TimeSeriesData[];
+  };
+  
+  // Model-specific usage breakdown
+  ModelUsageBreakdown: {
+    modelId: string;
+    requests: number;
+    tokens: number;
+    cost: number;
+    percentage: number;
+  }[];
+  
+  // Detailed usage history with filtering
+  UsageHistory: {
+    records: UsageRecord[];
+    filters: {
+      dateRange: DateRange;
+      model: string;
+      success: boolean;
+    };
+    pagination: PaginationState;
+  };
+  
+  // Data export functionality
+  ExportOptions: {
+    format: 'csv' | 'json';
+    period: DateRange;
+  };
+}
+```
+
+##### Admin Dashboard
+```typescript
+// Admin-facing system management dashboard
+interface AdminDashboard {
+  // System overview metrics
+  SystemOverview: {
+    totalUsers: number;
+    activeUsers: number;
+    totalRequests: number;
+    totalRevenue: number;
+    systemHealth: HealthStatus;
+  };
+  
+  // User management interface
+  UserManagement: {
+    users: UserWithStats[];
+    sortBy: 'email' | 'usage' | 'cost' | 'lastActive';
+    filters: UserFilters;
+    actions: {
+      viewDetails: (userId: number) => void;
+      exportUserData: (userId: number) => void;
+      manageAccess: (userId: number) => void;
+    };
+  };
+  
+  // Cost management and analytics
+  CostAnalytics: {
+    modelCosts: ModelCost[];
+    revenueByModel: RevenueData[];
+    costTrends: TimeSeriesData[];
+    updateModelPricing: (modelId: string, costs: ModelCost) => void;
+  };
+  
+  // System analytics and insights
+  SystemAnalytics: {
+    popularModels: ModelUsageRanking[];
+    usagePatterns: UsagePattern[];
+    performanceMetrics: PerformanceData[];
+    errorAnalysis: ErrorStats[];
+  };
+}
 ```
 
 #### Usage Tracking Integration
@@ -1668,43 +1789,66 @@ GET /api/v1/admin/usage/aggregate?period=day|week|month
 // Middleware for capturing usage data
 pub async fn usage_tracking_middleware(
     claims: Claims,
-    req: Request,
+    req: Request<Body>,
     next: Next,
 ) -> Result<Response, AppError> {
     let start_time = Instant::now();
-    let model_id = extract_model_id(&req).unwrap_or_default();
+    
+    // Extract request metadata
+    let model_id = extract_model_id(&req);
+    let endpoint_type = determine_endpoint_type(&req);
     let region = determine_region(&model_id);
-
-    // Count input tokens from request body
-    let input_tokens = count_tokens_from_request(&req).await?;
-
+    
+    // Capture request body for token counting
+    let (parts, body) = req.into_parts();
+    let body_bytes = hyper::body::to_bytes(body).await?;
+    let input_tokens = TokenCounter::count_request_tokens(&body_bytes).await?;
+    
+    // Reconstruct request
+    let req = Request::from_parts(parts, Body::from(body_bytes));
+    
+    // Process request
     let response = next.run(req).await;
     let response_time_ms = start_time.elapsed().as_millis() as u32;
-
-    // Count output tokens from response
-    let output_tokens = count_tokens_from_response(&response).await?;
-
+    
+    // Extract response body for token counting
+    let (parts, body) = response.into_parts();
+    let body_bytes = hyper::body::to_bytes(body).await?;
+    let output_tokens = TokenCounter::count_response_tokens(&parts, &body_bytes).await?;
+    
+    // Calculate cost if model pricing is configured
+    let cost_usd = calculate_cost(&model_id, input_tokens, output_tokens).await.ok();
+    
     // Record usage asynchronously (non-blocking)
+    let user_id = get_user_id_from_claims(&claims).await?;
+    let usage_record = UsageRecord {
+        id: None,
+        user_id,
+        model_id,
+        endpoint_type,
+        region,
+        request_time: Utc::now(),
+        input_tokens,
+        output_tokens,
+        total_tokens: input_tokens + output_tokens,
+        response_time_ms,
+        success: parts.status.is_success(),
+        error_message: if parts.status.is_success() { None } else { Some("Request failed".to_string()) },
+        cost_usd,
+    };
+    
+    // Store usage record asynchronously
     tokio::spawn(async move {
-        let usage_record = UsageRecord {
-            id: None,
-            user_id: get_user_id_from_claims(&claims).await.unwrap_or(0),
-            model_id,
-            region,
-            request_time: Utc::now(),
-            input_tokens,
-            output_tokens,
-            total_tokens: input_tokens + output_tokens,
-            response_time_ms,
-            success: response.status().is_success(),
-            error_message: if response.status().is_success() { None } else { Some("Request failed".to_string()) },
-        };
-
         if let Err(e) = store_usage_record(&usage_record).await {
-            warn!("Failed to store usage record: {}", e);
+            tracing::warn!("Failed to store usage record: {}", e);
         }
+        
+        // Update Prometheus metrics
+        record_usage_metrics(&usage_record);
     });
-
+    
+    // Reconstruct response
+    let response = Response::from_parts(parts, Body::from(body_bytes));
     Ok(response)
 }
 ```
@@ -1712,23 +1856,93 @@ pub async fn usage_tracking_middleware(
 #### Token Counting
 
 ```rust
-// Token counting from AWS Bedrock response headers or body analysis
-pub async fn count_tokens_from_response(response: &Response) -> Result<u32, AppError> {
-    // Method 1: Check for AWS Bedrock token count headers
-    if let Some(token_count) = response.headers().get("x-amzn-bedrock-output-token-count") {
-        return Ok(token_count.to_str()?.parse()?);
-    }
+// Token counting service for accurate usage tracking
+pub struct TokenCounter;
 
-    // Method 2: Parse from response body (model-specific)
-    let body = response.body();
-    match extract_token_count_from_body(body).await {
-        Ok(count) => Ok(count),
-        Err(_) => {
-            // Method 3: Estimate based on text length
-            Ok(estimate_token_count_from_text(body).await?)
+impl TokenCounter {
+    // Count tokens from Anthropic/Bedrock request
+    pub async fn count_request_tokens(body: &[u8]) -> Result<u32, AppError> {
+        let request: serde_json::Value = serde_json::from_slice(body)?;
+        
+        // Extract messages and system prompt
+        let messages = request["messages"].as_array().unwrap_or(&vec![]);
+        let system = request["system"].as_str().unwrap_or("");
+        
+        // Use tiktoken or simple estimation (4 chars ≈ 1 token)
+        let mut token_count = estimate_tokens(system);
+        
+        for message in messages {
+            if let Some(content) = message["content"].as_str() {
+                token_count += estimate_tokens(content);
+            }
         }
+        
+        Ok(token_count)
+    }
+    
+    // Extract tokens from AWS Bedrock response
+    pub async fn count_response_tokens(
+        response: &http::response::Parts,
+        body: &[u8]
+    ) -> Result<u32, AppError> {
+        // Method 1: Check AWS headers
+        if let Some(token_header) = response.headers.get("x-amzn-bedrock-output-token-count") {
+            if let Ok(count) = token_header.to_str()?.parse::<u32>() {
+                return Ok(count);
+            }
+        }
+        
+        // Method 2: Parse from response body
+        let response_data: serde_json::Value = serde_json::from_slice(body)?;
+        
+        // Extract from usage field
+        if let Some(usage) = response_data["usage"].as_object() {
+            if let Some(output_tokens) = usage["output_tokens"].as_u64() {
+                return Ok(output_tokens as u32);
+            }
+        }
+        
+        // Method 3: Estimate from response content
+        if let Some(content) = response_data["content"].as_array() {
+            let mut total_chars = 0;
+            for item in content {
+                if let Some(text) = item["text"].as_str() {
+                    total_chars += text.len();
+                }
+            }
+            return Ok(estimate_tokens_from_chars(total_chars));
+        }
+        
+        Ok(0)
     }
 }
+```
+
+#### Configuration
+
+```yaml
+# Usage tracking configuration
+usage_tracking:
+  enabled: true
+  batch_size: 100
+  flush_interval: 60  # seconds
+  retention_days: 365
+  enable_detailed_logging: true
+  
+  # Cost tracking configuration
+  cost_tracking:
+    enabled: true
+    # Default model costs (can be overridden via admin API)
+    default_costs:
+      "anthropic.claude-3-sonnet-20240229-v1:0":
+        input_cost_per_1k_tokens: 0.003
+        output_cost_per_1k_tokens: 0.015
+      "anthropic.claude-3-opus-20240229-v1:0":
+        input_cost_per_1k_tokens: 0.015
+        output_cost_per_1k_tokens: 0.075
+      "anthropic.claude-3-haiku-20240307-v1:0":
+        input_cost_per_1k_tokens: 0.00025
+        output_cost_per_1k_tokens: 0.00125
 ```
 
 ### 3. Multi-Region Support
@@ -1928,16 +2142,44 @@ pub async fn multi_region_health_check(
 4. **Testing**: Update/remove 15 rate limiting tests
 5. **Documentation**: Update configuration examples
 
-#### Phase 8.5.2: Token Usage Tracking (6-8 hours)
+#### Phase 8.5.2: Token Usage Tracking with Dashboards (18-25 hours)
 
+**Backend Implementation (8-10 hours)**
 1. **Database Schema**: Add usage tracking tables and migrations
 2. **Storage Layer**: Implement usage recording and querying methods
-3. **Middleware**: Add usage tracking middleware to capture request/response
-   data
-4. **API Endpoints**: Implement usage summary and detailed reporting endpoints
-5. **Token Counting**: Implement token counting from AWS responses
-6. **Testing**: Add comprehensive usage tracking tests
-7. **Documentation**: Usage tracking API documentation
+3. **Token Counting**: Implement accurate token counting from requests/responses
+4. **Usage Middleware**: Add middleware to capture usage data
+5. **API Endpoints**: Implement user and admin usage endpoints
+6. **Cost Tracking**: Add model pricing and cost calculation
+7. **Metrics Integration**: Connect with Prometheus metrics
+8. **Testing**: Comprehensive backend tests
+
+**Frontend Implementation (10-15 hours)**
+1. **User Dashboard Components**:
+   - Usage summary cards with key metrics
+   - Interactive usage charts (requests, tokens, costs)
+   - Model usage breakdown and analytics
+   - Usage history with filtering and pagination
+   - Data export functionality (CSV/JSON)
+
+2. **Admin Dashboard Components**:
+   - System overview with health metrics
+   - User management interface
+   - Cost management and model pricing
+   - System analytics and insights
+   - Batch operations and controls
+
+3. **Shared Components**:
+   - Date range picker
+   - Loading states and error handling
+   - Export buttons and utilities
+   - Real-time data updates
+
+4. **Styling and UX**:
+   - Responsive design for all screen sizes
+   - Dark mode support
+   - Accessibility compliance
+   - Performance optimization
 
 #### Phase 8.5.3: Multi-Region Support (3-4 hours)
 
@@ -1950,11 +2192,12 @@ pub async fn multi_region_health_check(
 6. **Testing**: Add multi-region routing and fallback tests
 7. **Documentation**: Multi-region configuration and usage guide
 
-**Total Estimated Effort**: 10-14 hours
+**Total Estimated Effort**: 23-32 hours
 
-- **Development**: 8-12 hours
-- **Testing**: 2-3 hours
-- **Documentation**: 1 hour
+- **Backend Development**: 8-10 hours
+- **Frontend Development**: 10-15 hours
+- **Multi-Region Support**: 3-4 hours
+- **Testing & Integration**: 2-3 hours
 
 ## Client Integration Guide
 
@@ -2029,21 +2272,48 @@ curl -X POST "https://your-proxy-domain.com/auth/refresh" \
   -d '{"refresh_token": "your_refresh_token"}'
 ```
 
-## Frontend Implementation (Future Phase)
+## Frontend Implementation ✅ COMPLETED
 
-### Simple HTML/JS Frontend
+### React Frontend with OAuth Integration
 
-- **OAuth Flow**: Handle redirect, display tokens, show setup instructions
-- **Provider Selection**: List available providers from `/auth/providers`
-- **Token Display**: Show access token and refresh token
-- **Setup Guide**: Copy-paste instructions for claude-code
-- **Token Management**: Basic token validation and refresh
+The frontend has been fully implemented with React 18, TypeScript, and Vite, providing:
 
-### Features for Later Implementation
+**Completed Features:**
+- ✅ **OAuth Flow**: Full OAuth provider integration with callback handling
+- ✅ **Provider Selection**: Dynamic provider list from `/auth/providers`
+- ✅ **Token Display**: Secure display of access and refresh tokens
+- ✅ **Setup Guide**: Comprehensive Claude Code setup instructions
+- ✅ **Token Management**: Automatic refresh and validation
+- ✅ **Copy-to-clipboard**: One-click copy for tokens and commands
+- ✅ **Responsive Design**: Mobile-friendly interface
+- ✅ **Error Handling**: Graceful error states and user feedback
+- ✅ **Loading States**: Professional loading indicators
+- ✅ **Route Protection**: Secure routing with authentication guards
 
-- [ ] Simple HTML page with OAuth provider buttons
-- [ ] OAuth redirect handling with token display
-- [ ] Claude Code setup instructions generator
-- [ ] Token validation and refresh UI
-- [ ] Provider configuration examples
-- [ ] Copy-to-clipboard functionality for tokens
+**Technical Stack:**
+- **Framework**: React 18 with TypeScript
+- **Build Tool**: Vite for fast development and optimized builds
+- **Routing**: React Router v7 for navigation
+- **Icons**: Lucide React for professional UI icons
+- **Styling**: Custom CSS with responsive design
+
+**Pages Implemented:**
+- **LoginPage**: OAuth provider selection and authentication
+- **DashboardPage**: Token management and API usage instructions
+- **CallbackPage**: OAuth callback handling and token generation
+
+### Upcoming Dashboard Enhancements (Phase 8.5.2)
+
+The existing frontend will be extended with usage tracking dashboards:
+
+**User Dashboard Additions:**
+- Usage analytics and visualization
+- Cost tracking and estimates
+- Model usage breakdown
+- Historical data with export options
+
+**Admin Dashboard (New):**
+- System-wide usage analytics
+- User management interface
+- Cost configuration and tracking
+- Performance monitoring

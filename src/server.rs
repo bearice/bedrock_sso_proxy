@@ -176,7 +176,7 @@ impl Server {
             // OAuth authentication routes (no auth required)
             .nest("/auth", create_auth_routes().with_state(oauth_service))
             // Health check routes (no auth required)
-            .nest("/health",create_health_routes().with_state(health_service))
+            .nest("/health", create_health_routes().with_state(health_service))
             // Protected Bedrock API routes
             .nest(
                 "/bedrock",

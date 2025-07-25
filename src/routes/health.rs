@@ -63,10 +63,7 @@ mod tests {
         let health_service = create_test_health_service().await;
         let app = create_health_routes().with_state(health_service);
 
-        let request = Request::builder()
-            .uri("/")
-            .body(Body::empty())
-            .unwrap();
+        let request = Request::builder().uri("/").body(Body::empty()).unwrap();
 
         let response = app.oneshot(request).await.unwrap();
         assert_eq!(response.status(), StatusCode::OK);

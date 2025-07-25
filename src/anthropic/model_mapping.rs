@@ -6,36 +6,81 @@ use std::sync::LazyLock;
 /// This provides the latest Claude model mappings as of January 2025
 static DEFAULT_MODEL_MAPPING: LazyLock<HashMap<&'static str, &'static str>> = LazyLock::new(|| {
     let mut map = HashMap::new();
-    
+
     // Claude 4 Models (Latest)
-    map.insert("claude-opus-4-20250514", "anthropic.claude-opus-4-20250514-v1:0");
+    map.insert(
+        "claude-opus-4-20250514",
+        "anthropic.claude-opus-4-20250514-v1:0",
+    );
     map.insert("claude-opus-4-0", "anthropic.claude-opus-4-20250514-v1:0");
-    map.insert("claude-sonnet-4-20250514", "anthropic.claude-sonnet-4-20250514-v1:0");
-    map.insert("claude-sonnet-4-0", "anthropic.claude-sonnet-4-20250514-v1:0");
-    
+    map.insert(
+        "claude-sonnet-4-20250514",
+        "anthropic.claude-sonnet-4-20250514-v1:0",
+    );
+    map.insert(
+        "claude-sonnet-4-0",
+        "anthropic.claude-sonnet-4-20250514-v1:0",
+    );
+
     // Claude 3.7 Models
-    map.insert("claude-3-7-sonnet-20250219", "anthropic.claude-3-7-sonnet-20250219-v1:0");
-    map.insert("claude-3-7-sonnet-latest", "anthropic.claude-3-7-sonnet-20250219-v1:0");
-    
+    map.insert(
+        "claude-3-7-sonnet-20250219",
+        "anthropic.claude-3-7-sonnet-20250219-v1:0",
+    );
+    map.insert(
+        "claude-3-7-sonnet-latest",
+        "anthropic.claude-3-7-sonnet-20250219-v1:0",
+    );
+
     // Claude 3.5 Models
-    map.insert("claude-3-5-sonnet-20241022", "anthropic.claude-3-5-sonnet-20241022-v2:0");
-    map.insert("claude-3-5-sonnet-latest", "anthropic.claude-3-5-sonnet-20241022-v2:0");
-    map.insert("claude-3-5-sonnet-20240620", "anthropic.claude-3-5-sonnet-20240620-v1:0");
-    map.insert("claude-3-5-haiku-20241022", "anthropic.claude-3-5-haiku-20241022-v1:0");
-    map.insert("claude-3-5-haiku-latest", "anthropic.claude-3-5-haiku-20241022-v1:0");
-    
+    map.insert(
+        "claude-3-5-sonnet-20241022",
+        "anthropic.claude-3-5-sonnet-20241022-v2:0",
+    );
+    map.insert(
+        "claude-3-5-sonnet-latest",
+        "anthropic.claude-3-5-sonnet-20241022-v2:0",
+    );
+    map.insert(
+        "claude-3-5-sonnet-20240620",
+        "anthropic.claude-3-5-sonnet-20240620-v1:0",
+    );
+    map.insert(
+        "claude-3-5-haiku-20241022",
+        "anthropic.claude-3-5-haiku-20241022-v1:0",
+    );
+    map.insert(
+        "claude-3-5-haiku-latest",
+        "anthropic.claude-3-5-haiku-20241022-v1:0",
+    );
+
     // Claude 3 Models (Original)
-    map.insert("claude-3-opus-20240229", "anthropic.claude-3-opus-20240229-v1:0");
-    map.insert("claude-3-sonnet-20240229", "anthropic.claude-3-sonnet-20240229-v1:0");
-    map.insert("claude-3-haiku-20240307", "anthropic.claude-3-haiku-20240307-v1:0");
-    
+    map.insert(
+        "claude-3-opus-20240229",
+        "anthropic.claude-3-opus-20240229-v1:0",
+    );
+    map.insert(
+        "claude-3-sonnet-20240229",
+        "anthropic.claude-3-sonnet-20240229-v1:0",
+    );
+    map.insert(
+        "claude-3-haiku-20240307",
+        "anthropic.claude-3-haiku-20240307-v1:0",
+    );
+
     // Backward compatibility aliases
     map.insert("claude-3-sonnet", "anthropic.claude-3-sonnet-20240229-v1:0");
     map.insert("claude-3-haiku", "anthropic.claude-3-haiku-20240307-v1:0");
     map.insert("claude-3-opus", "anthropic.claude-3-opus-20240229-v1:0");
-    map.insert("claude-3-5-sonnet", "anthropic.claude-3-5-sonnet-20241022-v2:0");
-    map.insert("claude-3-5-haiku", "anthropic.claude-3-5-haiku-20241022-v1:0");
-    
+    map.insert(
+        "claude-3-5-sonnet",
+        "anthropic.claude-3-5-sonnet-20241022-v2:0",
+    );
+    map.insert(
+        "claude-3-5-haiku",
+        "anthropic.claude-3-5-haiku-20241022-v1:0",
+    );
+
     map
 });
 
@@ -52,7 +97,7 @@ impl ModelMapper {
     pub fn new(custom_mappings: HashMap<String, String>) -> Self {
         // Build reverse mapping from both default and custom mappings
         let mut reverse_mapping = HashMap::new();
-        
+
         // Add default mappings to reverse lookup, prioritizing canonical names over aliases
         // Process in order: canonical names first, then aliases
         let canonical_models = [
@@ -66,26 +111,26 @@ impl ModelMapper {
             "claude-3-sonnet-20240229",
             "claude-3-haiku-20240307",
         ];
-        
+
         // First, add canonical models
         for anthropic in canonical_models {
             if let Some(bedrock) = DEFAULT_MODEL_MAPPING.get(anthropic) {
                 reverse_mapping.insert(bedrock.to_string(), anthropic.to_string());
             }
         }
-        
+
         // Then add aliases only if no canonical mapping exists
         for (anthropic, bedrock) in DEFAULT_MODEL_MAPPING.iter() {
             if !reverse_mapping.contains_key(*bedrock) {
                 reverse_mapping.insert(bedrock.to_string(), anthropic.to_string());
             }
         }
-        
+
         // Override with custom mappings in reverse lookup
         for (anthropic, bedrock) in &custom_mappings {
             reverse_mapping.insert(bedrock.clone(), anthropic.clone());
         }
-        
+
         Self {
             custom_mappings,
             reverse_mapping,
@@ -98,13 +143,15 @@ impl ModelMapper {
         if let Some(bedrock_model) = self.custom_mappings.get(anthropic_model) {
             return Ok(bedrock_model.clone());
         }
-        
+
         // Then check default mappings
         if let Some(bedrock_model) = DEFAULT_MODEL_MAPPING.get(anthropic_model) {
             return Ok(bedrock_model.to_string());
         }
-        
-        Err(AnthropicError::UnsupportedModel(anthropic_model.to_string()))
+
+        Err(AnthropicError::UnsupportedModel(
+            anthropic_model.to_string(),
+        ))
     }
 
     /// Convert Bedrock model ID to Anthropic model name
@@ -128,17 +175,17 @@ impl ModelMapper {
     /// Get all supported Anthropic model names
     pub fn get_supported_anthropic_models(&self) -> Vec<String> {
         let mut models = Vec::new();
-        
+
         // Add default models
         models.extend(DEFAULT_MODEL_MAPPING.keys().map(|s| s.to_string()));
-        
+
         // Add custom models (avoiding duplicates)
         for model in self.custom_mappings.keys() {
             if !models.contains(model) {
                 models.push(model.clone());
             }
         }
-        
+
         models.sort();
         models
     }
@@ -160,14 +207,14 @@ impl ModelMapper {
 
         // Handle case variations - try to find a case-insensitive match
         let lower_model = model.to_lowercase();
-        
+
         // Check custom mappings first (case-insensitive)
         for supported_model in self.custom_mappings.keys() {
             if supported_model.to_lowercase() == lower_model {
                 return Ok(supported_model.clone());
             }
         }
-        
+
         // Check default mappings (case-insensitive)
         for supported_model in DEFAULT_MODEL_MAPPING.keys() {
             if supported_model.to_lowercase() == lower_model {
@@ -177,24 +224,24 @@ impl ModelMapper {
 
         Err(AnthropicError::UnsupportedModel(model.to_string()))
     }
-    
+
     /// Get the effective mapping (custom overrides default)
     pub fn get_effective_mapping(&self) -> HashMap<String, String> {
         let mut effective = HashMap::new();
-        
+
         // Start with default mappings
         for (anthropic, bedrock) in DEFAULT_MODEL_MAPPING.iter() {
             effective.insert(anthropic.to_string(), bedrock.to_string());
         }
-        
+
         // Override with custom mappings
         for (anthropic, bedrock) in &self.custom_mappings {
             effective.insert(anthropic.clone(), bedrock.clone());
         }
-        
+
         effective
     }
-    
+
     /// Check if a model mapping exists (either default or custom)
     pub fn has_mapping(&self, anthropic_model: &str) -> bool {
         self.is_anthropic_model_supported(anthropic_model)
@@ -220,10 +267,8 @@ mod tests {
             .anthropic_to_bedrock("claude-opus-4-20250514")
             .unwrap();
         assert_eq!(result, "anthropic.claude-opus-4-20250514-v1:0");
-        
-        let result = mapper
-            .anthropic_to_bedrock("claude-opus-4-0")
-            .unwrap();
+
+        let result = mapper.anthropic_to_bedrock("claude-opus-4-0").unwrap();
         assert_eq!(result, "anthropic.claude-opus-4-20250514-v1:0");
 
         // Test Claude 3.5 models
@@ -280,43 +325,47 @@ mod tests {
             AnthropicError::UnsupportedModel(_)
         ));
     }
-    
+
     #[test]
     fn test_custom_model_mapping() {
         let mut custom_mappings = HashMap::new();
         custom_mappings.insert(
             "custom-claude-model".to_string(),
-            "anthropic.custom-claude-model-v1:0".to_string()
+            "anthropic.custom-claude-model-v1:0".to_string(),
         );
-        
+
         let mapper = ModelMapper::new(custom_mappings);
-        
+
         // Test custom mapping
         assert_eq!(
             mapper.anthropic_to_bedrock("custom-claude-model").unwrap(),
             "anthropic.custom-claude-model-v1:0"
         );
-        
+
         // Test default mapping still works
         assert_eq!(
-            mapper.anthropic_to_bedrock("claude-3-haiku-20240307").unwrap(),
+            mapper
+                .anthropic_to_bedrock("claude-3-haiku-20240307")
+                .unwrap(),
             "anthropic.claude-3-haiku-20240307-v1:0"
         );
     }
-    
+
     #[test]
     fn test_custom_override_default() {
         let mut custom_mappings = HashMap::new();
         custom_mappings.insert(
             "claude-3-haiku-20240307".to_string(),
-            "anthropic.custom-haiku-override-v1:0".to_string()
+            "anthropic.custom-haiku-override-v1:0".to_string(),
         );
-        
+
         let mapper = ModelMapper::new(custom_mappings);
-        
+
         // Test that custom mapping overrides default
         assert_eq!(
-            mapper.anthropic_to_bedrock("claude-3-haiku-20240307").unwrap(),
+            mapper
+                .anthropic_to_bedrock("claude-3-haiku-20240307")
+                .unwrap(),
             "anthropic.custom-haiku-override-v1:0"
         );
     }
@@ -347,9 +396,7 @@ mod tests {
         );
 
         assert_eq!(
-            mapper
-                .validate_anthropic_model("claude-opus-4-0")
-                .unwrap(),
+            mapper.validate_anthropic_model("claude-opus-4-0").unwrap(),
             "claude-opus-4-0"
         );
     }
@@ -424,10 +471,10 @@ mod tests {
         // Test that mapping is bidirectional and consistent for core models
         let test_models = vec![
             "claude-opus-4-20250514",
-            "claude-sonnet-4-20250514", 
+            "claude-sonnet-4-20250514",
             "claude-3-5-sonnet-20241022",
             "claude-3-sonnet-20240229",
-            "claude-3-haiku-20240307"
+            "claude-3-haiku-20240307",
         ];
 
         for anthropic_model in test_models {
@@ -436,34 +483,34 @@ mod tests {
             assert_eq!(anthropic_model, back_to_anthropic);
         }
     }
-    
+
     #[test]
     fn test_effective_mapping() {
         let mut custom_mappings = HashMap::new();
         custom_mappings.insert(
             "claude-3-haiku-20240307".to_string(),
-            "anthropic.custom-haiku-v1:0".to_string()
+            "anthropic.custom-haiku-v1:0".to_string(),
         );
         custom_mappings.insert(
             "custom-model".to_string(),
-            "anthropic.custom-model-v1:0".to_string()
+            "anthropic.custom-model-v1:0".to_string(),
         );
-        
+
         let mapper = ModelMapper::new(custom_mappings);
         let effective = mapper.get_effective_mapping();
-        
+
         // Should have custom override
         assert_eq!(
             effective.get("claude-3-haiku-20240307"),
             Some(&"anthropic.custom-haiku-v1:0".to_string())
         );
-        
+
         // Should have custom addition
         assert_eq!(
             effective.get("custom-model"),
             Some(&"anthropic.custom-model-v1:0".to_string())
         );
-        
+
         // Should have default mappings
         assert_eq!(
             effective.get("claude-opus-4-20250514"),
