@@ -90,11 +90,13 @@ pub struct ModelMapper {
     custom_mappings: HashMap<String, String>,
     /// Cached reverse mapping for performance
     reverse_mapping: HashMap<String, String>,
+    /// AWS region for automatic region prefix
+    aws_region: String,
 }
 
 impl ModelMapper {
-    /// Create a new model mapper with optional custom mappings from config
-    pub fn new(custom_mappings: HashMap<String, String>) -> Self {
+    /// Create a new model mapper with optional custom mappings and AWS region
+    pub fn new(custom_mappings: HashMap<String, String>, aws_region: String) -> Self {
         // Build reverse mapping from both default and custom mappings
         let mut reverse_mapping = HashMap::new();
 
@@ -134,6 +136,18 @@ impl ModelMapper {
         Self {
             custom_mappings,
             reverse_mapping,
+            aws_region,
+        }
+    }
+
+    /// Get region prefix based on AWS region
+    fn get_region_prefix(&self) -> String {
+        // Extract region prefix from AWS region (e.g., "us-east-1" -> "us")
+        if let Some(region_prefix) = self.aws_region.split('-').next() {
+            format!("{}.", region_prefix)
+        } else {
+            // Fallback to "us." if region parsing fails
+            "us.".to_string()
         }
     }
 
@@ -144,9 +158,10 @@ impl ModelMapper {
             return Ok(bedrock_model.clone());
         }
 
-        // Then check default mappings
+        // Then check default mappings and add region prefix
         if let Some(bedrock_model) = DEFAULT_MODEL_MAPPING.get(anthropic_model) {
-            return Ok(bedrock_model.to_string());
+            let region_prefix = self.get_region_prefix();
+            return Ok(format!("{}{}", region_prefix, bedrock_model));
         }
 
         Err(AnthropicError::UnsupportedModel(
@@ -250,7 +265,7 @@ impl ModelMapper {
 
 impl Default for ModelMapper {
     fn default() -> Self {
-        Self::new(HashMap::new())
+        Self::new(HashMap::new(), "us-east-1".to_string())
     }
 }
 
@@ -266,32 +281,32 @@ mod tests {
         let result = mapper
             .anthropic_to_bedrock("claude-opus-4-20250514")
             .unwrap();
-        assert_eq!(result, "anthropic.claude-opus-4-20250514-v1:0");
+        assert_eq!(result, "us.anthropic.claude-opus-4-20250514-v1:0");
 
         let result = mapper.anthropic_to_bedrock("claude-opus-4-0").unwrap();
-        assert_eq!(result, "anthropic.claude-opus-4-20250514-v1:0");
+        assert_eq!(result, "us.anthropic.claude-opus-4-20250514-v1:0");
 
         // Test Claude 3.5 models
         let result = mapper
             .anthropic_to_bedrock("claude-3-5-sonnet-latest")
             .unwrap();
-        assert_eq!(result, "anthropic.claude-3-5-sonnet-20241022-v2:0");
+        assert_eq!(result, "us.anthropic.claude-3-5-sonnet-20241022-v2:0");
 
         // Test Claude 3 models
         let result = mapper
             .anthropic_to_bedrock("claude-3-sonnet-20240229")
             .unwrap();
-        assert_eq!(result, "anthropic.claude-3-sonnet-20240229-v1:0");
+        assert_eq!(result, "us.anthropic.claude-3-sonnet-20240229-v1:0");
 
         let result = mapper
             .anthropic_to_bedrock("claude-3-haiku-20240307")
             .unwrap();
-        assert_eq!(result, "anthropic.claude-3-haiku-20240307-v1:0");
+        assert_eq!(result, "us.anthropic.claude-3-haiku-20240307-v1:0");
 
         let result = mapper
             .anthropic_to_bedrock("claude-3-opus-20240229")
             .unwrap();
-        assert_eq!(result, "anthropic.claude-3-opus-20240229-v1:0");
+        assert_eq!(result, "us.anthropic.claude-3-opus-20240229-v1:0");
     }
 
     #[test]
@@ -331,15 +346,15 @@ mod tests {
         let mut custom_mappings = HashMap::new();
         custom_mappings.insert(
             "custom-claude-model".to_string(),
-            "anthropic.custom-claude-model-v1:0".to_string(),
+            "us.anthropic.custom-claude-model-v1:0".to_string(),
         );
 
-        let mapper = ModelMapper::new(custom_mappings);
+        let mapper = ModelMapper::new(custom_mappings, "us-east-1".to_string());
 
         // Test custom mapping
         assert_eq!(
             mapper.anthropic_to_bedrock("custom-claude-model").unwrap(),
-            "anthropic.custom-claude-model-v1:0"
+            "us.anthropic.custom-claude-model-v1:0"
         );
 
         // Test default mapping still works
@@ -347,7 +362,7 @@ mod tests {
             mapper
                 .anthropic_to_bedrock("claude-3-haiku-20240307")
                 .unwrap(),
-            "anthropic.claude-3-haiku-20240307-v1:0"
+            "us.anthropic.claude-3-haiku-20240307-v1:0"
         );
     }
 
@@ -359,7 +374,7 @@ mod tests {
             "anthropic.custom-haiku-override-v1:0".to_string(),
         );
 
-        let mapper = ModelMapper::new(custom_mappings);
+        let mapper = ModelMapper::new(custom_mappings, "us-east-1".to_string());
 
         // Test that custom mapping overrides default
         assert_eq!(
@@ -461,7 +476,7 @@ mod tests {
 
         // Verify the mapping works
         let bedrock_id = mapper.anthropic_to_bedrock(&result).unwrap();
-        assert_eq!(bedrock_id, "anthropic.claude-3-5-sonnet-20241022-v2:0");
+        assert_eq!(bedrock_id, "us.anthropic.claude-3-5-sonnet-20241022-v2:0");
     }
 
     #[test]
@@ -479,7 +494,9 @@ mod tests {
 
         for anthropic_model in test_models {
             let bedrock_model = mapper.anthropic_to_bedrock(anthropic_model).unwrap();
-            let back_to_anthropic = mapper.bedrock_to_anthropic(&bedrock_model).unwrap();
+            // Strip region prefix for reverse mapping test
+            let bedrock_without_prefix = bedrock_model.strip_prefix("us.").unwrap_or(&bedrock_model);
+            let back_to_anthropic = mapper.bedrock_to_anthropic(bedrock_without_prefix).unwrap();
             assert_eq!(anthropic_model, back_to_anthropic);
         }
     }
@@ -496,7 +513,7 @@ mod tests {
             "anthropic.custom-model-v1:0".to_string(),
         );
 
-        let mapper = ModelMapper::new(custom_mappings);
+        let mapper = ModelMapper::new(custom_mappings, "us-east-1".to_string());
         let effective = mapper.get_effective_mapping();
 
         // Should have custom override

@@ -784,7 +784,7 @@ pub mod tests {
         let usage_record = UsageRecord {
             id: None,
             user_id,
-            model_id: "anthropic.claude-3-sonnet-20240229-v1:0".to_string(),
+            model_id: "anthropic.claude-sonnet-4-20250514-v1:0".to_string(),
             endpoint_type: "bedrock".to_string(),
             region: "us-east-1".to_string(),
             request_time: Utc::now(),

@@ -478,7 +478,7 @@ mod tests {
 
         // Create multiple usage records with different characteristics
         let now = Utc::now();
-        let models = ["anthropic.claude-3-sonnet-20240229-v1:0", "anthropic.claude-3-haiku-20240307-v1:0"];
+        let models = ["anthropic.claude-sonnet-4-20250514-v1:0", "anthropic.claude-3-haiku-20240307-v1:0"];
         
         for (i, model) in models.iter().enumerate() {
             let record = crate::storage::UsageRecord {
@@ -518,7 +518,7 @@ mod tests {
         // Should only get successful records within date range
         assert_eq!(records.len(), 1);
         assert!(records[0].success);
-        assert_eq!(records[0].model_id, "anthropic.claude-3-sonnet-20240229-v1:0");
+        assert_eq!(records[0].model_id, "anthropic.claude-sonnet-4-20250514-v1:0");
         assert_eq!(records[0].input_tokens, 100);
         
         // Test filter by specific model

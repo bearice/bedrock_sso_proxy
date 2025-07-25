@@ -114,6 +114,11 @@ impl ModelService {
         }
     }
 
+    /// Create a ModelMapper from the current configuration
+    pub fn create_model_mapper(&self) -> crate::anthropic::model_mapping::ModelMapper {
+        self.config.create_model_mapper()
+    }
+
     /// Initialize model costs in the background
     /// This should be called at startup to populate initial cost data
     pub async fn initialize_model_costs(&self) -> Result<(), AppError> {

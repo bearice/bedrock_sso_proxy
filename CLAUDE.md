@@ -39,7 +39,7 @@ The proxy now supports both AWS Bedrock and standard Anthropic API formats for m
 
 **Bedrock Format:**
 ```bash
-curl -X POST "http://localhost:3000/bedrock/model/anthropic.claude-3-sonnet-20240229-v1:0/invoke" \
+curl -X POST "http://localhost:3000/bedrock/model/anthropic.claude-sonnet-4-20250514-v1:0/invoke" \
   -H "Authorization: Bearer YOUR_JWT_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
@@ -55,7 +55,7 @@ curl -X POST "http://localhost:3000/anthropic/v1/messages" \
   -H "Authorization: Bearer YOUR_JWT_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
-    "model": "claude-3-sonnet-20240229",
+    "model": "claude-sonnet-4-20250514",
     "max_tokens": 1000,
     "messages": [{"role": "user", "content": "Hello!"}]
   }'
@@ -67,7 +67,7 @@ curl -X POST "http://localhost:3000/anthropic/v1/messages" \
   -H "Authorization: Bearer YOUR_JWT_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
-    "model": "claude-3-sonnet-20240229",
+    "model": "claude-sonnet-4-20250514",
     "max_tokens": 1000,
     "messages": [{"role": "user", "content": "Hello!"}],
     "stream": true

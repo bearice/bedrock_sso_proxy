@@ -19,36 +19,8 @@ impl AuthConfig {
     }
 }
 
-pub async fn jwt_auth_middleware(
-    State(auth_config): State<Arc<AuthConfig>>,
-    mut request: Request,
-    next: Next,
-) -> Result<Response, AppError> {
-    let auth_header = request
-        .headers()
-        .get(AUTHORIZATION)
-        .and_then(|header| header.to_str().ok())
-        .ok_or_else(|| AppError::Unauthorized("Missing Authorization header".to_string()))?;
-
-    if !auth_header.starts_with("Bearer ") {
-        return Err(AppError::Unauthorized(
-            "Invalid Authorization format".to_string(),
-        ));
-    }
-
-    let token = &auth_header[7..];
-
-    // Validate token (supports both OAuth and legacy tokens)
-    let _claims = auth_config.jwt_service.validate_token(token)?;
-
-    // Remove Authorization header before forwarding to AWS
-    request.headers_mut().remove(AUTHORIZATION);
-
-    Ok(next.run(request).await)
-}
-
 // Enhanced middleware that provides claims to the request
-pub async fn jwt_auth_middleware_with_claims(
+pub async fn jwt_auth_middleware(
     State(auth_config): State<Arc<AuthConfig>>,
     mut request: Request,
     next: Next,
@@ -95,7 +67,7 @@ where
     type Rejection = AppError;
 
     async fn from_request_parts(
-        parts: &mut Parts, 
+        parts: &mut Parts,
         _state: &S,
     ) -> Result<Self, Self::Rejection> {
         parts
@@ -234,7 +206,7 @@ mod tests {
             .route("/test", get(test_claims_handler))
             .layer(middleware::from_fn_with_state(
                 auth_config.clone(),
-                jwt_auth_middleware_with_claims,
+                jwt_auth_middleware,
             ));
 
         let request = Request::builder()
@@ -262,7 +234,7 @@ mod tests {
             .route("/test", get(test_claims_handler))
             .layer(middleware::from_fn_with_state(
                 auth_config.clone(),
-                jwt_auth_middleware_with_claims,
+                jwt_auth_middleware,
             ));
 
         let token = create_legacy_token("test-secret", "user123", 3600);

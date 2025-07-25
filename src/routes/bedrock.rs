@@ -151,7 +151,7 @@ async fn invoke_model_with_response_stream(
 mod tests {
     use super::*;
     use crate::{
-        auth::middleware::{AuthConfig, jwt_auth_middleware_with_claims},
+        auth::middleware::{AuthConfig, jwt_auth_middleware},
         config::Config,
         storage::{database::SqliteStorage, Storage},
     };
@@ -188,7 +188,7 @@ mod tests {
             .with_state(model_service)
             .layer(middleware::from_fn_with_state(
                 auth_config,
-                jwt_auth_middleware_with_claims,
+                jwt_auth_middleware,
             ));
 
         let request = Request::builder()
@@ -210,7 +210,7 @@ mod tests {
             .with_state(model_service)
             .layer(middleware::from_fn_with_state(
                 auth_config,
-                jwt_auth_middleware_with_claims,
+                jwt_auth_middleware,
             ));
 
         let request = Request::builder()
@@ -235,7 +235,7 @@ mod tests {
             .with_state(model_service)
             .layer(middleware::from_fn_with_state(
                 auth_config.clone(),
-                jwt_auth_middleware_with_claims,
+                jwt_auth_middleware,
             ));
 
         // Create a valid JWT token for the test
@@ -282,7 +282,7 @@ mod tests {
             .with_state(model_service)
             .layer(middleware::from_fn_with_state(
                 auth_config,
-                jwt_auth_middleware_with_claims,
+                jwt_auth_middleware,
             ));
 
         let request = Request::builder()
@@ -307,7 +307,7 @@ mod tests {
             .with_state(model_service)
             .layer(middleware::from_fn_with_state(
                 auth_config,
-                jwt_auth_middleware_with_claims,
+                jwt_auth_middleware,
             ));
 
         // Create a large JSON body (simulating large input)

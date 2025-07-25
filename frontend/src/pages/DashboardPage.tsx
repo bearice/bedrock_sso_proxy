@@ -284,7 +284,7 @@ export function DashboardPage() {
             </li>
           </ul>
           <p style={{ fontSize: '0.9rem', color: '#666', margin: '0.5rem 0 0 1rem' }}>
-            Uses AWS model IDs like <code>anthropic.claude-3-sonnet-20240229-v1:0</code> in the URL
+            Uses AWS model IDs like <code>anthropic.claude-sonnet-4-20250514-v1:0</code> in the URL
             path
           </p>
         </div>
@@ -297,7 +297,7 @@ export function DashboardPage() {
             </li>
           </ul>
           <p style={{ fontSize: '0.9rem', color: '#666', margin: '0.5rem 0 0 1rem' }}>
-            Uses standard model names like <code>claude-3-sonnet-20240229</code> in the request body
+            Uses standard model names like <code>claude-sonnet-4-20250514</code> in the request body
           </p>
         </div>
 
@@ -354,7 +354,7 @@ export CLAUDE_CODE_USE_BEDROCK=1`}</pre>
           {/* Bedrock Format Example */}
           <div>
             <h4>Bedrock Format (AWS Native):</h4>
-            <pre>{`curl -X POST "${currentDomain}/bedrock/model/anthropic.claude-3-sonnet-20240229-v1:0/invoke" \\
+            <pre>{`curl -X POST "${currentDomain}/bedrock/model/anthropic.claude-sonnet-4-20250514-v1:0/invoke" \\
   -H "Authorization: Bearer ${token?.substring(0, 30)}..." \\
   -H "Content-Type: application/json" \\
   -d '{
@@ -371,7 +371,7 @@ export CLAUDE_CODE_USE_BEDROCK=1`}</pre>
   -H "Authorization: Bearer ${token?.substring(0, 30)}..." \\
   -H "Content-Type: application/json" \\
   -d '{
-    "model": "claude-3-sonnet-20240229",
+    "model": "claude-sonnet-4-20250514",
     "max_tokens": 1000,
     "messages": [{"role": "user", "content": "Hello!"}]
   }'`}</pre>
@@ -384,7 +384,7 @@ export CLAUDE_CODE_USE_BEDROCK=1`}</pre>
   -H "Authorization: Bearer ${token?.substring(0, 30)}..." \\
   -H "Content-Type: application/json" \\
   -d '{
-    "model": "claude-3-sonnet-20240229",
+    "model": "claude-sonnet-4-20250514",
     "max_tokens": 1000,
     "messages": [{"role": "user", "content": "Hello!"}],
     "stream": true
@@ -403,7 +403,7 @@ export CLAUDE_CODE_USE_BEDROCK=1`}</pre>
           <button
             onClick={() =>
               copyToClipboard(
-                `curl -X POST "${currentDomain}/bedrock/model/anthropic.claude-3-sonnet-20240229-v1:0/invoke" -H "Authorization: Bearer ${token}" -H "Content-Type: application/json" -d '{"anthropic_version": "bedrock-2023-05-31", "max_tokens": 1000, "messages": [{"role": "user", "content": "Hello!"}]}'`,
+                `curl -X POST "${currentDomain}/bedrock/model/anthropic.claude-sonnet-4-20250514-v1:0/invoke" -H "Authorization: Bearer ${token}" -H "Content-Type: application/json" -d '{"anthropic_version": "bedrock-2023-05-31", "max_tokens": 1000, "messages": [{"role": "user", "content": "Hello!"}]}'`,
                 'curl-bedrock'
               )
             }
@@ -416,7 +416,7 @@ export CLAUDE_CODE_USE_BEDROCK=1`}</pre>
           <button
             onClick={() =>
               copyToClipboard(
-                `curl -X POST "${currentDomain}/anthropic/v1/messages" -H "Authorization: Bearer ${token}" -H "Content-Type: application/json" -d '{"model": "claude-3-sonnet-20240229", "max_tokens": 1000, "messages": [{"role": "user", "content": "Hello!"}]}'`,
+                `curl -X POST "${currentDomain}/anthropic/v1/messages" -H "Authorization: Bearer ${token}" -H "Content-Type: application/json" -d '{"model": "claude-sonnet-4-20250514", "max_tokens": 1000, "messages": [{"role": "user", "content": "Hello!"}]}'`,
                 'curl-anthropic'
               )
             }

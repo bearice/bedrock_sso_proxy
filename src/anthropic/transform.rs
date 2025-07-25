@@ -43,7 +43,31 @@ pub fn transform_anthropic_to_bedrock(
     }
 
     if let Some(system) = request.system {
-        bedrock_request["system"] = json!(system);
+        // Handle system field - convert to string if it's an array of content blocks
+        let system_string = match system {
+            serde_json::Value::String(s) => s,
+            serde_json::Value::Array(content_blocks) => {
+                // Extract text from content blocks and concatenate
+                let mut system_text = String::new();
+                for block in content_blocks {
+                    if let Some(text) = block.get("text").and_then(|t| t.as_str()) {
+                        if !system_text.is_empty() {
+                            system_text.push('\n');
+                        }
+                        system_text.push_str(text);
+                    }
+                }
+                system_text
+            }
+            _ => {
+                // For any other format, try to convert to string
+                system.as_str().unwrap_or("").to_string()
+            }
+        };
+        
+        if !system_string.is_empty() {
+            bedrock_request["system"] = json!(system_string);
+        }
     }
 
     // Note: 'stream' parameter is handled at the HTTP level, not in the request body
@@ -296,7 +320,7 @@ mod tests {
 
     fn create_test_anthropic_request() -> AnthropicRequest {
         AnthropicRequest {
-            model: "claude-3-sonnet-20240229".to_string(),
+            model: "claude-sonnet-4-20250514".to_string(),
             messages: vec![Message {
                 role: "user".to_string(),
                 content: json!("Hello, how can you help me today?"),
@@ -322,7 +346,7 @@ mod tests {
                     "text": "Hello! I'm Claude, an AI assistant."
                 }
             ],
-            "model": "anthropic.claude-3-sonnet-20240229-v1:0",
+            "model": "anthropic.claude-sonnet-4-20250514-v1:0",
             "stop_reason": "end_turn",
             "stop_sequence": null,
             "usage": {
@@ -340,7 +364,7 @@ mod tests {
         let (bedrock_request, model_id) =
             transform_anthropic_to_bedrock(anthropic_request, &mapper).unwrap();
 
-        assert_eq!(model_id, "anthropic.claude-3-sonnet-20240229-v1:0");
+        assert_eq!(model_id, "us.anthropic.claude-sonnet-4-20250514-v1:0");
         assert_eq!(bedrock_request["anthropic_version"], "bedrock-2023-05-31");
         assert_eq!(bedrock_request["max_tokens"], 1000);
         // Use approximate comparison for floating point values
@@ -354,13 +378,13 @@ mod tests {
         let bedrock_response = create_test_bedrock_response();
 
         let anthropic_response =
-            transform_bedrock_to_anthropic(bedrock_response, "claude-3-sonnet-20240229", &mapper)
+            transform_bedrock_to_anthropic(bedrock_response, "claude-sonnet-4-20250514", &mapper)
                 .unwrap();
 
         assert_eq!(anthropic_response.id, "msg_01ABC123");
         assert_eq!(anthropic_response.type_, "message");
         assert_eq!(anthropic_response.role, "assistant");
-        assert_eq!(anthropic_response.model, "claude-3-sonnet-20240229");
+        assert_eq!(anthropic_response.model, "claude-sonnet-4-20250514");
         assert_eq!(anthropic_response.stop_reason, "end_turn");
         assert_eq!(anthropic_response.content.len(), 1);
         assert_eq!(anthropic_response.content[0].type_, "text");
@@ -382,7 +406,7 @@ mod tests {
         // Empty model should fail
         request.model = "".to_string();
         assert!(validate_anthropic_request(&request).is_err());
-        request.model = "claude-3-sonnet-20240229".to_string();
+        request.model = "claude-sonnet-4-20250514".to_string();
 
         // Empty messages should fail
         request.messages = vec![];
@@ -426,7 +450,7 @@ mod tests {
         let mapper = create_test_mapper();
         let chunk = b"data: {\"type\": \"content_block_delta\", \"delta\": {\"text\": \"Hello\"}}";
 
-        let result = transform_streaming_event(chunk, &mapper, "claude-3-sonnet-20240229");
+        let result = transform_streaming_event(chunk, &mapper, "claude-sonnet-4-20250514");
         assert!(result.is_ok());
 
         let transformed = result.unwrap();
@@ -439,7 +463,7 @@ mod tests {
         let mapper = create_test_mapper();
         let chunk = b"data: [DONE]";
 
-        let result = transform_streaming_event(chunk, &mapper, "claude-3-sonnet-20240229");
+        let result = transform_streaming_event(chunk, &mapper, "claude-sonnet-4-20250514");
         assert!(result.is_ok());
 
         let transformed = result.unwrap();
@@ -493,7 +517,40 @@ mod tests {
         let (_bedrock_request, model_id) =
             transform_anthropic_to_bedrock(request, &mapper).unwrap();
 
-        // Should resolve to the actual model ID
-        assert_eq!(model_id, "anthropic.claude-3-sonnet-20240229-v1:0");
+        // Should resolve to the actual model ID that the alias points to
+        assert_eq!(model_id, "us.anthropic.claude-3-sonnet-20240229-v1:0");
+    }
+
+    #[test]
+    fn test_system_field_as_array() {
+        let mapper = create_test_mapper();
+        let mut request = create_test_anthropic_request();
+        
+        // Set system field as array of content blocks (like the failing request)
+        request.system = Some(json!([{
+            "type": "text",
+            "text": "You are a helpful assistant."
+        }]));
+
+        let (bedrock_request, _model_id) =
+            transform_anthropic_to_bedrock(request, &mapper).unwrap();
+
+        // Should convert array to string
+        assert_eq!(bedrock_request["system"], "You are a helpful assistant.");
+    }
+
+    #[test]
+    fn test_system_field_as_string() {
+        let mapper = create_test_mapper();
+        let mut request = create_test_anthropic_request();
+        
+        // Set system field as simple string
+        request.system = Some(json!("You are a helpful assistant."));
+
+        let (bedrock_request, _model_id) =
+            transform_anthropic_to_bedrock(request, &mapper).unwrap();
+
+        // Should pass through as string
+        assert_eq!(bedrock_request["system"], "You are a helpful assistant.");
     }
 }

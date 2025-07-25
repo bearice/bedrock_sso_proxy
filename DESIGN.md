@@ -312,7 +312,7 @@ compatibility with different clients and LLM gateways.
 ```json
 // Anthropic Format Input
 {
-  "model": "claude-3-sonnet-20240229",
+  "model": "claude-sonnet-4-20250514",
   "max_tokens": 1000,
   "messages": [
     {"role": "user", "content": "Hello"}
@@ -344,7 +344,7 @@ compatibility with different clients and LLM gateways.
     }
   ],
   "id": "msg_01ABC123",
-  "model": "claude-3-sonnet-20240229",
+  "model": "claude-sonnet-4-20250514",
   "role": "assistant",
   "stop_reason": "end_turn",
   "stop_sequence": null,
@@ -366,7 +366,7 @@ compatibility with different clients and LLM gateways.
       "text": "Hello! How can I help you today?"
     }
   ],
-  "model": "claude-3-sonnet-20240229",
+  "model": "claude-sonnet-4-20250514",
   "stop_reason": "end_turn",
   "stop_sequence": null,
   "usage": {
@@ -383,7 +383,7 @@ compatibility with different clients and LLM gateways.
 ```rust
 // Anthropic model names → Bedrock model IDs
 let model_mapping = HashMap::from([
-    ("claude-3-sonnet-20240229", "anthropic.claude-3-sonnet-20240229-v1:0"),
+    ("claude-sonnet-4-20250514", "anthropic.claude-sonnet-4-20250514-v1:0"),
     ("claude-3-haiku-20240307", "anthropic.claude-3-haiku-20240307-v1:0"),
     ("claude-3-opus-20240229", "anthropic.claude-3-opus-20240229-v1:0"),
     ("claude-3-5-sonnet-20240620", "anthropic.claude-3-5-sonnet-20240620-v1:0"),
@@ -1931,7 +1931,7 @@ usage_tracking:
     enabled: true
     # Default model costs (can be overridden via admin API)
     default_costs:
-      "anthropic.claude-3-sonnet-20240229-v1:0":
+      "anthropic.claude-sonnet-4-20250514-v1:0":
         input_cost_per_1k_tokens: 0.003
         output_cost_per_1k_tokens: 0.015
       "anthropic.claude-3-opus-20240229-v1:0":
@@ -1948,10 +1948,10 @@ usage_tracking:
 
 Enable dynamic routing to different AWS regions based on model name prefixes:
 
-- `apac.anthropic.claude-3-sonnet-20240229-v1:0` → `ap-northeast-1`
-- `us.anthropic.claude-3-sonnet-20240229-v1:0` → `us-east-1`
-- `eu.anthropic.claude-3-sonnet-20240229-v1:0` → `eu-west-1`
-- `anthropic.claude-3-sonnet-20240229-v1:0` → `us-east-1` (default)
+- `apac.anthropic.claude-sonnet-4-20250514-v1:0` → `ap-northeast-1`
+- `us.anthropic.claude-sonnet-4-20250514-v1:0` → `us-east-1`
+- `eu.anthropic.claude-sonnet-4-20250514-v1:0` → `eu-west-1`
+- `anthropic.claude-sonnet-4-20250514-v1:0` → `us-east-1` (default)
 
 #### Configuration Structure (Simplified with Shared Credentials)
 
@@ -2028,9 +2028,9 @@ impl MultiRegionAwsClient {
 ```rust
 #[derive(Debug, Clone)]
 pub struct ModelRequest {
-    pub original_model_id: String,  // apac.anthropic.claude-3-sonnet-20240229-v1:0
+    pub original_model_id: String,  // apac.anthropic.claude-sonnet-4-20250514-v1:0
     pub region: String,             // ap-northeast-1
-    pub bedrock_model_id: String,   // anthropic.claude-3-sonnet-20240229-v1:0 (prefix stripped)
+    pub bedrock_model_id: String,   // anthropic.claude-sonnet-4-20250514-v1:0 (prefix stripped)
 }
 
 pub fn parse_model_id(model_id: &str, region_mapping: &HashMap<String, String>) -> ModelRequest {
@@ -2253,7 +2253,7 @@ Content-Type: application/json
 #### Example API Call
 
 ```bash
-curl -X POST "https://your-proxy-domain.com/model/anthropic.claude-3-sonnet-20240229-v1:0/invoke" \
+curl -X POST "https://your-proxy-domain.com/model/anthropic.claude-sonnet-4-20250514-v1:0/invoke" \
   -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..." \
   -H "Content-Type: application/json" \
   -d '{

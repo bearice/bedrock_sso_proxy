@@ -37,7 +37,7 @@ enum Commands {
         #[arg(
             short,
             long,
-            default_value = "apac.anthropic.claude-3-sonnet-20240229-v1:0"
+            default_value = "apac.anthropic.claude-sonnet-4-20250514-v1:0"
         )]
         model: String,
 
@@ -49,7 +49,7 @@ enum Commands {
         #[arg(
             short,
             long,
-            default_value = "apac.anthropic.claude-3-sonnet-20240229-v1:0"
+            default_value = "apac.anthropic.claude-sonnet-4-20250514-v1:0"
         )]
         model: String,
 

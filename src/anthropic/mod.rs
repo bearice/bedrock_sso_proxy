@@ -23,7 +23,7 @@ pub enum AnthropicError {
 /// Anthropic API request format
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AnthropicRequest {
-    /// The model ID in Anthropic format (e.g., "claude-3-sonnet-20240229")
+    /// The model ID in Anthropic format (e.g., "claude-sonnet-4-20250514")
     pub model: String,
 
     /// Array of message objects
@@ -52,9 +52,9 @@ pub struct AnthropicRequest {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub stream: Option<bool>,
 
-    /// System prompt to provide context
+    /// System prompt to provide context (can be string or array of content blocks)
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub system: Option<String>,
+    pub system: Option<serde_json::Value>,
 }
 
 /// Anthropic API response format
@@ -160,7 +160,7 @@ mod tests {
     #[test]
     fn test_anthropic_request_deserialization() {
         let json = r#"{
-            "model": "claude-3-sonnet-20240229",
+            "model": "claude-sonnet-4-20250514",
             "messages": [
                 {
                     "role": "user",
@@ -172,7 +172,7 @@ mod tests {
         }"#;
 
         let request: AnthropicRequest = serde_json::from_str(json).unwrap();
-        assert_eq!(request.model, "claude-3-sonnet-20240229");
+        assert_eq!(request.model, "claude-sonnet-4-20250514");
         assert_eq!(request.max_tokens, 1000);
         assert_eq!(request.temperature, Some(0.7));
         assert_eq!(request.messages.len(), 1);
@@ -190,7 +190,7 @@ mod tests {
                 text: Some("Hello! I'm Claude, an AI assistant.".to_string()),
                 extra: serde_json::Map::new(),
             }],
-            model: "claude-3-sonnet-20240229".to_string(),
+            model: "claude-sonnet-4-20250514".to_string(),
             stop_reason: "end_turn".to_string(),
             stop_sequence: None,
             usage: Usage {

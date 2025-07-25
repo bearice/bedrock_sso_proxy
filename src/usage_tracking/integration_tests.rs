@@ -36,7 +36,7 @@ use axum::{
             .with_state(storage)
             .layer(middleware::from_fn_with_state(
                 auth_config,
-                crate::auth::middleware::jwt_auth_middleware_with_claims,
+                crate::auth::middleware::jwt_auth_middleware,
             ))
     }
 
@@ -87,7 +87,7 @@ async fn setup_test_data(storage: &Storage) -> (i32, i32) {
 
         // Create usage records for user1 with exact decimal costs
         let models = [
-            ("anthropic.claude-3-sonnet-20240229-v1:0", 100, 50, Decimal::new(75, 4)),    // 0.0075
+            ("anthropic.claude-sonnet-4-20250514-v1:0", 100, 50, Decimal::new(75, 4)),    // 0.0075
             ("anthropic.claude-3-haiku-20240307-v1:0", 200, 75, Decimal::new(5, 3)),      // 0.005
             ("anthropic.claude-3-opus-20240229-v1:0", 150, 100, Decimal::new(2, 2))       // 0.02
         ];
@@ -113,7 +113,7 @@ async fn setup_test_data(storage: &Storage) -> (i32, i32) {
 
         // Create model costs with exact decimal values
         let model_costs = vec![
-            ("anthropic.claude-3-sonnet-20240229-v1:0", Decimal::new(3, 3), Decimal::new(15, 3)),      // 0.003, 0.015
+            ("anthropic.claude-sonnet-4-20250514-v1:0", Decimal::new(3, 3), Decimal::new(15, 3)),      // 0.003, 0.015
             ("anthropic.claude-3-haiku-20240307-v1:0", Decimal::new(25, 5), Decimal::new(125, 5)),     // 0.00025, 0.00125
             ("test-new-model", Decimal::new(1, 3), Decimal::new(5, 3)),                                // 0.001, 0.005
         ];
@@ -193,7 +193,7 @@ async fn setup_test_data(storage: &Storage) -> (i32, i32) {
         let expected_cost = "0.0325";
         let parsed_cost: f64 = total_cost.parse().unwrap_or(0.0);
         let expected_cost_f64: f64 = expected_cost.parse().unwrap();
-        assert!((parsed_cost - expected_cost_f64).abs() < 0.0001, 
+        assert!((parsed_cost - expected_cost_f64).abs() < 0.0001,
             "Expected cost {}, got {}", expected_cost, total_cost);
     }
 
@@ -208,7 +208,7 @@ async fn setup_test_data(storage: &Storage) -> (i32, i32) {
         // Test model filtering
         let request = Request::builder()
             .method(Method::GET)
-            .uri("/usage/records?model=anthropic.claude-3-sonnet-20240229-v1:0")
+            .uri("/usage/records?model=anthropic.claude-sonnet-4-20250514-v1:0")
             .header(AUTHORIZATION, format!("Bearer {}", token))
             .body(Body::empty())
             .unwrap();
@@ -223,7 +223,7 @@ async fn setup_test_data(storage: &Storage) -> (i32, i32) {
 
         let records = json["records"].as_array().unwrap();
         assert_eq!(records.len(), 1);
-        assert_eq!(records[0]["model_id"], "anthropic.claude-3-sonnet-20240229-v1:0");
+        assert_eq!(records[0]["model_id"], "anthropic.claude-sonnet-4-20250514-v1:0");
     }
 
     #[tokio::test]
@@ -350,7 +350,7 @@ async fn setup_test_data(storage: &Storage) -> (i32, i32) {
         let expected_cost = "0.002";
         let parsed_cost: f64 = input_cost.parse().unwrap_or(0.0);
         let expected_cost_f64: f64 = expected_cost.parse().unwrap();
-        assert!((parsed_cost - expected_cost_f64).abs() < 0.0001, 
+        assert!((parsed_cost - expected_cost_f64).abs() < 0.0001,
             "Expected cost {}, got {}", expected_cost, input_cost);
 
         // Test update model cost

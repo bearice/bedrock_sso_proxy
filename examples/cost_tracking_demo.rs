@@ -78,7 +78,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let demo_user_id = 12345;
     let model_request = ModelRequest {
-        model_id: "anthropic.claude-3-sonnet-20240229-v1:0".to_string(),
+        model_id: "anthropic.claude-sonnet-4-20250514-v1:0".to_string(),
         body: b"Hello, world!".to_vec(),
         headers: HeaderMap::new(),
         user_id: demo_user_id,
@@ -96,7 +96,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Manually store some model costs for demonstration
     let claude_sonnet_cost = bedrock_sso_proxy::storage::StoredModelCost {
         id: None,
-        model_id: "anthropic.claude-3-sonnet-20240229-v1:0".to_string(),
+        model_id: "anthropic.claude-sonnet-4-20250514-v1:0".to_string(),
         input_cost_per_1k_tokens: Decimal::from_f64_retain(0.003).unwrap(),  // $3 per million tokens
         output_cost_per_1k_tokens: Decimal::from_f64_retain(0.015).unwrap(), // $15 per million tokens
         updated_at: Utc::now(),

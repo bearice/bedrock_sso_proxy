@@ -478,6 +478,7 @@ impl Config {
     pub fn create_model_mapper(&self) -> crate::anthropic::model_mapping::ModelMapper {
         crate::anthropic::model_mapping::ModelMapper::new(
             self.model_mapping.custom_mappings.clone(),
+            self.aws.region.clone(),
         )
     }
 }

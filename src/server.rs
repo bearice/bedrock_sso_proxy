@@ -1,7 +1,7 @@
 use crate::{
     auth::{
-        jwt::{JwtService, parse_algorithm},
-        middleware::{AuthConfig, jwt_auth_middleware, jwt_auth_middleware_with_claims},
+        jwt::{JwtService, parse_algorithm, ValidatedClaims},
+        middleware::{AuthConfig, jwt_auth_middleware},
         oauth::OAuthService,
     },
     model_service::ModelService,
@@ -48,7 +48,7 @@ impl Server {
                     Some(handle)
                 }
                 Err(e) => {
-                    error!("Failed to start metrics server on port {}: {}", 
+                    error!("Failed to start metrics server on port {}: {}",
                         config.metrics.port, e);
                     return Err(AppError::Internal(format!("Failed to start metrics server: {}", e)));
                 }
@@ -82,7 +82,7 @@ impl Server {
         // Initialize health service
         let health_service = Arc::new(HealthService::new());
 
-        Ok(Self { 
+        Ok(Self {
             config,
             auth_config,
             model_service,
@@ -174,7 +174,7 @@ impl Server {
                     .with_state(self.storage.clone())
                     .layer(middleware::from_fn_with_state(
                         self.auth_config.clone(),
-                        jwt_auth_middleware_with_claims,
+                        jwt_auth_middleware,
                     )),
             )
             // Protected Bedrock API routes - usage tracking now handled by ModelService
@@ -236,7 +236,7 @@ impl Server {
                     // Get user from JWT claims if available
                     let user = req
                         .extensions()
-                        .get::<crate::auth::jwt::ValidatedClaims>()
+                        .get::<ValidatedClaims>()
                         .map(|claims| claims.subject().to_string())
                         .unwrap_or_else(|| "anonymous".to_string());
 
@@ -294,7 +294,7 @@ mod tests {
         config.storage.redis.enabled = false;
         config.storage.database.enabled = false;
         config.metrics.enabled = false;
-        
+
         let server = Server::new(config.clone()).await.unwrap();
         (server, config)
     }

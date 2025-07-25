@@ -21,6 +21,7 @@ use axum::{
 };
 use std::sync::Arc;
 use tracing::{error, info, warn};
+use serde_json::json;
 
 /// Create routes for Anthropic API endpoints
 pub fn create_anthropic_routes() -> Router<Arc<ModelService>> {
@@ -39,21 +40,55 @@ pub async fn create_message(
 
     // Extract user_id directly from JWT claims
     let user_id = claims.user_id();
+    tracing::trace!("User ID from JWT claims: {}", user_id);
+
+    // Log request body details for debugging
+    tracing::trace!("Request body size: {} bytes", body.len());
+    
+    // Log first 500 characters of the body for debugging (safely)
+    let body_preview = if body.len() > 500 {
+        format!("{}... (truncated)", String::from_utf8_lossy(&body[..500]))
+    } else {
+        String::from_utf8_lossy(&body).to_string()
+    };
+    tracing::trace!("Request body preview: {}", body_preview);
 
     // Parse the Anthropic request
     let anthropic_request: AnthropicRequest = serde_json::from_slice(&body)
-        .map_err(|e| AppError::BadRequest(format!("Invalid JSON request: {}", e)))?;
+        .map_err(|e| {
+            error!("Failed to parse JSON request body. Error: {}", e);
+            tracing::trace!("Body length: {} bytes", body.len());
+            if body.len() < 1000 {
+                tracing::trace!("Full body content: {}", String::from_utf8_lossy(&body));
+            } else {
+                tracing::trace!("Body too large to log completely. First 1000 chars: {}", 
+                       String::from_utf8_lossy(&body[..1000]));
+            }
+            AppError::BadRequest(format!("Invalid JSON request: {}", e))
+        })?;
+
+    // Log successful parsing
+    tracing::trace!("Successfully parsed Anthropic request - Model: {}, Messages: {}, Max tokens: {}", 
+          anthropic_request.model, 
+          anthropic_request.messages.len(),
+          anthropic_request.max_tokens);
 
     // Validate the request format
     validate_anthropic_request(&anthropic_request).map_err(AppError::from)?;
+    tracing::trace!("Request validation passed");
 
-    // Create model mapper for transformations
-    let model_mapper = ModelMapper::default();
+    // Create model mapper for transformations from service config
+    let model_mapper = model_service.create_model_mapper();
 
     // Transform Anthropic request to Bedrock format
+    tracing::trace!("Transforming Anthropic model '{}' to Bedrock format", anthropic_request.model);
     let (bedrock_request, bedrock_model_id) =
         transform_anthropic_to_bedrock(anthropic_request.clone(), &model_mapper)
-            .map_err(AppError::from)?;
+            .map_err(|e| {
+                error!("Failed to transform Anthropic request to Bedrock format: {}", e);
+                AppError::from(e)
+            })?;
+    tracing::trace!("Successfully transformed to Bedrock model ID: {}", bedrock_model_id);
 
     // Convert bedrock_request to bytes for AWS call
     let bedrock_body = serde_json::to_vec(&bedrock_request)
@@ -115,20 +150,50 @@ async fn handle_non_streaming_message(
     match model_service.invoke_model(model_request).await {
         Ok(model_response) => {
             info!(
-                "Successfully invoked Bedrock model {} with status {}",
+                "Bedrock model {} invocation completed with status {}",
                 bedrock_model_id, model_response.status
             );
 
-            // Parse AWS response body as JSON
+            // Check for HTTP error status first
+            if !model_response.status.is_success() {
+                // Parse error response
+                let error_response: serde_json::Value = serde_json::from_slice(&model_response.body)
+                    .unwrap_or_else(|_| json!({"message": "Unknown error"}));
+                
+                let error_message = error_response.get("message")
+                    .and_then(|m| m.as_str())
+                    .unwrap_or("Unknown AWS error");
+
+                error!("AWS Bedrock error ({}): {}", model_response.status, error_message);
+                
+                // Return appropriate error based on status code
+                return match model_response.status.as_u16() {
+                    403 => Err(AppError::BadRequest(format!(
+                        "Model access denied: {}. Please ensure the model is enabled in your AWS Bedrock console and your credentials have the necessary permissions.", 
+                        error_message
+                    ))),
+                    400 => Err(AppError::BadRequest(format!("Invalid request: {}", error_message))),
+                    401 => Err(AppError::Unauthorized(format!("Authentication failed: {}", error_message))),
+                    429 => Err(AppError::BadRequest(format!("Rate limit exceeded: {}", error_message))),
+                    _ => Err(AppError::Internal(format!("AWS Bedrock error ({}): {}", model_response.status, error_message)))
+                };
+            }
+
+            // Parse successful response body as JSON
             let bedrock_response: serde_json::Value = serde_json::from_slice(&model_response.body)
                 .map_err(|e| {
+                    error!("Failed to parse successful Bedrock response: {}", e);
+                    error!("Raw Bedrock response body: {}", String::from_utf8_lossy(&model_response.body));
                     AppError::Internal(format!("Failed to parse Bedrock response: {}", e))
                 })?;
 
             // Transform Bedrock response to Anthropic format
             let anthropic_response =
                 transform_bedrock_to_anthropic(bedrock_response, &original_model, &model_mapper)
-                    .map_err(AppError::from)?;
+                    .map_err(|e| {
+                        error!("Transformation error: {}", e);
+                        AppError::from(e)
+                    })?;
 
             // Return JSON response
             Ok(Response::builder()
@@ -238,7 +303,7 @@ async fn handle_streaming_message(
 mod tests {
     use super::*;
     use crate::{
-        auth::middleware::{AuthConfig, jwt_auth_middleware_with_claims},
+        auth::middleware::{AuthConfig, jwt_auth_middleware},
         config::Config,
         storage::{database::SqliteStorage, Storage},
     };
@@ -270,7 +335,7 @@ mod tests {
 
     fn create_test_anthropic_request_json() -> String {
         serde_json::to_string(&serde_json::json!({
-            "model": "claude-3-sonnet-20240229",
+            "model": "claude-sonnet-4-20250514",
             "messages": [
                 {
                     "role": "user",
@@ -285,7 +350,7 @@ mod tests {
 
     fn create_test_streaming_request_json() -> String {
         serde_json::to_string(&serde_json::json!({
-            "model": "claude-3-sonnet-20240229",
+            "model": "claude-sonnet-4-20250514",
             "messages": [
                 {
                     "role": "user",
@@ -306,7 +371,7 @@ mod tests {
             .with_state(model_service)
             .layer(middleware::from_fn_with_state(
                 auth_config,
-                jwt_auth_middleware_with_claims,
+                jwt_auth_middleware,
             ));
 
         let request = Request::builder()
@@ -330,7 +395,7 @@ mod tests {
             .with_state(model_service)
             .layer(middleware::from_fn_with_state(
                 auth_config,
-                jwt_auth_middleware_with_claims,
+                jwt_auth_middleware,
             ));
 
         let request = Request::builder()
@@ -354,7 +419,7 @@ mod tests {
             .with_state(model_service)
             .layer(middleware::from_fn_with_state(
                 auth_config.clone(),
-                jwt_auth_middleware_with_claims,
+                jwt_auth_middleware,
             ));
 
         // Create a valid JWT token for the test
@@ -401,11 +466,11 @@ mod tests {
             .with_state(model_service)
             .layer(middleware::from_fn_with_state(
                 auth_config,
-                jwt_auth_middleware_with_claims,
+                jwt_auth_middleware,
             ));
 
         let incomplete_request = serde_json::to_string(&serde_json::json!({
-            "model": "claude-3-sonnet-20240229",
+            "model": "claude-sonnet-4-20250514",
             // Missing messages and max_tokens
         }))
         .unwrap();
@@ -430,7 +495,7 @@ mod tests {
             .with_state(model_service)
             .layer(middleware::from_fn_with_state(
                 auth_config,
-                jwt_auth_middleware_with_claims,
+                jwt_auth_middleware,
             ));
 
         let request_with_unsupported_model = serde_json::to_string(&serde_json::json!({
@@ -465,11 +530,11 @@ mod tests {
             .with_state(model_service)
             .layer(middleware::from_fn_with_state(
                 auth_config,
-                jwt_auth_middleware_with_claims,
+                jwt_auth_middleware,
             ));
 
         let request_with_system = serde_json::to_string(&serde_json::json!({
-            "model": "claude-3-sonnet-20240229",
+            "model": "claude-sonnet-4-20250514",
             "messages": [
                 {
                     "role": "user",
@@ -502,11 +567,11 @@ mod tests {
             .with_state(model_service)
             .layer(middleware::from_fn_with_state(
                 auth_config,
-                jwt_auth_middleware_with_claims,
+                jwt_auth_middleware,
             ));
 
         let full_request = serde_json::to_string(&serde_json::json!({
-            "model": "claude-3-sonnet-20240229",
+            "model": "claude-sonnet-4-20250514",
             "messages": [
                 {
                     "role": "user",
@@ -543,7 +608,7 @@ mod tests {
             .with_state(model_service)
             .layer(middleware::from_fn_with_state(
                 auth_config,
-                jwt_auth_middleware_with_claims,
+                jwt_auth_middleware,
             ));
 
         let request_with_alias = serde_json::to_string(&serde_json::json!({
@@ -579,13 +644,13 @@ mod tests {
             .with_state(model_service)
             .layer(middleware::from_fn_with_state(
                 auth_config,
-                jwt_auth_middleware_with_claims,
+                jwt_auth_middleware,
             ));
 
         // Create a large content string
         let large_content = "A".repeat(5000);
         let large_request = serde_json::to_string(&serde_json::json!({
-            "model": "claude-3-sonnet-20240229",
+            "model": "claude-sonnet-4-20250514",
             "messages": [
                 {
                     "role": "user",
