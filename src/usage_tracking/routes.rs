@@ -4,6 +4,7 @@ use crate::{
     error::AppError,
     storage::{Storage, StoredModelCost, UsageQuery, UsageRecord, UsageStats},
 };
+use rust_decimal::Decimal;
 use axum::{
     Router,
     extract::{Path, Query, State},
@@ -248,8 +249,8 @@ async fn create_model_cost(
     let cost = StoredModelCost {
         id: None,
         model_id: request.model_id,
-        input_cost_per_1k_tokens: request.input_cost_per_1k_tokens,
-        output_cost_per_1k_tokens: request.output_cost_per_1k_tokens,
+        input_cost_per_1k_tokens: Decimal::from_f64_retain(request.input_cost_per_1k_tokens).unwrap_or_default(),
+        output_cost_per_1k_tokens: Decimal::from_f64_retain(request.output_cost_per_1k_tokens).unwrap_or_default(),
         updated_at: Utc::now(),
     };
 
@@ -276,8 +277,8 @@ async fn update_model_cost(
     let cost = StoredModelCost {
         id: None,
         model_id: model_id.clone(),
-        input_cost_per_1k_tokens: request.input_cost_per_1k_tokens,
-        output_cost_per_1k_tokens: request.output_cost_per_1k_tokens,
+        input_cost_per_1k_tokens: Decimal::from_f64_retain(request.input_cost_per_1k_tokens).unwrap_or_default(),
+        output_cost_per_1k_tokens: Decimal::from_f64_retain(request.output_cost_per_1k_tokens).unwrap_or_default(),
         updated_at: Utc::now(),
     };
 
@@ -354,7 +355,7 @@ async fn check_admin_permissions(
 mod tests {
     use super::*;
     use crate::auth::jwt::{OAuthClaims, ValidatedClaims};
-    use crate::storage::memory::{MemoryCacheStorage, MemoryDatabaseStorage};
+    use crate::storage::memory::MemoryCacheStorage;
     use axum::{body::Body, http::Request};
     use chrono::Utc;
     use tower::ServiceExt;
@@ -375,8 +376,9 @@ mod tests {
     async fn test_create_usage_routes() {
         let storage = Arc::new(crate::storage::Storage::new(
             Box::new(MemoryCacheStorage::new(3600)),
-            Box::new(MemoryDatabaseStorage::new()),
+            Box::new(crate::storage::database::SqliteStorage::new("sqlite::memory:").await.unwrap()),
         ));
+        storage.migrate().await.unwrap();
 
         let app = create_usage_routes().with_state(storage);
 
@@ -396,8 +398,9 @@ mod tests {
     async fn test_admin_permissions() {
         let storage = crate::storage::Storage::new(
             Box::new(MemoryCacheStorage::new(3600)),
-            Box::new(MemoryDatabaseStorage::new()),
+            Box::new(crate::storage::database::SqliteStorage::new("sqlite::memory:").await.unwrap()),
         );
+        storage.migrate().await.unwrap();
 
         let admin_claims = create_test_claims();
         assert!(

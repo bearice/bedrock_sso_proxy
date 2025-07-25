@@ -1,16 +1,23 @@
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
+use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, sync::Arc};
 use thiserror::Error;
 
 use crate::health::{HealthCheckResult, HealthChecker};
+#[cfg(test)]
+pub mod integration_tests;
 
+pub mod blackhole;
 pub mod database;
 pub mod factory;
 pub mod memory;
 pub mod migrations;
+pub mod postgres;
+pub mod query_builder;
 pub mod redis;
+pub mod sqlite;
 
 pub use factory::StorageFactory;
 
@@ -108,7 +115,7 @@ pub struct UsageRecord {
     pub response_time_ms: u32,
     pub success: bool,
     pub error_message: Option<String>,
-    pub cost_usd: Option<f64>,
+    pub cost_usd: Option<Decimal>,
 }
 
 /// Pre-calculated usage summary for performance
@@ -126,7 +133,7 @@ pub struct UsageSummary {
     pub total_tokens: u64,
     pub avg_response_time_ms: f32,
     pub success_rate: f32,
-    pub estimated_cost: Option<f64>,
+    pub estimated_cost: Option<Decimal>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
@@ -136,8 +143,8 @@ pub struct UsageSummary {
 pub struct StoredModelCost {
     pub id: Option<i32>,
     pub model_id: String,
-    pub input_cost_per_1k_tokens: f64,
-    pub output_cost_per_1k_tokens: f64,
+    pub input_cost_per_1k_tokens: Decimal,
+    pub output_cost_per_1k_tokens: Decimal,
     pub updated_at: DateTime<Utc>,
 }
 
@@ -162,7 +169,7 @@ pub struct UsageStats {
     pub total_tokens: u64,
     pub avg_response_time_ms: f32,
     pub success_rate: f32,
-    pub total_cost: Option<f64>,
+    pub total_cost: Option<Decimal>,
     pub unique_models: u32,
     pub date_range: (DateTime<Utc>, DateTime<Utc>),
 }

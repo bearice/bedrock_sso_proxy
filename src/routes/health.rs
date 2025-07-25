@@ -44,9 +44,9 @@ mod tests {
     use super::*;
     use crate::{
         config::Config,
-        health::HealthService, 
+        health::HealthService,
         model_service::ModelService,
-        storage::{memory::MemoryDatabaseStorage, Storage},
+        storage::{Storage, database::SqliteStorage},
     };
     use axum::{
         body::Body,
@@ -56,17 +56,18 @@ mod tests {
 
     async fn create_test_health_service() -> Arc<HealthService> {
         let health_service = Arc::new(HealthService::new());
-        
+
         // Create ModelService for testing and register its AWS health checker
         let config = Config::default();
         let storage = Arc::new(Storage::new(
             Box::new(crate::storage::memory::MemoryCacheStorage::new(3600)),
-            Box::new(MemoryDatabaseStorage::new()),
+            Box::new(SqliteStorage::new("sqlite::memory:").await.unwrap()),
         ));
-        let model_service = ModelService::new_test(storage, config);
-        
+        storage.migrate().await.unwrap();
+        let model_service = ModelService::new(storage, config);
+
         health_service
-            .register(Arc::new(model_service.aws_client().clone().health_checker()))
+            .register(model_service.aws_client().health_checker())
             .await;
         health_service
     }
@@ -102,7 +103,7 @@ mod tests {
         let app = create_health_routes().with_state(health_service);
 
         let request = Request::builder()
-            .uri("/?check=aws_bedrock")
+            .uri("/?check=aws")
             .body(Body::empty())
             .unwrap();
 

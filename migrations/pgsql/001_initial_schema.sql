@@ -18,7 +18,7 @@ CREATE TABLE IF NOT EXISTS users (
 CREATE TABLE IF NOT EXISTS refresh_tokens (
     id SERIAL PRIMARY KEY,
     token_hash VARCHAR(64) NOT NULL UNIQUE,
-    user_id INTEGER NOT NULL,
+    user_id TEXT NOT NULL,
     provider VARCHAR(100) NOT NULL,
     email VARCHAR(255) NOT NULL,
     created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
@@ -61,7 +61,7 @@ COMMENT ON COLUMN users.email IS 'User email address (primary identifier)';
 COMMENT ON COLUMN users.display_name IS 'User display name from OAuth provider';
 
 COMMENT ON COLUMN refresh_tokens.token_hash IS 'SHA-256 hash of the refresh token';
-COMMENT ON COLUMN refresh_tokens.user_id IS 'User ID from OAuth provider (not database ID)';
+COMMENT ON COLUMN refresh_tokens.user_id IS 'User ID from OAuth provider (string identifier)';
 COMMENT ON COLUMN refresh_tokens.provider IS 'OAuth provider name';
 COMMENT ON COLUMN refresh_tokens.email IS 'User email address';
 COMMENT ON COLUMN refresh_tokens.rotation_count IS 'Number of times this token has been rotated';

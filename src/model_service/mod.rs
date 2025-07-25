@@ -1,4 +1,4 @@
-mod aws_http;
+pub mod aws_http;
 
 use crate::{
     config::Config,
@@ -6,18 +6,72 @@ use crate::{
     error::AppError,
     storage::{Storage, UsageRecord},
 };
-use aws_http::AwsHttpClient;
+use rust_decimal::Decimal;
+use aws_http::{AwsHttpClient, AwsResponse};
+use axum::http::HeaderMap;
+use async_trait::async_trait;
+
+// Trait for AWS client operations to enable mocking
+#[async_trait]
+pub trait AwsClientTrait: Send + Sync {
+    async fn invoke_model(
+        &self,
+        model_id: &str,
+        content_type: Option<&str>,
+        accept: Option<&str>,
+        body: Vec<u8>,
+    ) -> Result<AwsResponse, AppError>;
+
+    async fn invoke_model_with_response_stream(
+        &self,
+        model_id: &str,
+        headers: &HeaderMap,
+        content_type: Option<&str>,
+        accept: Option<&str>,
+        body: Vec<u8>,
+    ) -> Result<aws_http::AwsStreamResponse, AppError>;
+
+    fn health_checker(&self) -> Arc<dyn crate::health::HealthChecker>;
+}
+
+// Implement the trait for the real AWS client
+#[async_trait]
+impl AwsClientTrait for AwsHttpClient {
+    async fn invoke_model(
+        &self,
+        model_id: &str,
+        content_type: Option<&str>,
+        accept: Option<&str>,
+        body: Vec<u8>,
+    ) -> Result<AwsResponse, AppError> {
+        self.invoke_model(model_id, content_type, accept, body).await
+    }
+
+    async fn invoke_model_with_response_stream(
+        &self,
+        model_id: &str,
+        headers: &HeaderMap,
+        content_type: Option<&str>,
+        accept: Option<&str>,
+        body: Vec<u8>,
+    ) -> Result<aws_http::AwsStreamResponse, AppError> {
+        self.invoke_model_with_response_stream(model_id, headers, content_type, accept, body).await
+    }
+
+    fn health_checker(&self) -> Arc<dyn crate::health::HealthChecker> {
+        Arc::new(AwsHttpClient::health_checker(self))
+    }
+}
 
 // Re-export AwsHttpClient for binaries (e2e client needs direct access)
 pub use aws_http::AwsHttpClient as BinaryAwsHttpClient;
-use axum::http::{HeaderMap, StatusCode};
+use axum::http::StatusCode;
 use chrono::Utc;
-use rust_decimal::{Decimal, prelude::FromPrimitive};
 use std::{sync::Arc, time::Instant};
 
 /// Unified model service for AWS calls and usage tracking
 pub struct ModelService {
-    aws_client: AwsHttpClient,
+    aws_client: Box<dyn AwsClientTrait>,
     storage: Arc<Storage>,
     config: Config,
 }
@@ -54,7 +108,7 @@ impl ModelService {
     pub fn new(storage: Arc<Storage>, config: Config) -> Self {
         let aws_client = AwsHttpClient::new(config.aws.clone());
         Self {
-            aws_client,
+            aws_client: Box::new(aws_client),
             storage,
             config,
         }
@@ -106,16 +160,6 @@ impl ModelService {
         Ok(())
     }
 
-    /// Create a test instance with mock AWS client
-    #[cfg(any(test, feature = "tests"))]
-    pub fn new_test(storage: Arc<Storage>, config: Config) -> Self {
-        let aws_client = AwsHttpClient::new_test();
-        Self {
-            aws_client,
-            storage,
-            config,
-        }
-    }
 
     /// Non-streaming model invocation with automatic usage tracking
     pub async fn invoke_model(&self, request: ModelRequest) -> Result<ModelResponse, AppError> {
@@ -235,7 +279,7 @@ impl ModelService {
             response_time_ms: usage_metadata.response_time_ms,
             success: true,
             error_message: None,
-            cost_usd,
+            cost_usd: cost_usd.map(|c| Decimal::from_f64_retain(c).unwrap_or_default()),
         };
 
         // Store usage record
@@ -299,10 +343,10 @@ impl ModelService {
         match self.storage.database.get_model_cost(model_id).await {
             Ok(Some(cost_data)) => {
                 let input_cost = Decimal::from(input_tokens)
-                    * Decimal::from_f64(cost_data.input_cost_per_1k_tokens).unwrap_or_default()
+                    * cost_data.input_cost_per_1k_tokens
                     / Decimal::from(1000);
                 let output_cost = Decimal::from(output_tokens)
-                    * Decimal::from_f64(cost_data.output_cost_per_1k_tokens).unwrap_or_default()
+                    * cost_data.output_cost_per_1k_tokens
                     / Decimal::from(1000);
                 Some(input_cost + output_cost)
             }
@@ -317,10 +361,11 @@ impl ModelService {
         }
     }
 
-    /// Get the AWS client for direct access if needed
-    pub fn aws_client(&self) -> &AwsHttpClient {
-        &self.aws_client
+    /// Get the AWS client for direct access if needed (returns trait object)
+    pub fn aws_client(&self) -> &dyn AwsClientTrait {
+        self.aws_client.as_ref()
     }
+
 
     /// Get the storage layer for direct access if needed
     pub fn storage(&self) -> &Arc<Storage> {
@@ -333,8 +378,9 @@ mod tests {
     use super::*;
     use crate::{
         config::{AwsConfig, Config},
-        storage::{Storage, memory::MemoryDatabaseStorage},
+        storage::{Storage, database::SqliteStorage},
     };
+
 
     fn create_test_config() -> Config {
         Config {
@@ -349,19 +395,21 @@ mod tests {
         }
     }
 
-    fn create_test_storage() -> Arc<Storage> {
+    async fn create_test_storage() -> Arc<Storage> {
+        let sqlite_storage = SqliteStorage::new(":memory:").await.unwrap();
+        sqlite_storage.migrate().await.unwrap();
         Arc::new(Storage::new(
             Box::new(crate::storage::memory::MemoryCacheStorage::new(3600)),
-            Box::new(MemoryDatabaseStorage::new()),
+            Box::new(sqlite_storage),
         ))
     }
 
     #[tokio::test]
     async fn test_model_service_creation() {
         let config = create_test_config();
-        let storage = create_test_storage();
+        let storage = create_test_storage().await;
 
-        let model_service = ModelService::new_test(storage, config);
+        let model_service = ModelService::new(storage, config);
 
         // Verify service was created successfully
         assert_eq!(model_service.config.aws.region, "us-east-1");
@@ -370,8 +418,8 @@ mod tests {
     #[tokio::test]
     async fn test_extract_usage_metadata() {
         let config = create_test_config();
-        let storage = create_test_storage();
-        let model_service = ModelService::new_test(storage, config);
+        let storage = create_test_storage().await;
+        let model_service = ModelService::new(storage, config);
 
         let mut headers = HeaderMap::new();
         headers.insert("x-amzn-bedrock-input-token-count", "100".parse().unwrap());
@@ -388,15 +436,15 @@ mod tests {
     #[tokio::test]
     async fn test_calculate_cost() {
         let config = create_test_config();
-        let storage = create_test_storage();
-        let model_service = ModelService::new_test(storage.clone(), config);
+        let storage = create_test_storage().await;
+        let model_service = ModelService::new(storage.clone(), config);
 
         // Add a model cost to storage
         let model_cost = crate::storage::StoredModelCost {
             id: None,
             model_id: "test-model".to_string(),
-            input_cost_per_1k_tokens: 0.003,
-            output_cost_per_1k_tokens: 0.015,
+            input_cost_per_1k_tokens: Decimal::new(3, 3), // 0.003 exactly
+            output_cost_per_1k_tokens: Decimal::new(15, 3), // 0.015 exactly
             updated_at: Utc::now(),
         };
         storage
@@ -409,17 +457,20 @@ mod tests {
         let cost = model_service.calculate_cost("test-model", 100, 50).await;
 
         assert!(cost.is_some());
-        let expected_cost = Decimal::from_f64(0.003).unwrap() * Decimal::from(100)
-            / Decimal::from(1000)
-            + Decimal::from_f64(0.015).unwrap() * Decimal::from(50) / Decimal::from(1000);
-        assert_eq!(cost.unwrap(), expected_cost);
+        // Calculate expected cost: (0.003 * 100 / 1000) + (0.015 * 50 / 1000) = 0.00105
+        let expected_cost = Decimal::new(105, 5); // 0.00105 exactly
+        let actual_cost = cost.unwrap();
+        // Use approximate comparison due to potential precision issues in calculations
+        let diff = (actual_cost - expected_cost).abs();
+        assert!(diff < Decimal::new(1, 7), // 0.0000001 tolerance
+            "Expected cost {}, got {}, diff {}", expected_cost, actual_cost, diff);
     }
 
     #[tokio::test]
     async fn test_track_usage() {
         let config = create_test_config();
-        let storage = create_test_storage();
-        let model_service = ModelService::new_test(storage.clone(), config);
+        let storage = create_test_storage().await;
+        let model_service = ModelService::new(storage.clone(), config);
 
         // Create a test user first
         let user_record = crate::storage::UserRecord {

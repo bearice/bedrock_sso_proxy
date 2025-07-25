@@ -1,7 +1,8 @@
 use super::{
     CacheStorage, DatabaseStorage, Storage, StorageResult,
+    blackhole::BlackholeStorage,
     database::{DatabaseConfig, PostgresStorage, SqliteStorage},
-    memory::{MemoryCacheStorage, MemoryDatabaseStorage},
+    memory::MemoryCacheStorage,
     redis::{RedisCacheStorage, RedisConfig},
 };
 use crate::config::Config;
@@ -94,7 +95,8 @@ impl StorageFactory {
     ) -> StorageResult<Box<dyn DatabaseStorage>> {
         match config.database_backend {
             DatabaseBackend::Memory => {
-                let database = MemoryDatabaseStorage::new();
+                // Use blackhole storage when database is disabled
+                let database = BlackholeStorage::new();
                 Ok(Box::new(database))
             }
             DatabaseBackend::Sqlite => {
@@ -122,9 +124,11 @@ impl StorageFactory {
             } else if config.storage.database.url.starts_with("sqlite://") {
                 DatabaseBackend::Sqlite
             } else {
-                DatabaseBackend::Memory
+                // Default to SQLite in-memory if URL format is unrecognized
+                DatabaseBackend::Sqlite
             }
         } else {
+            // Use blackhole storage when database is disabled
             DatabaseBackend::Memory
         };
 
@@ -150,8 +154,25 @@ impl StorageFactory {
         }
     }
 
-    /// Create storage for testing with memory backends
+    /// Create storage for testing with SQLite in-memory
     pub async fn create_test_storage() -> StorageResult<Storage> {
+        let config = StorageFactoryConfig {
+            cache_backend: CacheBackend::Memory,
+            database_backend: DatabaseBackend::Sqlite,
+            redis_config: RedisConfig::default(),
+            database_config: DatabaseConfig {
+                url: "sqlite::memory:".to_string(),
+                max_connections: 5,
+                migration_on_startup: true,
+            },
+            memory_cleanup_interval: 60, // 1 minute for testing
+        };
+
+        Self::create_storage(config).await
+    }
+
+    /// Create storage for testing with blackhole (no-op) database
+    pub async fn create_blackhole_storage() -> StorageResult<Storage> {
         let config = StorageFactoryConfig {
             cache_backend: CacheBackend::Memory,
             database_backend: DatabaseBackend::Memory,
@@ -325,5 +346,203 @@ mod tests {
         assert_eq!(config.memory_cleanup_interval, 3600);
         assert_eq!(config.redis_config.key_prefix, "bedrock_sso:");
         assert_eq!(config.database_config.max_connections, 5);
+    }
+
+    #[tokio::test]
+    async fn test_postgres_storage_factory() {
+        use crate::storage::postgres::tests::create_test_postgres_db;
+        
+        let test_db = create_test_postgres_db().await
+            .expect("PostgreSQL database must be available for testing. Set POSTGRES_ADMIN_URL or ensure PostgreSQL is running.");
+        
+        let database_url = format!("postgres://localhost/{}", test_db.db_name);
+
+        let config = StorageFactoryConfig {
+            cache_backend: CacheBackend::Memory,
+            database_backend: DatabaseBackend::Postgres,
+            redis_config: RedisConfig::default(),
+            database_config: DatabaseConfig {
+                url: database_url,
+                max_connections: 5,
+                migration_on_startup: true,
+            },
+            memory_cleanup_interval: 3600,
+        };
+
+        let storage = StorageFactory::create_storage(config).await
+            .expect("PostgreSQL database must be available for testing. Set POSTGRES_ADMIN_URL or ensure PostgreSQL is running.");
+
+        // Test health check
+        storage.health_check().await.unwrap();
+
+        // Test basic database operations through factory-created storage
+        let user = super::super::UserRecord {
+            id: None,
+            provider_user_id: "factory-user-postgres".to_string(),
+            provider: "google".to_string(),
+            email: "factory@example.com".to_string(),
+            display_name: Some("Factory Test User".to_string()),
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
+            last_login: None,
+        };
+
+        let user_id = storage.database.upsert_user(&user).await.unwrap();
+        assert!(user_id > 0);
+
+        let retrieved = storage
+            .database
+            .get_user_by_provider("google", "factory-user-postgres")
+            .await
+            .unwrap();
+        assert!(retrieved.is_some());
+        assert_eq!(retrieved.unwrap().email, "factory@example.com");
+
+        // Test cache operations work with PostgreSQL backend
+        let validation = super::super::CachedValidation {
+            user_id: "factory-user-postgres".to_string(),
+            provider: "google".to_string(),
+            email: "factory@example.com".to_string(),
+            validated_at: Utc::now(),
+            expires_at: Utc::now() + chrono::Duration::hours(1),
+            scopes: vec!["read".to_string()],
+        };
+
+        storage
+            .cache
+            .store_validation("factory-key", &validation, 3600)
+            .await
+            .unwrap();
+        let retrieved_validation = storage.cache.get_validation("factory-key").await.unwrap();
+        assert!(retrieved_validation.is_some());
+        assert_eq!(retrieved_validation.unwrap().user_id, "factory-user-postgres");
+    }
+
+    #[tokio::test]
+    async fn test_database_backend_selection() {
+        use crate::config::Config;
+
+        // Test PostgreSQL URL detection
+        let mut config = Config::default();
+        config.storage.database.url = "postgres://user:pass@localhost:5432/test".to_string();
+        config.storage.database.enabled = true;
+
+        let storage_config = StorageFactory::extract_storage_config(&config);
+        match storage_config.database_backend {
+            DatabaseBackend::Postgres => (),
+            _ => panic!("Should detect PostgreSQL from postgres:// URL"),
+        }
+
+        // Test SQLite URL detection
+        config.storage.database.url = "sqlite://./test.db".to_string();
+        let storage_config = StorageFactory::extract_storage_config(&config);
+        match storage_config.database_backend {
+            DatabaseBackend::Sqlite => (),
+            _ => panic!("Should detect SQLite from sqlite:// URL"),
+        }
+
+        // Test unknown URL format defaults to SQLite
+        config.storage.database.url = "unknown://format".to_string();
+        let storage_config = StorageFactory::extract_storage_config(&config);
+        match storage_config.database_backend {
+            DatabaseBackend::Sqlite => (),
+            _ => panic!("Should default to SQLite for unknown URL format"),
+        }
+
+        // Test disabled database defaults to Memory (blackhole)
+        config.storage.database.enabled = false;
+        let storage_config = StorageFactory::extract_storage_config(&config);
+        match storage_config.database_backend {
+            DatabaseBackend::Memory => (),
+            _ => panic!("Should default to Memory when database disabled"),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_create_blackhole_storage() {
+        let storage = StorageFactory::create_blackhole_storage().await.unwrap();
+
+        // Test health check
+        storage.health_check().await.unwrap();
+
+        // Test migrations (should be no-op)
+        storage.migrate().await.unwrap();
+
+        // Test that database operations return empty/default values
+        let user = super::super::UserRecord {
+            id: None,
+            provider_user_id: "test-user".to_string(),
+            provider: "google".to_string(),
+            email: "test@example.com".to_string(),
+            display_name: Some("Test User".to_string()),
+            created_at: chrono::Utc::now(),
+            updated_at: chrono::Utc::now(),
+            last_login: None,
+        };
+
+        // Should "succeed" but not actually store anything
+        let user_id = storage.database.upsert_user(&user).await.unwrap();
+        assert_eq!(user_id, 1);
+
+        // Should return None since nothing is actually stored
+        let retrieved = storage
+            .database
+            .get_user_by_provider("google", "test-user")
+            .await
+            .unwrap();
+        assert!(retrieved.is_none());
+
+        // Test cache operations still work (memory cache)
+        let validation = super::super::CachedValidation {
+            user_id: "user123".to_string(),
+            provider: "google".to_string(),
+            email: "user@example.com".to_string(),
+            validated_at: chrono::Utc::now(),
+            expires_at: chrono::Utc::now() + chrono::Duration::hours(1),
+            scopes: vec!["read".to_string()],
+        };
+
+        storage
+            .cache
+            .store_validation("key1", &validation, 3600)
+            .await
+            .unwrap();
+        let retrieved = storage.cache.get_validation("key1").await.unwrap();
+        assert!(retrieved.is_some());
+        assert_eq!(retrieved.unwrap().user_id, "user123");
+    }
+
+    #[tokio::test]
+    async fn test_production_storage_factory() {
+        let redis_url = "redis://localhost:6379";
+        let postgres_url = std::env::var("POSTGRES_TEST_URL")
+            .unwrap_or_else(|_| "postgres://localhost/bedrock_sso_test".to_string());
+
+        let storage = match StorageFactory::create_production_storage(redis_url, &postgres_url).await {
+            Ok(storage) => storage,
+            Err(_) => {
+                eprintln!("Skipping production storage test - services not available");
+                return;
+            }
+        };
+
+        // Test health check works for production configuration
+        storage.health_check().await.unwrap();
+
+        // Verify production configuration was applied correctly
+        // (Redis cache + PostgreSQL database should be configured)
+        let user = super::super::UserRecord {
+            id: None,
+            provider_user_id: "prod-test-user".to_string(),
+            provider: "google".to_string(),
+            email: "prod@example.com".to_string(),
+            display_name: Some("Production Test User".to_string()),
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
+            last_login: None,
+        };
+
+        let user_id = storage.database.upsert_user(&user).await.unwrap();
+        assert!(user_id > 0);
     }
 }

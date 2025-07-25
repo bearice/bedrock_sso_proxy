@@ -322,7 +322,7 @@ mod tests {
     use std::collections::HashMap;
     use tower::ServiceExt;
 
-    fn create_test_oauth_service() -> Arc<OAuthService> {
+    async fn create_test_oauth_service() -> Arc<OAuthService> {
         let mut providers = HashMap::new();
         providers.insert(
             "google".to_string(),
@@ -360,15 +360,16 @@ mod tests {
 
         let storage = Arc::new(crate::storage::Storage::new(
             Box::new(crate::storage::memory::MemoryCacheStorage::new(3600)),
-            Box::new(crate::storage::memory::MemoryDatabaseStorage::new()),
+            Box::new(crate::storage::database::SqliteStorage::new("sqlite::memory:").await.unwrap()),
         ));
+        storage.migrate().await.unwrap();
         let jwt_service = JwtService::new("test-secret".to_string(), Algorithm::HS256).unwrap();
         Arc::new(OAuthService::new(config, jwt_service, storage))
     }
 
     #[tokio::test]
     async fn test_authorize_handler() {
-        let oauth_service = create_test_oauth_service();
+        let oauth_service = create_test_oauth_service().await;
         let app = create_auth_routes().with_state(oauth_service);
 
         let request = Request::builder()
@@ -382,7 +383,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_authorize_handler_unknown_provider() {
-        let oauth_service = create_test_oauth_service();
+        let oauth_service = create_test_oauth_service().await;
         let app = create_auth_routes().with_state(oauth_service);
 
         let request = Request::builder()
@@ -396,7 +397,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_providers_handler() {
-        let oauth_service = create_test_oauth_service();
+        let oauth_service = create_test_oauth_service().await;
         let app = create_auth_routes().with_state(oauth_service);
 
         let request = Request::builder()
@@ -410,7 +411,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_validate_handler_missing_header() {
-        let oauth_service = create_test_oauth_service();
+        let oauth_service = create_test_oauth_service().await;
         let app = create_auth_routes().with_state(oauth_service);
 
         let request = Request::builder()
@@ -424,7 +425,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_validate_handler_invalid_format() {
-        let oauth_service = create_test_oauth_service();
+        let oauth_service = create_test_oauth_service().await;
         let app = create_auth_routes().with_state(oauth_service);
 
         let request = Request::builder()

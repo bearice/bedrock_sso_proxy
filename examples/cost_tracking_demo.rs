@@ -10,9 +10,10 @@ use bedrock_sso_proxy::{
     config::{AwsConfig, Config},
     cost_tracking::CostTrackingService,
     model_service::{ModelRequest, ModelService, UsageMetadata},
-    storage::{Storage, memory::MemoryDatabaseStorage},
+    storage::{Storage},
 };
 use chrono::Utc;
+use rust_decimal::Decimal;
 use std::sync::Arc;
 use tracing::{Level, info};
 
@@ -39,8 +40,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         Box::new(bedrock_sso_proxy::storage::memory::MemoryCacheStorage::new(
             3600,
         )),
-        Box::new(MemoryDatabaseStorage::new()),
+        Box::new(bedrock_sso_proxy::storage::database::SqliteStorage::new("sqlite::memory:").await.unwrap()),
     ));
+    
+    // Run database migrations
+    storage.migrate().await?;
 
     // 2. Initialize ModelService with cost tracking
     let model_service = Arc::new(ModelService::new(storage.clone(), config.clone()));
@@ -93,8 +97,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let claude_sonnet_cost = bedrock_sso_proxy::storage::StoredModelCost {
         id: None,
         model_id: "anthropic.claude-3-sonnet-20240229-v1:0".to_string(),
-        input_cost_per_1k_tokens: 0.003,  // $3 per million tokens
-        output_cost_per_1k_tokens: 0.015, // $15 per million tokens
+        input_cost_per_1k_tokens: Decimal::from_f64_retain(0.003).unwrap(),  // $3 per million tokens
+        output_cost_per_1k_tokens: Decimal::from_f64_retain(0.015).unwrap(), // $15 per million tokens
         updated_at: Utc::now(),
     };
     storage
@@ -109,10 +113,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .get_model_cost(&model_request.model_id)
         .await?
     {
-        let input_cost =
-            (usage_metadata.input_tokens as f64 / 1000.0) * cost.input_cost_per_1k_tokens;
-        let output_cost =
-            (usage_metadata.output_tokens as f64 / 1000.0) * cost.output_cost_per_1k_tokens;
+        let input_cost = Decimal::from_f64_retain(usage_metadata.input_tokens as f64 / 1000.0).unwrap() * cost.input_cost_per_1k_tokens;
+        let output_cost = Decimal::from_f64_retain(usage_metadata.output_tokens as f64 / 1000.0).unwrap() * cost.output_cost_per_1k_tokens;
         let total_cost = input_cost + output_cost;
 
         info!(

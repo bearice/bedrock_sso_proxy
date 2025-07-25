@@ -29,7 +29,13 @@ async fn main() {
     info!("Starting Bedrock SSO Proxy");
     info!("Configuration loaded successfully");
 
-    let server = Server::new(config);
+    let server = match Server::new(config).await {
+        Ok(server) => server,
+        Err(e) => {
+            error!("Failed to initialize server: {}", e);
+            std::process::exit(1);
+        }
+    };
 
     if let Err(e) = server.run().await {
         error!("Server error: {}", e);

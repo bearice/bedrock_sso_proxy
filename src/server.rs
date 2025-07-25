@@ -15,7 +15,7 @@ use crate::{
         create_health_routes,
     },
     shutdown::{HttpServerShutdown, ShutdownCoordinator, ShutdownManager, StorageShutdown},
-    storage::{StorageHealthChecker, factory::StorageFactory},
+    storage::factory::StorageFactory,
 };
 use axum::{
     Router, body::Body, extract::DefaultBodyLimit, http::Request, middleware, middleware::Next,
@@ -23,61 +23,83 @@ use axum::{
 };
 use std::{net::SocketAddr, sync::Arc, time::Duration};
 use tokio::net::TcpListener;
-use tracing::{error, info, trace};
+use tracing::{error, info};
 
 /// Maximum request body size (10MB) to prevent DoS attacks
 const MAX_BODY_SIZE: usize = 10 * 1024 * 1024;
 
+
 pub struct Server {
-    config: Config,
+    pub config: Config,
+    pub auth_config: Arc<AuthConfig>,
+    pub model_service: Arc<ModelService>,
+    pub oauth_service: Arc<OAuthService>,
+    pub health_service: Arc<HealthService>,
+    pub storage: Arc<crate::storage::Storage>,
 }
 
 impl Server {
-    pub fn new(config: Config) -> Self {
-        Self { config }
+    pub async fn new(config: Config) -> Result<Self, AppError> {
+        // Initialize metrics if enabled
+        let _metrics_handle = if config.metrics.enabled {
+            match metrics::init_metrics_with_port(config.metrics.port) {
+                Ok(handle) => {
+                    info!("Metrics server started on port {}", config.metrics.port);
+                    Some(handle)
+                }
+                Err(e) => {
+                    error!("Failed to start metrics server on port {}: {}", 
+                        config.metrics.port, e);
+                    return Err(AppError::Internal(format!("Failed to start metrics server: {}", e)));
+                }
+            }
+        } else {
+            None
+        };
+
+        // Initialize JWT service
+        let jwt_algorithm = parse_algorithm(&config.jwt.algorithm)?;
+        let jwt_service = JwtService::new(config.jwt.secret.clone(), jwt_algorithm)?;
+        let auth_config = Arc::new(AuthConfig::new(jwt_service.clone()));
+
+        // Initialize storage
+        let storage = Arc::new(
+            StorageFactory::create_from_config(&config)
+                .await
+                .map_err(AppError::Storage)?
+        );
+
+        // Initialize model service
+        let model_service = Arc::new(ModelService::new(storage.clone(), config.clone()));
+
+        // Initialize OAuth service
+        let oauth_service = Arc::new(OAuthService::new(
+            config.clone(),
+            jwt_service.clone(),
+            storage.clone(),
+        ));
+
+        // Initialize health service
+        let health_service = Arc::new(HealthService::new());
+
+        Ok(Self { 
+            config,
+            auth_config,
+            model_service,
+            oauth_service,
+            health_service,
+            storage,
+        })
     }
+
 
     pub async fn run(&self) -> Result<(), AppError> {
         // Initialize shutdown coordinator
         let shutdown_coordinator = ShutdownCoordinator::new();
         let mut shutdown_manager = ShutdownManager::new(Duration::from_secs(30));
 
-        // Initialize metrics system
-        let _metrics_handle = if self.config.metrics.enabled {
-            match metrics::init_metrics_with_port(self.config.metrics.port) {
-                Ok(handle) => {
-                    info!(
-                        "Metrics server started on port {}",
-                        self.config.metrics.port
-                    );
-                    Some(handle)
-                }
-                Err(e) => {
-                    error!("Failed to initialize metrics: {}", e);
-                    None
-                }
-            }
-        } else {
-            info!("Metrics collection is disabled");
-            None
-        };
-
-        let jwt_algorithm = parse_algorithm(&self.config.jwt.algorithm)?;
-        let jwt_service = JwtService::new(self.config.jwt.secret.clone(), jwt_algorithm)?;
-        let auth_config = Arc::new(AuthConfig::new(jwt_service.clone()));
-
-        // Initialize storage system
-        let storage = Arc::new(
-            StorageFactory::create_from_config(&self.config)
-                .await
-                .map_err(|e| AppError::Internal(format!("Failed to initialize storage: {}", e)))?,
-        );
-
-        // Initialize ModelService (creates its own AWS client)
-        let model_service = Arc::new(ModelService::new(storage.clone(), self.config.clone()));
-
         // Initialize model costs in the background
-        let model_service_clone = model_service.clone();
+        let model_service_clone = self.model_service.clone();
         tokio::spawn(async move {
             if let Err(e) = model_service_clone.initialize_model_costs().await {
                 tracing::warn!("Failed to initialize model costs: {}", e);
@@ -85,49 +107,9 @@ impl Server {
         });
 
         // Register storage for graceful shutdown
-        shutdown_manager.register(StorageShutdown::new(storage.clone()));
+        shutdown_manager.register(StorageShutdown::new(self.storage.clone()));
 
-        // OAuth is always enabled
-
-        let oauth_service = Arc::new(OAuthService::new(
-            self.config.clone(),
-            jwt_service.clone(),
-            storage.clone(),
-        ));
-
-        // Create centralized health service and register health checkers
-        let health_service = Arc::new(HealthService::new());
-
-        // Register AWS health checker through ModelService
-        health_service
-            .register(Arc::new(model_service.aws_client().clone().health_checker()))
-            .await;
-
-        // Register OAuth health checker
-        health_service
-            .register(Arc::new(oauth_service.health_checker()))
-            .await;
-
-        // Register JWT health checker
-        health_service
-            .register(Arc::new(jwt_service.health_checker()))
-            .await;
-
-        // Register storage health checker
-        let storage_health_checker = storage.clone();
-        health_service
-            .register(Arc::new(StorageHealthChecker::new(storage_health_checker)))
-            .await;
-
-        let app = self.create_app(
-            auth_config,
-            model_service.clone(),
-            oauth_service,
-            health_service,
-            storage.clone(),
-            self.config.metrics.enabled,
-            tracing::Level::INFO,
-        );
+        let app = self.create_app();
 
         let addr = SocketAddr::from(([0, 0, 0, 0], self.config.server.port));
         let listener = TcpListener::bind(addr)
@@ -173,29 +155,25 @@ impl Server {
         Ok(())
     }
 
-    // Creates an application router with common routes and middleware
-    fn create_app(
-        &self,
-        auth_config: Arc<AuthConfig>,
-        model_service: Arc<ModelService>,
-        oauth_service: Arc<OAuthService>,
-        health_service: Arc<HealthService>,
-        storage: Arc<crate::storage::Storage>,
-        use_metrics: bool,
-        log_level: tracing::Level,
-    ) -> Router {
+    // Creates an application router
+    pub fn create_app(&self) -> Router {
+        self.create_app_internal()
+    }
+
+    // Internal method that actually creates the application router
+    fn create_app_internal(&self) -> Router {
         let mut app = Router::new()
             // OAuth authentication routes (no auth required)
-            .nest("/auth", create_auth_routes().with_state(oauth_service))
+            .nest("/auth", create_auth_routes().with_state(self.oauth_service.clone()))
             // Health check routes (no auth required)
-            .nest("/health", create_health_routes().with_state(health_service))
+            .nest("/health", create_health_routes().with_state(self.health_service.clone()))
             // Protected usage tracking API routes
             .nest(
                 "/api",
                 create_usage_routes()
-                    .with_state(storage.clone())
+                    .with_state(self.storage.clone())
                     .layer(middleware::from_fn_with_state(
-                        auth_config.clone(),
+                        self.auth_config.clone(),
                         jwt_auth_middleware_with_claims,
                     )),
             )
@@ -203,10 +181,10 @@ impl Server {
             .nest(
                 "/bedrock",
                 create_bedrock_routes()
-                    .with_state(model_service.clone())
+                    .with_state(self.model_service.clone())
                     .layer(DefaultBodyLimit::max(MAX_BODY_SIZE))
                     .layer(middleware::from_fn_with_state(
-                        auth_config.clone(),
+                        self.auth_config.clone(),
                         jwt_auth_middleware,
                     )),
             )
@@ -214,10 +192,10 @@ impl Server {
             .nest(
                 "/anthropic",
                 create_anthropic_routes()
-                    .with_state(model_service)
+                    .with_state(self.model_service.clone())
                     .layer(DefaultBodyLimit::max(MAX_BODY_SIZE))
                     .layer(middleware::from_fn_with_state(
-                        auth_config,
+                        self.auth_config.clone(),
                         jwt_auth_middleware,
                     )),
             )
@@ -225,17 +203,16 @@ impl Server {
             .fallback_service(create_frontend_router(self.config.frontend.clone()));
 
         // Add metrics middleware if enabled
-        if use_metrics {
+        if self.config.metrics.enabled {
             app = app.layer(middleware::from_fn(metrics::metrics_middleware));
         }
 
         // Add request logging middleware if enabled
         if self.config.logging.log_request {
             // Enhanced request/response logging middleware
-            async fn request_response_logger_with_level(
+            async fn request_response_logger(
                 req: Request<Body>,
                 next: Next,
-                log_level: tracing::Level,
             ) -> Response {
                 // Get method and path
                 let method = req.method().to_string();
@@ -264,14 +241,7 @@ impl Server {
                         .unwrap_or_else(|| "anonymous".to_string());
 
                     // Log request with simple format - only for API routes
-                    match log_level {
-                        tracing::Level::TRACE => {
-                            trace!("Request: {} {} ip={} user={}", method, path, ip, user);
-                        }
-                        _ => {
-                            info!("Request: {} {} ip={} user={}", method, path, ip, user);
-                        }
-                    }
+                    info!("Request: {} {} ip={} user={}", method, path, ip, user);
 
                     // Track request start time for latency calculation
                     let start = std::time::Instant::now();
@@ -283,26 +253,13 @@ impl Server {
                     let duration = start.elapsed();
 
                     // Log response
-                    match log_level {
-                        tracing::Level::TRACE => {
-                            trace!(
-                                "Response: {} {} status={} latency={}ms",
-                                method,
-                                path,
-                                response.status().as_u16(),
-                                duration.as_millis()
-                            );
-                        }
-                        _ => {
-                            info!(
-                                "Response: {} {} status={} latency={}ms",
-                                method,
-                                path,
-                                response.status().as_u16(),
-                                duration.as_millis()
-                            );
-                        }
-                    }
+                    info!(
+                        "Response: {} {} status={} latency={}ms",
+                        method,
+                        path,
+                        response.status().as_u16(),
+                        duration.as_millis()
+                    );
 
                     response
                 } else {
@@ -311,93 +268,38 @@ impl Server {
                 }
             }
 
-            // Create a closure that captures the log level
-            let log_level_clone = log_level;
-            app = app.layer(middleware::from_fn(move |req, next| {
-                request_response_logger_with_level(req, next, log_level_clone)
-            }));
+            app = app.layer(middleware::from_fn(request_response_logger));
         }
 
         app
     }
 
-    // For testing - OAuth always enabled with in-memory storage
-    #[cfg(any(test, feature = "tests"))]
-    pub async fn create_test_app(
-        &self,
-        auth_config: Arc<AuthConfig>,
-    ) -> Result<Router, AppError> {
-        let jwt_service = JwtService::new(
-            self.config.jwt.secret.clone(),
-            parse_algorithm(&self.config.jwt.algorithm).unwrap(),
-        )?;
-
-        // Create temporary storage for testing
-        let temp_storage = Arc::new(crate::storage::Storage::new(
-            Box::new(crate::storage::memory::MemoryCacheStorage::new(3600)),
-            Box::new(crate::storage::memory::MemoryDatabaseStorage::new()),
-        ));
-
-        let oauth_service = Arc::new(OAuthService::new(
-            self.config.clone(),
-            jwt_service.clone(),
-            temp_storage.clone(),
-        ));
-
-        // Create ModelService for testing
-        let model_service = Arc::new(ModelService::new_test(temp_storage.clone(), self.config.clone()));
-
-        // Create health service for testing
-        let health_service = Arc::new(HealthService::new());
-        health_service
-            .register(Arc::new(model_service.aws_client().clone().health_checker()))
-            .await;
-        health_service
-            .register(Arc::new(oauth_service.health_checker()))
-            .await;
-        health_service
-            .register(Arc::new(jwt_service.health_checker()))
-            .await;
-
-        // Create router with test-specific settings:
-        // - No metrics middleware
-        // - TRACE-level logging instead of INFO
-        // - Using memory storage instead of configured storage
-        let app = self.create_app(
-            auth_config,
-            model_service,
-            oauth_service,
-            health_service,
-            temp_storage,
-            false,                 // no metrics in tests
-            tracing::Level::TRACE, // use trace level in tests
-        );
-
-        // For tests, return the router wrapped in Result
-        Ok(app)
-    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::auth::jwt::JwtService;
-    use crate::auth::middleware::AuthConfig;
     use crate::config::Config;
     use axum::{
         body::Body,
         http::{Request, StatusCode},
     };
-    use jsonwebtoken::{Algorithm, EncodingKey, Header, encode};
-    use serde::{Deserialize, Serialize};
+    use jsonwebtoken::{EncodingKey, Header, encode};
     use std::time::{SystemTime, UNIX_EPOCH};
     use tower::ServiceExt;
 
-    #[derive(Debug, Serialize, Deserialize)]
-    struct TestClaims {
-        sub: String,
-        exp: usize,
+    // Common test setup function
+    async fn create_test_server() -> (Server, Config) {
+        let mut config = Config::default();
+        config.storage.redis.enabled = false;
+        config.storage.database.enabled = false;
+        config.metrics.enabled = false;
+        
+        let server = Server::new(config.clone()).await.unwrap();
+        (server, config)
     }
+
+    use crate::auth::jwt::Claims;
 
     fn create_test_token(secret: &str, sub: &str, exp_offset: i64) -> String {
         let now = SystemTime::now()
@@ -406,9 +308,10 @@ mod tests {
             .as_secs() as i64;
         let exp = (now + exp_offset) as usize;
 
-        let claims = TestClaims {
+        let claims = Claims {
             sub: sub.to_string(),
             exp,
+            user_id: 123,
         };
 
         encode(
@@ -421,14 +324,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_health_check_with_valid_jwt() {
-        let config = Config::default();
-        let jwt_service = JwtService::new(config.jwt.secret.clone(), Algorithm::HS256).unwrap();
-        let auth_config = Arc::new(AuthConfig::new(jwt_service));
-        let server = Server::new(config.clone());
-        let app = server
-            .create_test_app(auth_config)
-            .await
-            .unwrap();
+        let (server, config) = create_test_server().await;
+        let app = server.create_app();
 
         let token = create_test_token(&config.jwt.secret, "user123", 3600);
         let request = Request::builder()
@@ -443,14 +340,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_health_check_without_jwt() {
-        let config = Config::default();
-        let jwt_service = JwtService::new(config.jwt.secret.clone(), Algorithm::HS256).unwrap();
-        let auth_config = Arc::new(AuthConfig::new(jwt_service));
-        let server = Server::new(config);
-        let app = server
-            .create_test_app(auth_config)
-            .await
-            .unwrap();
+        let (server, _config) = create_test_server().await;
+        let app = server.create_app();
 
         let request = Request::builder()
             .uri("/health")
@@ -461,23 +352,16 @@ mod tests {
         assert_eq!(response.status(), StatusCode::OK);
     }
 
-    #[test]
-    fn test_server_creation() {
-        let config = Config::default();
-        let server = Server::new(config.clone());
+    #[tokio::test]
+    async fn test_server_creation() {
+        let (server, config) = create_test_server().await;
         assert_eq!(server.config.server.port, config.server.port);
     }
 
     #[tokio::test]
     async fn test_invoke_model_with_valid_jwt() {
-        let config = Config::default();
-        let jwt_service = JwtService::new(config.jwt.secret.clone(), Algorithm::HS256).unwrap();
-        let auth_config = Arc::new(AuthConfig::new(jwt_service));
-        let server = Server::new(config.clone());
-        let app = server
-            .create_test_app(auth_config)
-            .await
-            .unwrap();
+        let (server, config) = create_test_server().await;
+        let app = server.create_app();
 
         let token = create_test_token(&config.jwt.secret, "user123", 3600);
         let request = Request::builder()
@@ -504,14 +388,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_invoke_model_without_jwt() {
-        let config = Config::default();
-        let jwt_service = JwtService::new(config.jwt.secret.clone(), Algorithm::HS256).unwrap();
-        let auth_config = Arc::new(AuthConfig::new(jwt_service));
-        let server = Server::new(config);
-        let app = server
-            .create_test_app(auth_config)
-            .await
-            .unwrap();
+        let (server, _config) = create_test_server().await;
+        let app = server.create_app();
 
         let request = Request::builder()
             .uri("/bedrock/model/anthropic.claude-v2/invoke")

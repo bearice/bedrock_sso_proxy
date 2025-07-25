@@ -1,5 +1,5 @@
-use bedrock_sso_proxy::storage::factory::{CacheBackend, DatabaseBackend, StorageFactory};
-use bedrock_sso_proxy::storage::{
+use crate::storage::factory::{CacheBackend, DatabaseBackend, StorageFactory};
+use crate::storage::{
     AuditLogEntry, CachedValidation, RefreshTokenData, StateData, UserRecord,
 };
 use chrono::Utc;
@@ -146,7 +146,7 @@ async fn test_full_storage_integration() {
 
 #[tokio::test]
 async fn test_storage_configuration_from_config() {
-    use bedrock_sso_proxy::config::Config;
+    use crate::config::Config;
 
     let mut config = Config::default();
     config.storage.redis.enabled = true;

@@ -3,6 +3,7 @@ mod aws_pricing;
 pub use aws_pricing::*;
 
 use crate::{error::AppError, storage::Storage};
+use rust_decimal::{Decimal, prelude::ToPrimitive};
 use std::sync::Arc;
 use tracing::{info, warn};
 
@@ -41,8 +42,8 @@ impl CostTrackingService {
             let stored_cost = crate::storage::StoredModelCost {
                 id: None,
                 model_id: pricing.model_id.clone(),
-                input_cost_per_1k_tokens: pricing.input_cost_per_1k_tokens,
-                output_cost_per_1k_tokens: pricing.output_cost_per_1k_tokens,
+                input_cost_per_1k_tokens: Decimal::from_f64_retain(pricing.input_cost_per_1k_tokens).unwrap_or_default(),
+                output_cost_per_1k_tokens: Decimal::from_f64_retain(pricing.output_cost_per_1k_tokens).unwrap_or_default(),
                 updated_at: pricing.updated_at,
             };
 
@@ -101,8 +102,8 @@ impl CostTrackingService {
             let stored_cost = crate::storage::StoredModelCost {
                 id: None,
                 model_id: pricing.model_id.clone(),
-                input_cost_per_1k_tokens: pricing.input_cost_per_1k_tokens,
-                output_cost_per_1k_tokens: pricing.output_cost_per_1k_tokens,
+                input_cost_per_1k_tokens: Decimal::from_f64_retain(pricing.input_cost_per_1k_tokens).unwrap_or_default(),
+                output_cost_per_1k_tokens: Decimal::from_f64_retain(pricing.output_cost_per_1k_tokens).unwrap_or_default(),
                 updated_at: chrono::Utc::now(),
             };
 
@@ -161,8 +162,8 @@ impl CostTrackingService {
 
             summary.models.push(ModelCostInfo {
                 model_id: cost.model_id,
-                input_cost_per_1k_tokens: cost.input_cost_per_1k_tokens,
-                output_cost_per_1k_tokens: cost.output_cost_per_1k_tokens,
+                input_cost_per_1k_tokens: cost.input_cost_per_1k_tokens.to_f64().unwrap_or(0.0),
+                output_cost_per_1k_tokens: cost.output_cost_per_1k_tokens.to_f64().unwrap_or(0.0),
                 updated_at: cost.updated_at,
             });
         }

@@ -349,8 +349,8 @@ impl AwsHttpClient {
     }
 
     /// Create a health checker for this AWS client
-    pub fn health_checker(self) -> AwsHealthChecker {
-        AwsHealthChecker { client: self }
+    pub fn health_checker(&self) -> AwsHealthChecker {
+        AwsHealthChecker { client: self.clone() }
     }
 }
 

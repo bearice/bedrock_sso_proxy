@@ -875,17 +875,19 @@ mod tests {
         }
     }
 
-    fn create_test_storage() -> Arc<Storage> {
-        Arc::new(Storage::new(
+    async fn create_test_storage() -> Arc<Storage> {
+        let storage = Arc::new(Storage::new(
             Box::new(crate::storage::memory::MemoryCacheStorage::new(3600)),
-            Box::new(crate::storage::memory::MemoryDatabaseStorage::new()),
-        ))
+            Box::new(crate::storage::database::SqliteStorage::new("sqlite::memory:").await.unwrap()),
+        ));
+        storage.migrate().await.unwrap();
+        storage
     }
 
     #[tokio::test]
     async fn test_oauth_service_creation() {
         let config = create_test_config();
-        let storage = create_test_storage();
+        let storage = create_test_storage().await;
         let jwt_service = JwtService::new("test-secret".to_string(), Algorithm::HS256).unwrap();
 
         let oauth_service = OAuthService::new(config, jwt_service, storage);
@@ -900,7 +902,7 @@ mod tests {
     #[tokio::test]
     async fn test_get_authorization_url() {
         let config = create_test_config();
-        let storage = create_test_storage();
+        let storage = create_test_storage().await;
         let jwt_service = JwtService::new("test-secret".to_string(), Algorithm::HS256).unwrap();
         let oauth_service = OAuthService::new(config, jwt_service, storage);
 
@@ -922,7 +924,7 @@ mod tests {
     #[tokio::test]
     async fn test_get_authorization_url_unknown_provider() {
         let config = create_test_config();
-        let storage = create_test_storage();
+        let storage = create_test_storage().await;
         let jwt_service = JwtService::new("test-secret".to_string(), Algorithm::HS256).unwrap();
         let oauth_service = OAuthService::new(config, jwt_service, storage);
 
@@ -935,7 +937,7 @@ mod tests {
     #[tokio::test]
     async fn test_list_providers() {
         let config = create_test_config();
-        let storage = create_test_storage();
+        let storage = create_test_storage().await;
         let jwt_service = JwtService::new("test-secret".to_string(), Algorithm::HS256).unwrap();
         let oauth_service = OAuthService::new(config, jwt_service, storage);
 
@@ -951,7 +953,7 @@ mod tests {
     #[tokio::test]
     async fn test_display_names() {
         let config = create_test_config();
-        let storage = create_test_storage();
+        let storage = create_test_storage().await;
         let jwt_service = JwtService::new("test-secret".to_string(), Algorithm::HS256).unwrap();
         let oauth_service = OAuthService::new(config, jwt_service, storage);
 
@@ -967,7 +969,7 @@ mod tests {
     #[tokio::test]
     async fn test_validate_oauth_token() {
         let config = create_test_config();
-        let storage = create_test_storage();
+        let storage = create_test_storage().await;
         let jwt_service = JwtService::new("test-secret".to_string(), Algorithm::HS256).unwrap();
         let oauth_service = OAuthService::new(config, jwt_service.clone(), storage);
 

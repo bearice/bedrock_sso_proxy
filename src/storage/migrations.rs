@@ -1,7 +1,8 @@
-use crate::storage::StorageResult;
 use rust_embed::RustEmbed;
 use sha2::{Digest, Sha256};
 use std::collections::HashSet;
+use sqlx::Row;
+use super::{StorageError, StorageResult};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DatabaseType {
@@ -163,6 +164,169 @@ pub struct MigrationResult {
     pub execution_time_ms: u64,
     pub checksum: String,
     pub statements_executed: usize,
+}
+
+/// Run PostgreSQL migrations
+pub async fn run_postgres_migrations(pool: &sqlx::Pool<sqlx::Postgres>) -> StorageResult<()> {
+    use std::time::Instant;
+    use std::collections::HashSet;
+
+    // First, ensure migration tracking table exists
+    let tracking_sql = get_migration_sql(DatabaseType::Postgres, "000_migration_tracking.sql")?;
+    let tracking_statements = parse_sql_statements(&tracking_sql);
+    for statement in tracking_statements {
+        sqlx::query(&statement)
+            .execute(pool)
+            .await
+            .map_err(|e| {
+                StorageError::Database(format!(
+                    "Failed to create migration tracking table: {}",
+                    e
+                ))
+            })?;
+    }
+
+    // Get list of already executed migrations
+    let executed_rows =
+        sqlx::query("SELECT migration_name FROM migration_tracking ORDER BY executed_at")
+            .fetch_all(pool)
+            .await
+            .map_err(|e| {
+                StorageError::Database(format!("Failed to get executed migrations: {}", e))
+            })?;
+
+    let executed_migrations: HashSet<String> = executed_rows
+        .iter()
+        .map(|row| row.get::<String, _>("migration_name"))
+        .collect();
+
+    // Get pending migrations
+    let pending_migrations =
+        get_pending_migrations(DatabaseType::Postgres, &executed_migrations);
+
+    // Execute pending migrations
+    for migration_name in pending_migrations {
+        let start_time = Instant::now();
+        let sql = get_migration_sql(DatabaseType::Postgres, &migration_name)?;
+        let checksum = calculate_migration_checksum(&sql);
+
+        // Parse and execute migration statements
+        let statements = parse_sql_statements(&sql);
+        for statement in &statements {
+            sqlx::query(statement)
+                .execute(pool)
+                .await
+                .map_err(|e| {
+                    StorageError::Database(format!(
+                        "Failed to execute migration '{}' statement '{}': {}",
+                        migration_name, statement, e
+                    ))
+                })?;
+        }
+
+        let execution_time = start_time.elapsed().as_millis() as i32;
+
+        // Record migration as executed
+        sqlx::query(
+            "INSERT INTO migration_tracking (migration_name, checksum, execution_time_ms) VALUES ($1, $2, $3)"
+        )
+        .bind(&migration_name)
+        .bind(&checksum)
+        .bind(execution_time)
+        .execute(pool)
+        .await
+        .map_err(|e| StorageError::Database(format!("Failed to record migration '{}': {}", migration_name, e)))?;
+
+        tracing::info!(
+            "Executed migration '{}' in {}ms with {} statements",
+            migration_name,
+            execution_time,
+            statements.len()
+        );
+    }
+
+    Ok(())
+}
+
+/// Run SQLite migrations
+pub async fn run_sqlite_migrations(pool: &sqlx::Pool<sqlx::Sqlite>) -> StorageResult<()> {
+    use std::time::Instant;
+    use std::collections::HashSet;
+
+    // First, ensure migration tracking table exists
+    let tracking_sql = get_migration_sql(DatabaseType::Sqlite, "000_migration_tracking.sql")?;
+    let tracking_statements = parse_sql_statements(&tracking_sql);
+    for statement in tracking_statements {
+        sqlx::query(&statement)
+            .execute(pool)
+            .await
+            .map_err(|e| {
+                StorageError::Database(format!(
+                    "Failed to create migration tracking table: {}",
+                    e
+                ))
+            })?;
+    }
+
+    // Get list of already executed migrations
+    let executed_rows =
+        sqlx::query("SELECT migration_name FROM migration_tracking ORDER BY executed_at")
+            .fetch_all(pool)
+            .await
+            .map_err(|e| {
+                StorageError::Database(format!("Failed to get executed migrations: {}", e))
+            })?;
+
+    let executed_migrations: HashSet<String> = executed_rows
+        .iter()
+        .map(|row| row.get::<String, _>("migration_name"))
+        .collect();
+
+    // Get pending migrations
+    let pending_migrations = get_pending_migrations(DatabaseType::Sqlite, &executed_migrations);
+
+    // Execute pending migrations
+    for migration_name in pending_migrations {
+        let start_time = Instant::now();
+        let sql = get_migration_sql(DatabaseType::Sqlite, &migration_name)?;
+        let checksum = calculate_migration_checksum(&sql);
+
+        // Parse and execute migration statements
+        let statements = parse_sql_statements(&sql);
+        for statement in &statements {
+            sqlx::query(statement)
+                .execute(pool)
+                .await
+                .map_err(|e| {
+                    StorageError::Database(format!(
+                        "Failed to execute migration '{}' statement '{}': {}",
+                        migration_name, statement, e
+                    ))
+                })?;
+        }
+
+        let execution_time = start_time.elapsed().as_millis() as i32;
+
+        // Record migration as executed
+        sqlx::query(
+            "INSERT INTO migration_tracking (migration_name, checksum, execution_time_ms) VALUES (?1, ?2, ?3)"
+        )
+        .bind(&migration_name)
+        .bind(&checksum)
+        .bind(execution_time)
+        .execute(pool)
+        .await
+        .map_err(|e| StorageError::Database(format!("Failed to record migration '{}': {}", migration_name, e)))?;
+
+        tracing::info!(
+            "Executed migration '{}' in {}ms with {} statements",
+            migration_name,
+            execution_time,
+            statements.len()
+        );
+    }
+
+    Ok(())
 }
 
 #[cfg(test)]
