@@ -5,6 +5,7 @@ use axum::{
 };
 use serde_json::json;
 use thiserror::Error;
+use crate::storage::StorageError;
 
 #[derive(Debug, Error)]
 pub enum AppError {
@@ -49,6 +50,15 @@ pub enum AppError {
 
     #[error("AWS signing params error: {0}")]
     AwsSigningParams(#[from] aws_sigv4::sign::v4::signing_params::BuildError),
+
+    #[error("Storage error: {0}")]
+    Storage(#[from] StorageError),
+
+    #[error("Not found: {0}")]
+    NotFound(String),
+
+    #[error("Forbidden: {0}")]
+    Forbidden(String),
 }
 
 impl AppError {
@@ -61,6 +71,8 @@ impl AppError {
             | AppError::Json(_)
             | AppError::ToStrError(_) => StatusCode::BAD_REQUEST,
             AppError::Http(_) | AppError::Aws(_) => StatusCode::BAD_GATEWAY,
+            AppError::NotFound(_) => StatusCode::NOT_FOUND,
+            AppError::Forbidden(_) => StatusCode::FORBIDDEN,
             _ => StatusCode::INTERNAL_SERVER_ERROR,
         }
     }

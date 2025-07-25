@@ -66,6 +66,7 @@ fn create_encoding_key(key_data: &str, algorithm: Algorithm) -> Result<EncodingK
 pub struct Claims {
     pub sub: String,
     pub exp: usize,
+    pub user_id: i32,
 }
 
 // Enhanced Claims structure for OAuth-issued tokens
@@ -76,25 +77,28 @@ pub struct OAuthClaims {
     pub exp: usize,
     pub provider: String,
     pub email: String,
+    pub user_id: i32,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub refresh_token_id: Option<String>,
 }
 
 impl OAuthClaims {
     pub fn new(
-        user_id: String,
+        subject: String,
         provider: String,
         email: String,
+        user_id: i32,
         expires_in_seconds: u64,
         refresh_token_id: Option<String>,
     ) -> Self {
         let now = Utc::now().timestamp() as usize;
         Self {
-            sub: user_id,
+            sub: subject,
             iat: now,
             exp: now + expires_in_seconds as usize,
             provider,
             email,
+            user_id,
             refresh_token_id,
         }
     }
@@ -199,6 +203,7 @@ impl HealthChecker for JwtHealthChecker {
             "health_check_user".to_string(),
             "health_check".to_string(),
             "health@example.com".to_string(),
+            1, // user_id
             60, // 1 minute expiry
             None,
         );
@@ -271,6 +276,13 @@ impl ValidatedClaims {
         }
     }
 
+    pub fn user_id(&self) -> i32 {
+        match self {
+            ValidatedClaims::OAuth(claims) => claims.user_id,
+            ValidatedClaims::Legacy(claims) => claims.user_id,
+        }
+    }
+
     pub fn provider(&self) -> Option<&str> {
         match self {
             ValidatedClaims::OAuth(claims) => Some(&claims.provider),
@@ -301,6 +313,7 @@ mod tests {
         let claims = Claims {
             sub: sub.to_string(),
             exp,
+            user_id: 1, // Default test user ID
         };
 
         encode(
@@ -372,6 +385,7 @@ mod tests {
             "google:123".to_string(),
             "google".to_string(),
             "test@example.com".to_string(),
+            1, // user_id
             3600,
             Some("refresh_123".to_string()),
         );
@@ -391,6 +405,7 @@ mod tests {
             "google:123".to_string(),
             "google".to_string(),
             "test@example.com".to_string(),
+            1, // user_id
             3600,
             None,
         );
@@ -422,6 +437,7 @@ mod tests {
             "google:123".to_string(),
             "google".to_string(),
             "test@example.com".to_string(),
+            1, // user_id
             3600,
             None,
         );
@@ -452,6 +468,7 @@ mod tests {
             "google:123".to_string(),
             "google".to_string(),
             "test@example.com".to_string(),
+            1, // user_id
             3600,
             None,
         );
@@ -464,6 +481,7 @@ mod tests {
         let legacy_claims = Claims {
             sub: "user123".to_string(),
             exp: 1234567890,
+            user_id: 1,
         };
 
         let legacy_validated = ValidatedClaims::Legacy(legacy_claims);
@@ -478,6 +496,7 @@ mod tests {
             "google:123".to_string(),
             "google".to_string(),
             "test@example.com".to_string(),
+            1, // user_id
             3600,
             None,
         );

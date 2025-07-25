@@ -1,14 +1,15 @@
 use crate::{
     auth::{
         jwt::{JwtService, parse_algorithm},
-        middleware::{AuthConfig, jwt_auth_middleware},
+        middleware::{AuthConfig, jwt_auth_middleware, jwt_auth_middleware_with_claims},
         oauth::OAuthService,
     },
-    aws_http::AwsHttpClient,
+    model_service::ModelService,
     config::Config,
     error::AppError,
     health::HealthService,
     metrics,
+    usage_tracking::create_usage_routes,
     routes::{
         create_anthropic_routes, create_auth_routes, create_bedrock_routes, create_frontend_router,
         create_health_routes,
@@ -65,14 +66,23 @@ impl Server {
         let jwt_service = JwtService::new(self.config.jwt.secret.clone(), jwt_algorithm)?;
         let auth_config = Arc::new(AuthConfig::new(jwt_service.clone()));
 
-        let aws_http_client = AwsHttpClient::new(self.config.aws.clone());
-
         // Initialize storage system
         let storage = Arc::new(
             StorageFactory::create_from_config(&self.config)
                 .await
                 .map_err(|e| AppError::Internal(format!("Failed to initialize storage: {}", e)))?,
         );
+
+        // Initialize ModelService (creates its own AWS client)
+        let model_service = Arc::new(ModelService::new(storage.clone(), self.config.clone()));
+
+        // Initialize model costs in the background
+        let model_service_clone = model_service.clone();
+        tokio::spawn(async move {
+            if let Err(e) = model_service_clone.initialize_model_costs().await {
+                tracing::warn!("Failed to initialize model costs: {}", e);
+            }
+        });
 
         // Register storage for graceful shutdown
         shutdown_manager.register(StorageShutdown::new(storage.clone()));
@@ -88,9 +98,9 @@ impl Server {
         // Create centralized health service and register health checkers
         let health_service = Arc::new(HealthService::new());
 
-        // Register AWS health checker
+        // Register AWS health checker through ModelService
         health_service
-            .register(Arc::new(aws_http_client.clone().health_checker()))
+            .register(Arc::new(model_service.aws_client().clone().health_checker()))
             .await;
 
         // Register OAuth health checker
@@ -111,9 +121,10 @@ impl Server {
 
         let app = self.create_app(
             auth_config,
-            aws_http_client,
+            model_service.clone(),
             oauth_service,
             health_service,
+            storage.clone(),
             self.config.metrics.enabled,
             tracing::Level::INFO,
         );
@@ -166,9 +177,10 @@ impl Server {
     fn create_app(
         &self,
         auth_config: Arc<AuthConfig>,
-        aws_http_client: AwsHttpClient,
+        model_service: Arc<ModelService>,
         oauth_service: Arc<OAuthService>,
         health_service: Arc<HealthService>,
+        storage: Arc<crate::storage::Storage>,
         use_metrics: bool,
         log_level: tracing::Level,
     ) -> Router {
@@ -177,22 +189,32 @@ impl Server {
             .nest("/auth", create_auth_routes().with_state(oauth_service))
             // Health check routes (no auth required)
             .nest("/health", create_health_routes().with_state(health_service))
-            // Protected Bedrock API routes
+            // Protected usage tracking API routes
+            .nest(
+                "/api",
+                create_usage_routes()
+                    .with_state(storage.clone())
+                    .layer(middleware::from_fn_with_state(
+                        auth_config.clone(),
+                        jwt_auth_middleware_with_claims,
+                    )),
+            )
+            // Protected Bedrock API routes - usage tracking now handled by ModelService
             .nest(
                 "/bedrock",
                 create_bedrock_routes()
-                    .with_state(aws_http_client.clone())
+                    .with_state(model_service.clone())
                     .layer(DefaultBodyLimit::max(MAX_BODY_SIZE))
                     .layer(middleware::from_fn_with_state(
                         auth_config.clone(),
                         jwt_auth_middleware,
                     )),
             )
-            // Protected Anthropic API routes
+            // Protected Anthropic API routes - usage tracking now handled by ModelService
             .nest(
                 "/anthropic",
                 create_anthropic_routes()
-                    .with_state(aws_http_client)
+                    .with_state(model_service)
                     .layer(DefaultBodyLimit::max(MAX_BODY_SIZE))
                     .layer(middleware::from_fn_with_state(
                         auth_config,
@@ -304,7 +326,6 @@ impl Server {
     pub async fn create_test_app(
         &self,
         auth_config: Arc<AuthConfig>,
-        aws_http_client: AwsHttpClient,
     ) -> Result<Router, AppError> {
         let jwt_service = JwtService::new(
             self.config.jwt.secret.clone(),
@@ -320,13 +341,16 @@ impl Server {
         let oauth_service = Arc::new(OAuthService::new(
             self.config.clone(),
             jwt_service.clone(),
-            temp_storage,
+            temp_storage.clone(),
         ));
+
+        // Create ModelService for testing
+        let model_service = Arc::new(ModelService::new_test(temp_storage.clone(), self.config.clone()));
 
         // Create health service for testing
         let health_service = Arc::new(HealthService::new());
         health_service
-            .register(Arc::new(aws_http_client.clone().health_checker()))
+            .register(Arc::new(model_service.aws_client().clone().health_checker()))
             .await;
         health_service
             .register(Arc::new(oauth_service.health_checker()))
@@ -341,9 +365,10 @@ impl Server {
         // - Using memory storage instead of configured storage
         let app = self.create_app(
             auth_config,
-            aws_http_client,
+            model_service,
             oauth_service,
             health_service,
+            temp_storage,
             false,                 // no metrics in tests
             tracing::Level::TRACE, // use trace level in tests
         );
@@ -358,7 +383,6 @@ mod tests {
     use super::*;
     use crate::auth::jwt::JwtService;
     use crate::auth::middleware::AuthConfig;
-    use crate::aws_http::AwsHttpClient;
     use crate::config::Config;
     use axum::{
         body::Body,
@@ -400,11 +424,9 @@ mod tests {
         let config = Config::default();
         let jwt_service = JwtService::new(config.jwt.secret.clone(), Algorithm::HS256).unwrap();
         let auth_config = Arc::new(AuthConfig::new(jwt_service));
-        let aws_http_client = AwsHttpClient::new_test();
-
         let server = Server::new(config.clone());
         let app = server
-            .create_test_app(auth_config, aws_http_client)
+            .create_test_app(auth_config)
             .await
             .unwrap();
 
@@ -424,11 +446,9 @@ mod tests {
         let config = Config::default();
         let jwt_service = JwtService::new(config.jwt.secret.clone(), Algorithm::HS256).unwrap();
         let auth_config = Arc::new(AuthConfig::new(jwt_service));
-        let aws_http_client = AwsHttpClient::new_test();
-
         let server = Server::new(config);
         let app = server
-            .create_test_app(auth_config, aws_http_client)
+            .create_test_app(auth_config)
             .await
             .unwrap();
 
@@ -453,11 +473,9 @@ mod tests {
         let config = Config::default();
         let jwt_service = JwtService::new(config.jwt.secret.clone(), Algorithm::HS256).unwrap();
         let auth_config = Arc::new(AuthConfig::new(jwt_service));
-        let aws_http_client = AwsHttpClient::new_test();
-
         let server = Server::new(config.clone());
         let app = server
-            .create_test_app(auth_config, aws_http_client)
+            .create_test_app(auth_config)
             .await
             .unwrap();
 
@@ -489,11 +507,9 @@ mod tests {
         let config = Config::default();
         let jwt_service = JwtService::new(config.jwt.secret.clone(), Algorithm::HS256).unwrap();
         let auth_config = Arc::new(AuthConfig::new(jwt_service));
-        let aws_http_client = AwsHttpClient::new_test();
-
         let server = Server::new(config);
         let app = server
-            .create_test_app(auth_config, aws_http_client)
+            .create_test_app(auth_config)
             .await
             .unwrap();
 

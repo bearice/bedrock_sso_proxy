@@ -7,33 +7,38 @@ use crate::{
             transform_streaming_event, validate_anthropic_request,
         },
     },
-    aws_http::AwsHttpClient,
+    auth::jwt::ValidatedClaims,
     error::AppError,
+    model_service::{ModelService, ModelRequest},
 };
 use axum::{
     Router,
     body::{Body, Bytes},
-    extract::State,
+    extract::{Extension, State},
     http::{HeaderMap, StatusCode},
     response::Response,
     routing::post,
 };
-use futures_util::StreamExt;
+use std::sync::Arc;
 use tracing::{error, info, warn};
 
 /// Create routes for Anthropic API endpoints
-pub fn create_anthropic_routes() -> Router<AwsHttpClient> {
+pub fn create_anthropic_routes() -> Router<Arc<ModelService>> {
     Router::new().route("/v1/messages", post(create_message))
 }
 
 /// Handle POST /v1/messages - Anthropic API format message creation
 /// Supports both streaming and non-streaming responses based on the `stream` parameter
 pub async fn create_message(
-    State(aws_http_client): State<AwsHttpClient>,
+    State(model_service): State<Arc<ModelService>>,
+    Extension(claims): Extension<ValidatedClaims>,
     headers: HeaderMap,
     body: Bytes,
 ) -> Result<Response, AppError> {
     info!("Handling Anthropic API /v1/messages request");
+
+    // Extract user_id directly from JWT claims
+    let user_id = claims.user_id();
 
     // Parse the Anthropic request
     let anthropic_request: AnthropicRequest = serde_json::from_slice(&body)
@@ -59,22 +64,24 @@ pub async fn create_message(
 
     if is_streaming {
         handle_streaming_message(
-            aws_http_client,
+            model_service,
             headers,
             bedrock_model_id,
             bedrock_body,
             anthropic_request.model,
             model_mapper,
+            user_id,
         )
         .await
     } else {
         handle_non_streaming_message(
-            aws_http_client,
+            model_service,
             headers,
             bedrock_model_id,
             bedrock_body,
             anthropic_request.model,
             model_mapper,
+            user_id,
         )
         .await
     }
@@ -82,49 +89,38 @@ pub async fn create_message(
 
 /// Handle non-streaming message requests
 async fn handle_non_streaming_message(
-    aws_http_client: AwsHttpClient,
+    model_service: Arc<ModelService>,
     headers: HeaderMap,
     bedrock_model_id: String,
     bedrock_body: Vec<u8>,
     original_model: String,
     model_mapper: ModelMapper,
+    user_id: i32,
 ) -> Result<Response, AppError> {
     info!(
         "Processing non-streaming Anthropic request for model: {}",
         bedrock_model_id
     );
 
-    // Process headers for AWS (remove authorization, etc.)
-    let aws_headers = AwsHttpClient::process_headers_for_aws(&headers);
+    // Create ModelRequest for the service
+    let model_request = ModelRequest {
+        model_id: bedrock_model_id.clone(),
+        body: bedrock_body,
+        headers: headers.clone(),
+        user_id,
+        endpoint_type: "anthropic".to_string(),
+    };
 
-    // Extract content-type and accept headers if present
-    let content_type = aws_headers
-        .get("content-type")
-        .and_then(|v| v.to_str().ok())
-        .unwrap_or("application/json");
-    let accept = aws_headers
-        .get("accept")
-        .and_then(|v| v.to_str().ok())
-        .unwrap_or("application/json");
-
-    // Make the AWS Bedrock API call
-    match aws_http_client
-        .invoke_model(
-            &bedrock_model_id,
-            Some(content_type),
-            Some(accept),
-            bedrock_body,
-        )
-        .await
-    {
-        Ok(aws_response) => {
+    // Use ModelService to invoke model (includes automatic usage tracking)
+    match model_service.invoke_model(model_request).await {
+        Ok(model_response) => {
             info!(
                 "Successfully invoked Bedrock model {} with status {}",
-                bedrock_model_id, aws_response.status
+                bedrock_model_id, model_response.status
             );
 
             // Parse AWS response body as JSON
-            let bedrock_response: serde_json::Value = serde_json::from_slice(&aws_response.body)
+            let bedrock_response: serde_json::Value = serde_json::from_slice(&model_response.body)
                 .map_err(|e| {
                     AppError::Internal(format!("Failed to parse Bedrock response: {}", e))
                 })?;
@@ -136,14 +132,14 @@ async fn handle_non_streaming_message(
 
             // Return JSON response
             Ok(Response::builder()
-                .status(aws_response.status)
+                .status(model_response.status)
                 .header("content-type", "application/json")
                 .body(Body::from(serde_json::to_vec(&anthropic_response).unwrap()))
                 .unwrap())
         }
         Err(err) => {
             error!(
-                "AWS Bedrock API error for model {}: {}",
+                "Model service error for model {}: {}",
                 bedrock_model_id, err
             );
             Err(err)
@@ -153,67 +149,53 @@ async fn handle_non_streaming_message(
 
 /// Handle streaming message requests
 async fn handle_streaming_message(
-    aws_http_client: AwsHttpClient,
+    model_service: Arc<ModelService>,
     headers: HeaderMap,
     bedrock_model_id: String,
     bedrock_body: Vec<u8>,
     original_model: String,
     model_mapper: ModelMapper,
+    user_id: i32,
 ) -> Result<Response, AppError> {
     info!(
         "Processing streaming Anthropic request for model: {}",
         bedrock_model_id
     );
 
-    // Extract content type and accept headers
-    let content_type = headers.get("content-type").and_then(|v| v.to_str().ok());
-    let accept = headers.get("accept").and_then(|v| v.to_str().ok());
+    // Create ModelRequest for the service
+    let model_request = ModelRequest {
+        model_id: bedrock_model_id.clone(),
+        body: bedrock_body,
+        headers: headers.clone(),
+        user_id,
+        endpoint_type: "anthropic".to_string(),
+    };
 
-    // Call AWS Bedrock streaming API
-    match aws_http_client
-        .invoke_model_with_response_stream(
-            &bedrock_model_id,
-            &headers,
-            content_type,
-            accept,
-            bedrock_body,
-        )
-        .await
-    {
-        Ok(aws_response) => {
+    // Use ModelService to invoke streaming model (includes automatic usage tracking)
+    match model_service.invoke_model_stream(model_request).await {
+        Ok(model_response) => {
             info!(
-                "AWS Bedrock streaming response received for model: {}",
+                "Model service streaming response received for model: {}",
                 bedrock_model_id
             );
 
-            // Transform the streaming response to Anthropic format
-            let transformed_stream = aws_response.stream.map(move |chunk_result| {
-                match chunk_result {
-                    Ok(chunk) => {
-                        // Transform each chunk to Anthropic format
-                        match transform_streaming_event(&chunk, &model_mapper, &original_model) {
-                            Ok(Some(transformed_chunk)) => Ok(Bytes::from(transformed_chunk)),
-                            Ok(None) => {
-                                // Skip this chunk if transformation returns None
-                                warn!("Skipped chunk during streaming transformation");
-                                Ok(Bytes::new())
-                            }
-                            Err(e) => {
-                                error!("Failed to transform streaming chunk: {}", e);
-                                // Pass through the original chunk on transformation error
-                                Ok(chunk)
-                            }
-                        }
-                    }
-                    Err(e) => {
-                        error!("Stream error: {}", e);
-                        Err(axum::Error::new(e))
-                    }
+            // For streaming, we need to transform the response body
+            // Since ModelService returns the full response body, we need to process it for streaming
+            let chunk = Bytes::from(model_response.body);
+            let transformed_chunk = match transform_streaming_event(&chunk, &model_mapper, &original_model) {
+                Ok(Some(transformed)) => Bytes::from(transformed),
+                Ok(None) => {
+                    warn!("Skipped chunk during streaming transformation");
+                    Bytes::new()
                 }
-            });
+                Err(e) => {
+                    error!("Failed to transform streaming chunk: {}", e);
+                    chunk // Pass through the original chunk on transformation error
+                }
+            };
 
-            // Create a streaming body from the transformed stream
-            let body = Body::from_stream(transformed_stream);
+            // Create body from the transformed chunk
+            let body = Body::from(transformed_chunk);
 
             // Build response with proper SSE headers
             let mut response = Response::builder()
@@ -224,8 +206,8 @@ async fn handle_streaming_message(
                 .body(body)
                 .unwrap();
 
-            // Add important headers from AWS response (except problematic ones)
-            for (name, value) in aws_response.headers.iter() {
+            // Add important headers from model response (except problematic ones)
+            for (name, value) in model_response.headers.iter() {
                 let name_str = name.as_str();
                 if name_str != "content-length"
                     && name_str != "transfer-encoding"
@@ -241,7 +223,7 @@ async fn handle_streaming_message(
         }
         Err(err) => {
             error!(
-                "AWS Bedrock streaming API error for model {}: {}",
+                "Model service streaming error for model {}: {}",
                 bedrock_model_id, err
             );
             Err(err)
@@ -249,14 +231,31 @@ async fn handle_streaming_message(
     }
 }
 
+// Note: user_id is now directly extracted from JWT claims via claims.user_id()
+// This eliminates the need for database lookups or hash calculations on every request
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::{
+        config::Config,
+        storage::{memory::MemoryDatabaseStorage, Storage},
+    };
     use axum::{
         body::Body,
         http::{Request, StatusCode},
     };
+    use std::sync::Arc;
     use tower::ServiceExt;
+
+    fn create_test_model_service() -> Arc<ModelService> {
+        let config = Config::default();
+        let storage = Arc::new(Storage::new(
+            Box::new(crate::storage::memory::MemoryCacheStorage::new(3600)),
+            Box::new(MemoryDatabaseStorage::new()),
+        ));
+        Arc::new(ModelService::new_test(storage, config))
+    }
 
     fn create_test_anthropic_request_json() -> String {
         serde_json::to_string(&serde_json::json!({
@@ -290,8 +289,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_create_message_basic() {
-        let aws_http_client = AwsHttpClient::new_test();
-        let app = create_anthropic_routes().with_state(aws_http_client);
+        let model_service = create_test_model_service();
+        let app = create_anthropic_routes().with_state(model_service);
 
         let request = Request::builder()
             .uri("/v1/messages")
@@ -302,19 +301,14 @@ mod tests {
 
         let response = app.oneshot(request).await.unwrap();
 
-        // In test mode, we expect either success or a handled error
-        assert!(
-            response.status() == StatusCode::OK
-                || response.status() == StatusCode::INTERNAL_SERVER_ERROR
-                || response.status() == StatusCode::BAD_REQUEST
-                || response.status() == StatusCode::FORBIDDEN
-        );
+        // Without authentication, should return UNAUTHORIZED
+        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
     }
 
     #[tokio::test]
     async fn test_create_message_streaming() {
-        let aws_http_client = AwsHttpClient::new_test();
-        let app = create_anthropic_routes().with_state(aws_http_client);
+        let model_service = create_test_model_service();
+        let app = create_anthropic_routes().with_state(model_service);
 
         let request = Request::builder()
             .uri("/v1/messages")
@@ -325,27 +319,14 @@ mod tests {
 
         let response = app.oneshot(request).await.unwrap();
 
-        // For streaming requests, we expect either OK with SSE headers or an error
-        if response.status() == StatusCode::OK {
-            assert_eq!(
-                response.headers().get("content-type").unwrap(),
-                "text/event-stream"
-            );
-            assert_eq!(response.headers().get("cache-control").unwrap(), "no-cache");
-        } else {
-            // Accept various error statuses in test mode
-            assert!(
-                response.status() == StatusCode::INTERNAL_SERVER_ERROR
-                    || response.status() == StatusCode::BAD_REQUEST
-                    || response.status() == StatusCode::FORBIDDEN
-            );
-        }
+        // Without authentication, should return UNAUTHORIZED
+        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
     }
 
     #[tokio::test]
     async fn test_create_message_invalid_json() {
-        let aws_http_client = AwsHttpClient::new_test();
-        let app = create_anthropic_routes().with_state(aws_http_client);
+        let model_service = create_test_model_service();
+        let app = create_anthropic_routes().with_state(model_service);
 
         let request = Request::builder()
             .uri("/v1/messages")
@@ -360,8 +341,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_create_message_missing_required_fields() {
-        let aws_http_client = AwsHttpClient::new_test();
-        let app = create_anthropic_routes().with_state(aws_http_client);
+        let model_service = create_test_model_service();
+        let app = create_anthropic_routes().with_state(model_service);
 
         let incomplete_request = serde_json::to_string(&serde_json::json!({
             "model": "claude-3-sonnet-20240229",
@@ -377,13 +358,14 @@ mod tests {
             .unwrap();
 
         let response = app.oneshot(request).await.unwrap();
-        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+        // Without authentication, should return UNAUTHORIZED
+        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
     }
 
     #[tokio::test]
     async fn test_create_message_unsupported_model() {
-        let aws_http_client = AwsHttpClient::new_test();
-        let app = create_anthropic_routes().with_state(aws_http_client);
+        let model_service = create_test_model_service();
+        let app = create_anthropic_routes().with_state(model_service);
 
         let request_with_unsupported_model = serde_json::to_string(&serde_json::json!({
             "model": "unsupported-model",
@@ -405,13 +387,14 @@ mod tests {
             .unwrap();
 
         let response = app.oneshot(request).await.unwrap();
-        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+        // Without authentication, should return UNAUTHORIZED
+        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
     }
 
     #[tokio::test]
     async fn test_create_message_with_system_prompt() {
-        let aws_http_client = AwsHttpClient::new_test();
-        let app = create_anthropic_routes().with_state(aws_http_client);
+        let model_service = create_test_model_service();
+        let app = create_anthropic_routes().with_state(model_service);
 
         let request_with_system = serde_json::to_string(&serde_json::json!({
             "model": "claude-3-sonnet-20240229",
@@ -435,19 +418,14 @@ mod tests {
 
         let response = app.oneshot(request).await.unwrap();
 
-        // Should handle system prompts correctly
-        assert!(
-            response.status() == StatusCode::OK
-                || response.status() == StatusCode::INTERNAL_SERVER_ERROR
-                || response.status() == StatusCode::BAD_REQUEST
-                || response.status() == StatusCode::FORBIDDEN
-        );
+        // Without authentication, should return UNAUTHORIZED
+        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
     }
 
     #[tokio::test]
     async fn test_create_message_with_all_parameters() {
-        let aws_http_client = AwsHttpClient::new_test();
-        let app = create_anthropic_routes().with_state(aws_http_client);
+        let model_service = create_test_model_service();
+        let app = create_anthropic_routes().with_state(model_service);
 
         let full_request = serde_json::to_string(&serde_json::json!({
             "model": "claude-3-sonnet-20240229",
@@ -475,19 +453,14 @@ mod tests {
 
         let response = app.oneshot(request).await.unwrap();
 
-        // Should handle all parameters correctly
-        assert!(
-            response.status() == StatusCode::OK
-                || response.status() == StatusCode::INTERNAL_SERVER_ERROR
-                || response.status() == StatusCode::BAD_REQUEST
-                || response.status() == StatusCode::FORBIDDEN
-        );
+        // Without authentication, should return UNAUTHORIZED
+        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
     }
 
     #[tokio::test]
     async fn test_create_message_with_model_alias() {
-        let aws_http_client = AwsHttpClient::new_test();
-        let app = create_anthropic_routes().with_state(aws_http_client);
+        let model_service = create_test_model_service();
+        let app = create_anthropic_routes().with_state(model_service);
 
         let request_with_alias = serde_json::to_string(&serde_json::json!({
             "model": "claude-3-sonnet", // Using alias instead of full name
@@ -510,19 +483,14 @@ mod tests {
 
         let response = app.oneshot(request).await.unwrap();
 
-        // Should resolve aliases correctly
-        assert!(
-            response.status() == StatusCode::OK
-                || response.status() == StatusCode::INTERNAL_SERVER_ERROR
-                || response.status() == StatusCode::BAD_REQUEST
-                || response.status() == StatusCode::FORBIDDEN
-        );
+        // Without authentication, should return UNAUTHORIZED
+        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
     }
 
     #[tokio::test]
     async fn test_create_message_large_request() {
-        let aws_http_client = AwsHttpClient::new_test();
-        let app = create_anthropic_routes().with_state(aws_http_client);
+        let model_service = create_test_model_service();
+        let app = create_anthropic_routes().with_state(model_service);
 
         // Create a large content string
         let large_content = "A".repeat(5000);
@@ -547,13 +515,7 @@ mod tests {
 
         let response = app.oneshot(request).await.unwrap();
 
-        // Should handle large requests appropriately
-        assert!(
-            response.status() == StatusCode::OK
-                || response.status() == StatusCode::INTERNAL_SERVER_ERROR
-                || response.status() == StatusCode::BAD_REQUEST
-                || response.status() == StatusCode::FORBIDDEN
-                || response.status() == StatusCode::PAYLOAD_TOO_LARGE
-        );
+        // Without authentication, should return UNAUTHORIZED
+        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
     }
 }

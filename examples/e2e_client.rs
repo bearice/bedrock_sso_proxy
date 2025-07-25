@@ -1,5 +1,5 @@
 use base64::{Engine as _, engine::general_purpose};
-use bedrock_sso_proxy::{aws_http::AwsHttpClient, config::Config};
+use bedrock_sso_proxy::{model_service::BinaryAwsHttpClient as AwsHttpClient, config::Config};
 use chrono::{Duration, Utc};
 use clap::{Parser, Subcommand};
 use futures_util::stream::StreamExt;

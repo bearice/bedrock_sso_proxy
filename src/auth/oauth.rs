@@ -234,7 +234,7 @@ impl OAuthService {
 
         // Store user information persistently if storage is available
         let storage = &self.storage;
-        {
+        let db_user_id = {
             let now = Utc::now();
             let user_record = crate::storage::UserRecord {
                 id: None,
@@ -296,7 +296,9 @@ impl OAuthService {
                     audit_err
                 );
             }
-        }
+            
+            db_user_id
+        };
 
         // Create composite user ID
         let composite_user_id = format!("{}:{}", request.provider, user_id);
@@ -306,6 +308,7 @@ impl OAuthService {
             composite_user_id,
             request.provider.clone(),
             email.to_string(),
+            db_user_id,
             self.config.jwt.access_token_ttl,
             None, // No refresh token - JWT is long-lived
         );
@@ -469,11 +472,27 @@ impl OAuthService {
             token_data.email.clone()
         };
 
+        // Lookup database user ID from composite user_id
+        // Extract provider user ID from composite (format: "provider:user_id")
+        let provider_user_id = token_data.user_id
+            .split_once(':')
+            .map(|(_, id)| id)
+            .unwrap_or(&token_data.user_id);
+            
+        let db_user_id = self.storage
+            .database
+            .get_user_by_provider(&token_data.provider, provider_user_id)
+            .await
+            .map_err(|e| AppError::Internal(format!("Failed to lookup user: {}", e)))?
+            .and_then(|user| user.id)
+            .ok_or_else(|| AppError::NotFound("User not found in database".to_string()))?;
+
         // Create new OAuth JWT token
         let oauth_claims = OAuthClaims::new(
             token_data.user_id,
             token_data.provider.clone(),
             email,
+            db_user_id,
             self.config.jwt.access_token_ttl,
             Some(new_refresh_token.clone()),
         );
@@ -957,6 +976,7 @@ mod tests {
             "google:123".to_string(),
             "google".to_string(),
             "test@example.com".to_string(),
+            1, // user_id
             3600,
             None,
         );

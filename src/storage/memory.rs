@@ -1,6 +1,6 @@
 use super::{
     AuditLogEntry, CacheStorage, CachedValidation, DatabaseStorage, RefreshTokenData, StateData,
-    StorageResult, UserRecord,
+    StorageResult, StoredModelCost, UsageQuery, UsageRecord, UsageStats, UsageSummary, UserRecord,
 };
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
@@ -146,8 +146,11 @@ pub struct MemoryDatabaseStorage {
     users_by_email: Arc<DashMap<String, UserRecord>>, // key: email
     refresh_tokens: Arc<DashMap<String, RefreshTokenData>>, // key: token_hash
     audit_logs: Arc<DashMap<i32, AuditLogEntry>>, // key: entry_id
+    model_costs: Arc<DashMap<String, StoredModelCost>>, // key: model_id
+    usage_records: Arc<DashMap<i32, UsageRecord>>, // key: record_id
     next_user_id: AtomicI32,
     next_audit_id: AtomicI32,
+    next_usage_id: AtomicI32,
 }
 
 impl MemoryDatabaseStorage {
@@ -157,8 +160,11 @@ impl MemoryDatabaseStorage {
             users_by_email: Arc::new(DashMap::new()),
             refresh_tokens: Arc::new(DashMap::new()),
             audit_logs: Arc::new(DashMap::new()),
+            model_costs: Arc::new(DashMap::new()),
+            usage_records: Arc::new(DashMap::new()),
             next_user_id: AtomicI32::new(1),
             next_audit_id: AtomicI32::new(1),
+            next_usage_id: AtomicI32::new(1),
         }
     }
 
@@ -322,6 +328,155 @@ impl DatabaseStorage for MemoryDatabaseStorage {
     async fn migrate(&self) -> StorageResult<()> {
         // No migrations needed for memory storage
         Ok(())
+    }
+
+    // Usage tracking methods - stub implementations for memory storage
+
+    async fn store_usage_record(&self, record: &UsageRecord) -> StorageResult<()> {
+        let record_id = self.next_usage_id.fetch_add(1, Ordering::SeqCst);
+        let mut record_to_store = record.clone();
+        record_to_store.id = Some(record_id);
+        self.usage_records.insert(record_id, record_to_store);
+        Ok(())
+    }
+
+    async fn get_usage_records(&self, _query: &UsageQuery) -> StorageResult<Vec<UsageRecord>> {
+        // Stub implementation - memory storage doesn't persist usage records
+        Ok(Vec::new())
+    }
+
+    async fn get_usage_stats(&self, _query: &UsageQuery) -> StorageResult<UsageStats> {
+        // Stub implementation - memory storage doesn't persist usage records
+        Ok(UsageStats {
+            total_requests: 0,
+            total_input_tokens: 0,
+            total_output_tokens: 0,
+            total_tokens: 0,
+            avg_response_time_ms: 0.0,
+            success_rate: 0.0,
+            total_cost: None,
+            unique_models: 0,
+            date_range: (Utc::now(), Utc::now()),
+        })
+    }
+
+    async fn upsert_usage_summary(&self, _summary: &UsageSummary) -> StorageResult<()> {
+        // Stub implementation - memory storage doesn't persist usage summaries
+        Ok(())
+    }
+
+    async fn get_usage_summaries(&self, _query: &UsageQuery) -> StorageResult<Vec<UsageSummary>> {
+        // Stub implementation - memory storage doesn't persist usage summaries
+        Ok(Vec::new())
+    }
+
+    async fn cleanup_old_usage_records(&self, _retention_days: u32) -> StorageResult<u64> {
+        // Stub implementation - memory storage doesn't persist usage records
+        Ok(0)
+    }
+
+    async fn get_model_cost(&self, model_id: &str) -> StorageResult<Option<StoredModelCost>> {
+        Ok(self.model_costs.get(model_id).map(|entry| entry.value().clone()))
+    }
+
+    async fn upsert_model_cost(&self, cost: &StoredModelCost) -> StorageResult<()> {
+        let mut cost_to_store = cost.clone();
+        cost_to_store.updated_at = Utc::now();
+        self.model_costs.insert(cost.model_id.clone(), cost_to_store);
+        Ok(())
+    }
+
+    async fn get_all_model_costs(&self) -> StorageResult<Vec<StoredModelCost>> {
+        let costs: Vec<StoredModelCost> = self.model_costs
+            .iter()
+            .map(|entry| entry.value().clone())
+            .collect();
+        Ok(costs)
+    }
+
+    async fn delete_model_cost(&self, model_id: &str) -> StorageResult<()> {
+        self.model_costs.remove(model_id);
+        Ok(())
+    }
+
+    async fn get_user_usage_records(
+        &self,
+        user_id: i32,
+        limit: u32,
+        _offset: u32,
+        _model_filter: Option<&str>,
+        _start_date: Option<DateTime<Utc>>,
+        _end_date: Option<DateTime<Utc>>,
+    ) -> StorageResult<Vec<UsageRecord>> {
+        let mut records: Vec<UsageRecord> = self.usage_records
+            .iter()
+            .filter(|entry| entry.value().user_id == user_id)
+            .map(|entry| entry.value().clone())
+            .collect();
+        
+        // Sort by request_time descending (most recent first)
+        records.sort_by(|a, b| b.request_time.cmp(&a.request_time));
+        
+        // Apply limit
+        if (limit as usize) < records.len() {
+            records.truncate(limit as usize);
+        }
+        
+        Ok(records)
+    }
+
+    async fn get_user_usage_stats(
+        &self,
+        _user_id: i32,
+        _start_date: Option<DateTime<Utc>>,
+        _end_date: Option<DateTime<Utc>>,
+    ) -> StorageResult<UsageStats> {
+        // Stub implementation - memory storage doesn't persist usage records
+        Ok(UsageStats {
+            total_requests: 0,
+            total_input_tokens: 0,
+            total_output_tokens: 0,
+            total_tokens: 0,
+            avg_response_time_ms: 0.0,
+            success_rate: 0.0,
+            total_cost: None,
+            unique_models: 0,
+            date_range: (Utc::now(), Utc::now()),
+        })
+    }
+
+    async fn get_system_usage_stats(
+        &self,
+        _start_date: Option<DateTime<Utc>>,
+        _end_date: Option<DateTime<Utc>>,
+    ) -> StorageResult<UsageStats> {
+        // Stub implementation - memory storage doesn't persist usage records
+        Ok(UsageStats {
+            total_requests: 0,
+            total_input_tokens: 0,
+            total_output_tokens: 0,
+            total_tokens: 0,
+            avg_response_time_ms: 0.0,
+            success_rate: 0.0,
+            total_cost: None,
+            unique_models: 0,
+            date_range: (Utc::now(), Utc::now()),
+        })
+    }
+
+    async fn get_top_models_by_usage(
+        &self,
+        _limit: u32,
+        _start_date: Option<DateTime<Utc>>,
+        _end_date: Option<DateTime<Utc>>,
+    ) -> StorageResult<Vec<(String, u64)>> {
+        // Stub implementation - memory storage doesn't persist usage records
+        Ok(Vec::new())
+    }
+
+    async fn get_unique_model_ids(&self) -> StorageResult<Vec<String>> {
+        // Stub implementation - memory storage doesn't persist usage records
+        Ok(Vec::new())
     }
 }
 

@@ -2139,17 +2139,29 @@ pub async fn multi_region_health_check(
 4. **Testing**: Update/remove 15 rate limiting tests ✅
 5. **Documentation**: Update configuration examples ✅
 
-#### Phase 8.5.2: Token Usage Tracking with Dashboards (18-25 hours)
+#### Phase 8.5.2: Token Usage Tracking with Dashboards ✅ COMPLETED
 
-**Backend Implementation (8-10 hours)**
-1. **Database Schema**: Add usage tracking tables and migrations
-2. **Storage Layer**: Implement usage recording and querying methods
-3. **Token Counting**: Implement accurate token counting from requests/responses
-4. **Usage Middleware**: Add middleware to capture usage data
-5. **API Endpoints**: Implement user and admin usage endpoints
-6. **Cost Tracking**: Add model pricing and cost calculation
-7. **Metrics Integration**: Connect with Prometheus metrics
-8. **Testing**: Comprehensive backend tests
+**Backend Implementation ✅ COMPLETED**
+1. **Database Schema**: Add usage tracking tables and migrations ✅
+2. **Storage Layer**: Implement usage recording and querying methods ✅
+3. **Token Counting**: Implement accurate token counting from requests/responses ✅
+4. **Usage Middleware**: Add middleware to capture usage data ✅
+5. **API Endpoints**: Implement user and admin usage endpoints ✅
+6. **Cost Tracking**: Add model pricing and cost calculation ✅
+7. **Metrics Integration**: Connect with Prometheus metrics ✅
+8. **Testing**: Comprehensive backend tests ✅
+
+#### Phase 8.5.3: ModelService Unified Architecture (8-12 hours)
+
+**Architecture Simplification (8-12 hours)**
+1. **ModelService Design**: Create unified interface for AWS calls and usage tracking
+2. **ModelService Implementation**: Replace middleware with service-based approach
+3. **Route Handler Updates**: Update bedrock and anthropic routes to use ModelService
+4. **Middleware Removal**: Remove complex usage tracking middleware
+5. **Server Configuration**: Update router to use ModelService instead of middleware
+6. **Test Updates**: Replace middleware tests with ModelService unit tests
+7. **Usage Tracking Enhancement**: Use actual AWS token headers instead of estimates
+8. **Integration Testing**: Verify end-to-end functionality with new architecture
 
 **Frontend Implementation (10-15 hours)**
 1. **User Dashboard Components**:
@@ -2314,3 +2326,167 @@ The existing frontend will be extended with usage tracking dashboards:
 - User management interface
 - Cost configuration and tracking
 - Performance monitoring
+
+## ModelService Architecture (Phase 8.5.3)
+
+### Current Usage Tracking Problems
+
+The current middleware-based usage tracking approach has several issues:
+
+- **Complex Middleware**: Intercepts requests/responses with estimation-based token counting
+- **Duplicate Logic**: AWS call handling duplicated between bedrock.rs and anthropic.rs
+- **Inaccurate Counting**: Token estimation instead of actual AWS response headers
+- **Difficult Testing**: Complex middleware makes testing and debugging difficult
+
+### Proposed Unified Architecture
+
+```
+┌─────────────────┐    ┌──────────────────┐    ┌─────────────────┐    ┌─────────────────┐
+│ Bedrock Routes  │───▶│                  │───▶│                 │───▶│      AWS        │
+│ (validation)    │    │   ModelService   │    │  AwsHttpClient  │    │    Bedrock      │
+└─────────────────┘    │  (unified API +  │    │                 │    │                 │
+┌─────────────────┐    │ usage tracking)  │    │                 │    │                 │
+│ Anthropic Routes│───▶│                  │◄───│                 │◄───│                 │
+│ (transformation)│    └──────────────────┘    └─────────────────┘    └─────────────────┘
+└─────────────────┘             │
+                                ▼
+                    ┌─────────────────────────┐
+                    │     Storage Layer       │
+                    │   (usage records with   │
+                    │   actual token counts)  │
+                    └─────────────────────────┘
+```
+
+### ModelService Interface Design
+
+**Core Responsibilities:**
+1. **Unified AWS Call Interface** - Handle both streaming and non-streaming
+2. **Usage Tracking** - Extract actual token counts from AWS headers (`x-amzn-bedrock-*-token-count`)
+3. **Error Handling** - Centralized AWS error handling
+4. **Cost Calculation** - Apply model pricing to actual token counts
+
+**Key Methods:**
+```rust
+pub struct ModelService {
+    aws_client: AwsHttpClient,
+    storage: Arc<Storage>,
+    config: Config,
+}
+
+impl ModelService {
+    // Non-streaming calls - usage tracking happens internally
+    pub async fn invoke_model(&self, request: ModelRequest) -> Result<ModelResponse, AppError> {
+        // 1. Make AWS API call
+        let response = self.aws_client.invoke_model(...).await?;
+        
+        // 2. Track usage automatically (internal call)
+        self.track_usage(&request, &response).await?;
+        
+        // 3. Return response
+        Ok(response)
+    }
+    
+    // Streaming calls - usage tracking happens internally  
+    pub async fn invoke_model_stream(&self, request: ModelRequest) -> Result<ModelStreamResponse, AppError> {
+        // 1. Make AWS streaming API call
+        let response = self.aws_client.invoke_model_stream(...).await?;
+        
+        // 2. Track usage automatically (internal call) 
+        self.track_usage(&request, &response).await?;
+        
+        // 3. Return streaming response
+        Ok(response)
+    }
+    
+    // Private method - only called internally by invoke_* methods
+    async fn track_usage(&self, request: &ModelRequest, response: &ModelResponse) -> Result<(), AppError> {
+        let user_id = request.user_id;  // Extract from request
+        // Extract token counts from AWS response headers and store usage record
+    }
+}
+
+pub struct ModelRequest {
+    pub model_id: String,
+    pub body: Vec<u8>,
+    pub headers: HeaderMap,
+    pub user_id: i32,
+    pub endpoint_type: String,
+}
+
+pub struct ModelResponse {
+    pub status: StatusCode,
+    pub headers: HeaderMap,
+    pub body: Vec<u8>,
+    pub usage_metadata: Option<UsageMetadata>,
+}
+
+pub struct UsageMetadata {
+    pub input_tokens: u32,
+    pub output_tokens: u32,
+    pub region: String,
+    pub response_time_ms: u32,
+}
+```
+
+### Benefits of ModelService Architecture
+
+#### Simplified Flow
+- **Before**: Request → Auth → Middleware → Route → AWS → Middleware → Response  
+- **After**: Request → Auth → Route → ModelService → AWS → Response (with automatic usage tracking)
+
+#### Better Separation of Concerns
+- **Routes**: Request/response formatting and validation only
+- **ModelService**: AWS calls and automatic usage tracking (encapsulated)
+- **Storage**: Data persistence
+- **No Complex Middleware**: Eliminates request/response interception
+
+#### Automatic Usage Tracking
+- **Internal and Guaranteed**: Usage tracking happens automatically inside invoke_* methods
+- **Can't Be Forgotten**: No external calls to track_usage - it's built into the flow
+- **Actual Token Counts**: From AWS response headers instead of estimates
+- **Consistent**: All model invocations tracked the same way
+- **Better Error Handling**: Usage only tracked for successful requests
+
+#### Easier Testing & Debugging
+- **Single Mock Point**: Mock ModelService instead of complex middleware
+- **Clear Boundaries**: Easy to test each component in isolation
+- **Better Observability**: Centralized logging and metrics
+
+### Implementation Plan
+
+#### Phase 1: Create ModelService
+**Files to Create:**
+- `src/model_service.rs` - Core ModelService implementation
+- `src/model_service/mod.rs` - Module organization  
+- `src/model_service/types.rs` - Request/Response types
+- `src/model_service/usage.rs` - Usage tracking logic
+
+#### Phase 2: Update Route Handlers
+**Bedrock Routes**: Replace direct `aws_http_client.invoke_model()` calls with `model_service.invoke_model()`
+
+**Anthropic Routes**: Replace AWS calls with ModelService calls, keep transformation logic
+
+#### Phase 3: Remove Middleware & Update Server
+- Delete `src/usage_tracking/middleware.rs` 
+- Remove middleware from server configuration
+- Add ModelService to application state
+
+#### Phase 4: Testing & Verification
+- Replace middleware tests with ModelService unit tests
+- Update integration tests to mock ModelService
+- Verify usage tracking with actual AWS token headers
+
+### Migration Strategy
+
+#### Backwards Compatibility
+- Keep existing API endpoints unchanged
+- Maintain same request/response formats  
+- Preserve usage data structure
+
+#### Rollout Plan
+1. Create ModelService alongside existing middleware
+2. Update routes one at a time (bedrock first, then anthropic)
+3. Remove middleware once routes are migrated
+4. Clean up unused middleware code
+
+This architecture will be significantly simpler, more accurate, and easier to maintain than the current middleware-based approach.

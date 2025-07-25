@@ -42,7 +42,12 @@ async fn health_check(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{aws_http::AwsHttpClient, health::HealthService};
+    use crate::{
+        config::Config,
+        health::HealthService, 
+        model_service::ModelService,
+        storage::{memory::MemoryDatabaseStorage, Storage},
+    };
     use axum::{
         body::Body,
         http::{Request, StatusCode},
@@ -51,9 +56,17 @@ mod tests {
 
     async fn create_test_health_service() -> Arc<HealthService> {
         let health_service = Arc::new(HealthService::new());
-        let aws_client = AwsHttpClient::new_test();
+        
+        // Create ModelService for testing and register its AWS health checker
+        let config = Config::default();
+        let storage = Arc::new(Storage::new(
+            Box::new(crate::storage::memory::MemoryCacheStorage::new(3600)),
+            Box::new(MemoryDatabaseStorage::new()),
+        ));
+        let model_service = ModelService::new_test(storage, config);
+        
         health_service
-            .register(Arc::new(aws_client.health_checker()))
+            .register(Arc::new(model_service.aws_client().clone().health_checker()))
             .await;
         health_service
     }

@@ -1,8 +1,8 @@
 use crate::auth::{ValidatedClaims, jwt::JwtService};
 use crate::error::AppError;
 use axum::{
-    extract::{Request, State},
-    http::header::AUTHORIZATION,
+    extract::{FromRequestParts, Request, State},
+    http::{header::AUTHORIZATION, request::Parts},
     middleware::Next,
     response::Response,
 };
@@ -84,6 +84,29 @@ pub fn extract_claims(request: &Request) -> Option<&ValidatedClaims> {
     request.extensions().get::<ValidatedClaims>()
 }
 
+/// Custom extractor for ValidatedClaims from request extensions
+/// Use this in route handlers that need access to JWT claims
+pub struct ClaimsExtractor(pub ValidatedClaims);
+
+impl<S> FromRequestParts<S> for ClaimsExtractor
+where
+    S: Send + Sync,
+{
+    type Rejection = AppError;
+
+    async fn from_request_parts(
+        parts: &mut Parts, 
+        _state: &S,
+    ) -> Result<Self, Self::Rejection> {
+        parts
+            .extensions
+            .get::<ValidatedClaims>()
+            .cloned()
+            .map(ClaimsExtractor)
+            .ok_or_else(|| AppError::Unauthorized("Missing authentication claims".to_string()))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -129,6 +152,7 @@ mod tests {
         let claims = Claims {
             sub: sub.to_string(),
             exp,
+            user_id: 1,
         };
 
         encode(
@@ -144,6 +168,7 @@ mod tests {
             "google:123".to_string(),
             "google".to_string(),
             "test@example.com".to_string(),
+            1, // user_id
             3600,
             None,
         );

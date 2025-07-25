@@ -93,6 +93,80 @@ pub struct AuditLogEntry {
     pub metadata: Option<HashMap<String, serde_json::Value>>,
 }
 
+/// Usage record for database persistence - tracks individual API requests
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct UsageRecord {
+    pub id: Option<i32>,
+    pub user_id: i32,
+    pub model_id: String,
+    pub endpoint_type: String, // "bedrock" or "anthropic"
+    pub region: String,
+    pub request_time: DateTime<Utc>,
+    pub input_tokens: u32,
+    pub output_tokens: u32,
+    pub total_tokens: u32,
+    pub response_time_ms: u32,
+    pub success: bool,
+    pub error_message: Option<String>,
+    pub cost_usd: Option<f64>,
+}
+
+/// Pre-calculated usage summary for performance
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct UsageSummary {
+    pub id: Option<i32>,
+    pub user_id: i32,
+    pub model_id: String,
+    pub period_type: String, // "hour", "day", "month"
+    pub period_start: DateTime<Utc>,
+    pub period_end: DateTime<Utc>,
+    pub total_requests: u32,
+    pub total_input_tokens: u64,
+    pub total_output_tokens: u64,
+    pub total_tokens: u64,
+    pub avg_response_time_ms: f32,
+    pub success_rate: f32,
+    pub estimated_cost: Option<f64>,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+/// Model cost configuration for cost calculation
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct StoredModelCost {
+    pub id: Option<i32>,
+    pub model_id: String,
+    pub input_cost_per_1k_tokens: f64,
+    pub output_cost_per_1k_tokens: f64,
+    pub updated_at: DateTime<Utc>,
+}
+
+/// Query parameters for usage data retrieval
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct UsageQuery {
+    pub user_id: Option<i32>,
+    pub model_id: Option<String>,
+    pub start_date: Option<DateTime<Utc>>,
+    pub end_date: Option<DateTime<Utc>>,
+    pub success_only: Option<bool>,
+    pub limit: Option<u32>,
+    pub offset: Option<u32>,
+}
+
+/// Aggregated usage statistics
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct UsageStats {
+    pub total_requests: u32,
+    pub total_input_tokens: u64,
+    pub total_output_tokens: u64,
+    pub total_tokens: u64,
+    pub avg_response_time_ms: f32,
+    pub success_rate: f32,
+    pub total_cost: Option<f64>,
+    pub unique_models: u32,
+    pub date_range: (DateTime<Utc>, DateTime<Utc>),
+}
+
 /// Cache storage trait for TTL-based data (Redis or in-memory)
 #[async_trait]
 pub trait CacheStorage: Send + Sync {
@@ -181,6 +255,75 @@ pub trait DatabaseStorage: Send + Sync {
 
     /// Run database migrations
     async fn migrate(&self) -> StorageResult<()>;
+
+    // Usage tracking methods
+
+    /// Store usage record
+    async fn store_usage_record(&self, record: &UsageRecord) -> StorageResult<()>;
+
+    /// Get usage records for query
+    async fn get_usage_records(&self, query: &UsageQuery) -> StorageResult<Vec<UsageRecord>>;
+
+    /// Get usage statistics for query
+    async fn get_usage_stats(&self, query: &UsageQuery) -> StorageResult<UsageStats>;
+
+    /// Store or update usage summary
+    async fn upsert_usage_summary(&self, summary: &UsageSummary) -> StorageResult<()>;
+
+    /// Get usage summaries for query
+    async fn get_usage_summaries(&self, query: &UsageQuery) -> StorageResult<Vec<UsageSummary>>;
+
+    /// Clean up old usage records
+    async fn cleanup_old_usage_records(&self, retention_days: u32) -> StorageResult<u64>;
+
+    /// Get model cost by model ID
+    async fn get_model_cost(&self, model_id: &str) -> StorageResult<Option<StoredModelCost>>;
+
+    /// Store or update model cost
+    async fn upsert_model_cost(&self, cost: &StoredModelCost) -> StorageResult<()>;
+
+    /// Get all model costs
+    async fn get_all_model_costs(&self) -> StorageResult<Vec<StoredModelCost>>;
+
+    /// Delete model cost
+    async fn delete_model_cost(&self, model_id: &str) -> StorageResult<()>;
+
+    /// Get usage records for user (paginated)
+    async fn get_user_usage_records(
+        &self,
+        user_id: i32,
+        limit: u32,
+        offset: u32,
+        model_filter: Option<&str>,
+        start_date: Option<DateTime<Utc>>,
+        end_date: Option<DateTime<Utc>>,
+    ) -> StorageResult<Vec<UsageRecord>>;
+
+    /// Get user usage statistics
+    async fn get_user_usage_stats(
+        &self,
+        user_id: i32,
+        start_date: Option<DateTime<Utc>>,
+        end_date: Option<DateTime<Utc>>,
+    ) -> StorageResult<UsageStats>;
+
+    /// Get system-wide usage statistics (admin only)
+    async fn get_system_usage_stats(
+        &self,
+        start_date: Option<DateTime<Utc>>,
+        end_date: Option<DateTime<Utc>>,
+    ) -> StorageResult<UsageStats>;
+
+    /// Get top models by usage
+    async fn get_top_models_by_usage(
+        &self,
+        limit: u32,
+        start_date: Option<DateTime<Utc>>,
+        end_date: Option<DateTime<Utc>>,
+    ) -> StorageResult<Vec<(String, u64)>>; // (model_id, total_tokens)
+
+    /// Get unique model IDs from usage records
+    async fn get_unique_model_ids(&self) -> StorageResult<Vec<String>>;
 }
 
 /// Unified storage interface combining cache and database

@@ -23,6 +23,8 @@ pub struct Config {
     pub metrics: MetricsConfig,
     #[serde(default)]
     pub model_mapping: ModelMappingConfig,
+    #[serde(default)]
+    pub usage_tracking: UsageTrackingConfig,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -281,6 +283,83 @@ pub struct ModelMappingConfig {
     pub custom_mappings: HashMap<String, String>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UsageTrackingConfig {
+    #[serde(default = "default_usage_tracking_enabled")]
+    pub enabled: bool,
+    #[serde(default = "default_batch_size")]
+    pub batch_size: u32,
+    #[serde(default = "default_flush_interval")]
+    pub flush_interval: u64,
+    #[serde(default = "default_retention_days")]
+    pub retention_days: u32,
+    #[serde(default = "default_detailed_logging")]
+    pub enable_detailed_logging: bool,
+    #[serde(default)]
+    pub cost_tracking: CostTrackingConfig,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CostTrackingConfig {
+    #[serde(default = "default_cost_tracking_enabled")]
+    pub enabled: bool,
+    /// Default model costs (can be overridden via admin API)
+    #[serde(default)]
+    pub default_costs: HashMap<String, ModelCost>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ModelCost {
+    pub input_cost_per_1k_tokens: f64,
+    pub output_cost_per_1k_tokens: f64,
+}
+
+fn default_usage_tracking_enabled() -> bool {
+    true
+}
+
+fn default_batch_size() -> u32 {
+    100
+}
+
+fn default_flush_interval() -> u64 {
+    60 // seconds
+}
+
+fn default_retention_days() -> u32 {
+    365
+}
+
+fn default_detailed_logging() -> bool {
+    true
+}
+
+fn default_cost_tracking_enabled() -> bool {
+    true
+}
+
+impl Default for UsageTrackingConfig {
+    fn default() -> Self {
+        Self {
+            enabled: default_usage_tracking_enabled(),
+            batch_size: default_batch_size(),
+            flush_interval: default_flush_interval(),
+            retention_days: default_retention_days(),
+            enable_detailed_logging: default_detailed_logging(),
+            cost_tracking: CostTrackingConfig::default(),
+        }
+    }
+}
+
+impl Default for CostTrackingConfig {
+    fn default() -> Self {
+        Self {
+            enabled: default_cost_tracking_enabled(),
+            default_costs: HashMap::new(),
+        }
+    }
+}
+
 impl Default for RedisStorageConfig {
     fn default() -> Self {
         Self {
@@ -332,6 +411,7 @@ impl Default for Config {
             storage: StorageConfig::default(),
             metrics: MetricsConfig::default(),
             model_mapping: ModelMappingConfig::default(),
+            usage_tracking: UsageTrackingConfig::default(),
         }
     }
 }

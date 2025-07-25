@@ -213,42 +213,88 @@ export function DashboardPage() {
         </h3>
         <p>Use your JWT token to authenticate API requests to this Bedrock proxy:</p>
 
-        <div style={{ background: '#fff3cd', padding: '1rem', borderRadius: '8px', marginBottom: '1rem', border: '1px solid #ffeaa7' }}>
-          <strong>⚠️ Important:</strong> This is a custom proxy server, not the official Claude Code integration. 
-          For standard AWS Bedrock usage with Claude Code, see the <a href="https://docs.anthropic.com/en/docs/claude-code/amazon-bedrock" target="_blank" rel="noopener noreferrer">official documentation</a>.
+        <div
+          style={{
+            background: '#fff3cd',
+            padding: '1rem',
+            borderRadius: '8px',
+            marginBottom: '1rem',
+            border: '1px solid #ffeaa7',
+          }}
+        >
+          <strong>⚠️ Important:</strong> This is a custom proxy server, not the official Claude Code
+          integration. For standard AWS Bedrock usage with Claude Code, see the{' '}
+          <a
+            href="https://docs.anthropic.com/en/docs/claude-code/amazon-bedrock"
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            official documentation
+          </a>
+          .
         </div>
 
         <h4>API Usage</h4>
-        <p>This proxy supports both Bedrock and Anthropic API formats for maximum compatibility. Use the token as a Bearer token in the Authorization header:</p>
+        <p>
+          This proxy supports both Bedrock and Anthropic API formats for maximum compatibility. Use
+          the token as a Bearer token in the Authorization header:
+        </p>
         <pre>{`Authorization: Bearer ${token?.substring(0, 30)}...`}</pre>
-        
-        <div style={{ background: '#e8f5e8', padding: '1rem', borderRadius: '8px', marginTop: '1rem', border: '1px solid #b8d4b8' }}>
-          <strong>✨ New:</strong> Anthropic API format support! Use <code>/v1/messages</code> with standard Anthropic request format for better compatibility with Anthropic SDKs and LLM gateways.
+
+        <div
+          style={{
+            background: '#e8f5e8',
+            padding: '1rem',
+            borderRadius: '8px',
+            marginTop: '1rem',
+            border: '1px solid #b8d4b8',
+          }}
+        >
+          <strong>✨ New:</strong> Anthropic API format support! Use <code>/v1/messages</code> with
+          standard Anthropic request format for better compatibility with Anthropic SDKs and LLM
+          gateways.
         </div>
 
         <h4>Available Endpoints</h4>
         <div style={{ marginBottom: '1rem' }}>
           <strong>Health & Status:</strong>
           <ul>
-            <li><code>GET /health</code> - Health check (no auth required)</li>
+            <li>
+              <code>GET /health</code> - Health check (no auth required)
+            </li>
           </ul>
         </div>
-        
+
         <div style={{ marginBottom: '1rem' }}>
           <strong>Bedrock Format (AWS Native):</strong>
           <ul>
-            <li><code>POST /bedrock/model/{"{"}{"{"}model_id{"}"}/invoke</code> - Standard invocation</li>
-            <li><code>POST /bedrock/model/{"{"}{"{"}model_id{"}"}/invoke-with-response-stream</code> - Streaming responses</li>
+            <li>
+              <code>
+                POST /bedrock/model/{'{'}
+                {'{'}model_id{'}'}/invoke
+              </code>{' '}
+              - Standard invocation
+            </li>
+            <li>
+              <code>
+                POST /bedrock/model/{'{'}
+                {'{'}model_id{'}'}/invoke-with-response-stream
+              </code>{' '}
+              - Streaming responses
+            </li>
           </ul>
           <p style={{ fontSize: '0.9rem', color: '#666', margin: '0.5rem 0 0 1rem' }}>
-            Uses AWS model IDs like <code>anthropic.claude-3-sonnet-20240229-v1:0</code> in the URL path
+            Uses AWS model IDs like <code>anthropic.claude-3-sonnet-20240229-v1:0</code> in the URL
+            path
           </p>
         </div>
-        
+
         <div style={{ marginBottom: '1rem' }}>
           <strong>Anthropic Format (Standard API):</strong>
           <ul>
-            <li><code>POST /anthropic/v1/messages</code> - Standard Anthropic API (supports streaming)</li>
+            <li>
+              <code>POST /anthropic/v1/messages</code> - Standard Anthropic API (supports streaming)
+            </li>
           </ul>
           <p style={{ fontSize: '0.9rem', color: '#666', margin: '0.5rem 0 0 1rem' }}>
             Uses standard model names like <code>claude-3-sonnet-20240229</code> in the request body
@@ -265,7 +311,9 @@ export CLAUDE_CODE_SKIP_BEDROCK_AUTH=1
 export CLAUDE_CODE_USE_BEDROCK=1`}</pre>
 
         <h5>Method 2: Settings File</h5>
-        <p>Add to your <code>~/.claude/settings.json</code>:</p>
+        <p>
+          Add to your <code>~/.claude/settings.json</code>:
+        </p>
         <pre>{`{
   "env": {
     "ANTHROPIC_BEDROCK_BASE_URL": "${currentDomain}",
@@ -275,9 +323,19 @@ export CLAUDE_CODE_USE_BEDROCK=1`}</pre>
   }
 }`}</pre>
 
-        <div style={{ background: '#d1ecf1', padding: '1rem', borderRadius: '8px', marginTop: '1rem', border: '1px solid #bee5eb' }}>
-          <strong>💡 Tip:</strong> For official AWS Bedrock support, use <code>export CLAUDE_CODE_USE_BEDROCK=1</code> 
-          and configure AWS credentials instead. This requires proper AWS IAM permissions and enabled Claude models.
+        <div
+          style={{
+            background: '#d1ecf1',
+            padding: '1rem',
+            borderRadius: '8px',
+            marginTop: '1rem',
+            border: '1px solid #bee5eb',
+          }}
+        >
+          <strong>💡 Tip:</strong> For official AWS Bedrock support, use{' '}
+          <code>export CLAUDE_CODE_USE_BEDROCK=1</code>
+          and configure AWS credentials instead. This requires proper AWS IAM permissions and
+          enabled Claude models.
         </div>
       </div>
 
@@ -287,7 +345,10 @@ export CLAUDE_CODE_USE_BEDROCK=1`}</pre>
           <Shield size={20} style={{ marginRight: '0.5rem', verticalAlign: 'text-bottom' }} />
           🧪 Test Your Setup
         </h3>
-        <p>Verify your authentication is working with test requests. Choose your preferred API format:</p>
+        <p>
+          Verify your authentication is working with test requests. Choose your preferred API
+          format:
+        </p>
 
         <div style={{ display: 'grid', gap: '1.5rem', marginTop: '1rem' }}>
           {/* Bedrock Format Example */}
@@ -332,7 +393,10 @@ export CLAUDE_CODE_USE_BEDROCK=1`}</pre>
         </div>
 
         <h4 style={{ marginTop: '1.5rem' }}>Using Claude Code:</h4>
-        <p>With ANTHROPIC_BEDROCK_BASE_URL configured, Claude Code will automatically use the Anthropic format:</p>
+        <p>
+          With ANTHROPIC_BEDROCK_BASE_URL configured, Claude Code will automatically use the
+          Anthropic format:
+        </p>
         <pre>claude-code &quot;Hello, can you help me test this setup?&quot;</pre>
 
         <div style={{ marginTop: '1rem', display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
