@@ -214,12 +214,9 @@ impl Server {
             // Protected API key management routes (JWT auth required)
             .nest(
                 "/api/keys",
-                create_api_key_routes()
-                    .with_state(self.clone())
-                    .layer(middleware::from_fn_with_state(
-                        self.clone(),
-                        jwt_auth_middleware,
-                    )),
+                create_api_key_routes().with_state(self.clone()).layer(
+                    middleware::from_fn_with_state(self.clone(), jwt_auth_middleware),
+                ),
             )
             // Protected admin usage tracking API routes
             .nest(

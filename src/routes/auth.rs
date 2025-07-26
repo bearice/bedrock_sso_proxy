@@ -2,6 +2,7 @@ use crate::{
     auth::{
         jwt::OAuthClaims,
         oauth::{OAuthService, RefreshRequest, TokenRequest},
+        request_context::RequestContext,
     },
     database::entities::UserRecord,
     error::AppError,
@@ -55,17 +56,23 @@ pub async fn authorize_handler(
 
 pub async fn token_handler(
     State(oauth_service): State<Arc<OAuthService>>,
+    headers: HeaderMap,
     Json(request): Json<TokenRequest>,
 ) -> Result<Json<crate::auth::oauth::TokenResponse>, AppError> {
-    let response = oauth_service.exchange_code_for_token(request).await?;
+    let context = RequestContext::extract_from_headers(&headers);
+    let response = oauth_service
+        .exchange_code_for_token(request, context)
+        .await?;
     Ok(Json(response))
 }
 
 pub async fn refresh_handler(
     State(oauth_service): State<Arc<OAuthService>>,
+    headers: HeaderMap,
     Json(request): Json<RefreshRequest>,
 ) -> Result<Json<crate::auth::oauth::TokenResponse>, AppError> {
-    let response = oauth_service.refresh_token(request).await?;
+    let context = RequestContext::extract_from_headers(&headers);
+    let response = oauth_service.refresh_token(request, context).await?;
     Ok(Json(response))
 }
 
@@ -80,6 +87,7 @@ pub async fn callback_handler(
     State(oauth_service): State<Arc<OAuthService>>,
     Path(provider): Path<String>,
     Query(params): Query<CallbackQuery>,
+    headers: HeaderMap,
 ) -> Result<Redirect, AppError> {
     // Handle OAuth errors first
     if let Some(error) = params.error {
@@ -112,7 +120,11 @@ pub async fn callback_handler(
         state,
     };
 
-    match oauth_service.exchange_code_for_token(token_request).await {
+    let context = RequestContext::extract_from_headers(&headers);
+    match oauth_service
+        .exchange_code_for_token(token_request, context)
+        .await
+    {
         Ok(token_response) => {
             // Redirect to frontend callback page with success parameters
             let success_url = build_callback_url(&[

@@ -1,5 +1,5 @@
 use crate::{
-    auth::{OAuthClaims, jwt::JwtService},
+    auth::{OAuthClaims, jwt::JwtService, request_context::RequestContext},
     cache::{CacheManager, StateData},
     config::{Config, OAuthProvider},
     database::{DatabaseManager, entities::UserRecord},
@@ -139,9 +139,13 @@ impl OAuthService {
     pub async fn exchange_code_for_token(
         &self,
         request: TokenRequest,
+        context: RequestContext,
     ) -> Result<TokenResponse, AppError> {
         // Perform the authentication flow and log the result
-        match self.exchange_code_for_token_internal(request.clone()).await {
+        match self
+            .exchange_code_for_token_internal(request.clone(), context.clone())
+            .await
+        {
             Ok(response) => Ok(response),
             Err(e) => {
                 // Log authentication failure if database is available
@@ -151,8 +155,8 @@ impl OAuthService {
                         user_id: None,
                         event_type: "oauth_login_failed".to_string(),
                         provider: Some(request.provider.clone()),
-                        ip_address: None, // TODO: Extract from request context
-                        user_agent: None, // TODO: Extract from request context
+                        ip_address: context.ip_address.clone(),
+                        user_agent: context.user_agent.clone(),
                         success: false,
                         error_message: Some(e.to_string()),
                         created_at: Utc::now(),
@@ -186,6 +190,7 @@ impl OAuthService {
     async fn exchange_code_for_token_internal(
         &self,
         request: TokenRequest,
+        context: RequestContext,
     ) -> Result<TokenResponse, AppError> {
         // Validate state token
         let state_data = self
@@ -286,8 +291,8 @@ impl OAuthService {
                 user_id: Some(db_user_id),
                 event_type: "oauth_login".to_string(),
                 provider: Some(request.provider.clone()),
-                ip_address: None, // TODO: Extract from request context
-                user_agent: None, // TODO: Extract from request context
+                ip_address: context.ip_address.clone(),
+                user_agent: context.user_agent.clone(),
                 success: true,
                 error_message: None,
                 created_at: Utc::now(),
@@ -337,9 +342,16 @@ impl OAuthService {
         })
     }
 
-    pub async fn refresh_token(&self, request: RefreshRequest) -> Result<TokenResponse, AppError> {
+    pub async fn refresh_token(
+        &self,
+        request: RefreshRequest,
+        context: RequestContext,
+    ) -> Result<TokenResponse, AppError> {
         // Perform token refresh and log the result
-        match self.refresh_token_internal(request.clone()).await {
+        match self
+            .refresh_token_internal(request.clone(), context.clone())
+            .await
+        {
             Ok(response) => Ok(response),
             Err(e) => {
                 // Log refresh token failure if database is available
@@ -348,9 +360,9 @@ impl OAuthService {
                         id: 0, // Will be set by database
                         user_id: None,
                         event_type: "token_refresh_failed".to_string(),
-                        provider: None,   // Provider unknown at this point
-                        ip_address: None, // TODO: Extract from request context
-                        user_agent: None, // TODO: Extract from request context
+                        provider: None, // Provider unknown at this point
+                        ip_address: context.ip_address.clone(),
+                        user_agent: context.user_agent.clone(),
                         success: false,
                         error_message: Some(e.to_string()),
                         created_at: Utc::now(),
@@ -373,6 +385,7 @@ impl OAuthService {
     async fn refresh_token_internal(
         &self,
         request: RefreshRequest,
+        context: RequestContext,
     ) -> Result<TokenResponse, AppError> {
         // Use database storage
         let (token_data, new_refresh_token) = {
@@ -433,8 +446,8 @@ impl OAuthService {
                 user_id: None, // Would need user lookup by composite ID
                 event_type: "token_refresh".to_string(),
                 provider: Some(token_data.provider.clone()),
-                ip_address: None, // TODO: Extract from request context
-                user_agent: None, // TODO: Extract from request context
+                ip_address: context.ip_address,
+                user_agent: context.user_agent,
                 success: true,
                 error_message: None,
                 created_at: Utc::now(),

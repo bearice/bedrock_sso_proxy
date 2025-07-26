@@ -17,7 +17,7 @@ use std::sync::Arc;
 static X_API_KEY: HeaderName = HeaderName::from_static("x-api-key");
 
 /// Unified authentication middleware that handles both JWT and API key authentication
-/// Returns a cached UserRecord for both authentication methods
+/// Returns a UserRecord for both authentication methods
 pub async fn auth_middleware(
     State(server): State<Server>,
     mut request: Request,
@@ -77,7 +77,7 @@ pub async fn auth_middleware(
     Ok(next.run(request).await)
 }
 
-/// Authenticate with JWT token and return cached UserRecord
+/// Authenticate with JWT token and return UserRecord
 async fn authenticate_with_jwt(
     token: &str,
     database: &Arc<DatabaseManager>,
@@ -87,11 +87,11 @@ async fn authenticate_with_jwt(
     let claims = jwt_service.validate_oauth_token(token)?;
     let user_id = claims.sub;
 
-    // Get cached or lookup UserRecord
-    get_cached_user_record(user_id, database).await
+    // lookup UserRecord
+    get_user_record(user_id, database).await
 }
 
-/// Authenticate with API key and return cached UserRecord
+/// Authenticate with API key and return UserRecord
 async fn authenticate_with_api_key(
     api_key: &str,
     database: &Arc<DatabaseManager>,
@@ -118,55 +118,19 @@ async fn authenticate_with_api_key(
         ));
     }
 
-    // // Update API key last used timestamp asynchronously
-    // let database_clone = database.clone();
-    // let key_hash_clone = key_hash.clone();
-    // tokio::spawn(async move {
-    //     let _ = database_clone.api_keys().update_last_used(&key_hash_clone).await;
-    // });
-
-    // Get cached or lookup UserRecord
-    get_cached_user_record(stored_key.user_id, database).await
+    get_user_record(stored_key.user_id, database).await
 }
 
-/// Get UserRecord with caching support
-async fn get_cached_user_record(
+async fn get_user_record(
     user_id: i32,
     database: &Arc<DatabaseManager>,
 ) -> Result<UserRecord, AppError> {
-    // let cache_key = format!("user:id:{}", user_id);
-
-    // Try cache first
-    // match cache.get::<UserRecord>(&cache_key).await {
-    //     Ok(Some(user)) => {
-    //         tracing::debug!("User {} found in cache", user_id);
-    //         return Ok(user);
-    //     },
-    //     Ok(None) => {
-    //         tracing::debug!("User {} not in cache, checking database", user_id);
-    //     },
-    //     Err(e) => {
-    //         tracing::warn!("Cache error for user {}: {}", user_id, e);
-    //     }
-    // }
-
-    // Cache miss - fetch from database
     let user = database
         .users()
         .find_by_id(user_id)
         .await
         .map_err(|e| AppError::Internal(format!("Database error: {}", e)))?
         .ok_or_else(|| AppError::Unauthorized("User not found".to_string()))?;
-
-    // Store in cache (fire-and-forget to avoid blocking request)
-    // let cache_clone = cache.clone();
-    // let cache_key_clone = cache_key.clone();
-    // let user_clone = user.clone();
-    // tokio::spawn(async move {
-    //     if let Err(e) = cache_clone.set(&cache_key_clone, &user_clone, Some(std::time::Duration::from_secs(900))).await {
-    //         tracing::warn!("Failed to cache user {}: {}", user_id, e);
-    //     }
-    // });
 
     Ok(user)
 }
@@ -229,7 +193,7 @@ pub async fn jwt_auth_middleware(
     let claims = server.jwt_service.validate_oauth_token(token)?;
 
     // Get UserRecord for the user
-    let user = get_cached_user_record(claims.sub, &server.database).await?;
+    let user = get_user_record(claims.sub, &server.database).await?;
 
     // Add both claims and UserRecord to request extensions for downstream handlers
     request.extensions_mut().insert(claims.clone());

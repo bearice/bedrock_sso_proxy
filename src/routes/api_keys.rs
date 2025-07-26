@@ -13,7 +13,6 @@ use axum::{
     routing::{delete, get, post},
 };
 use chrono::{Duration, Utc};
-use std::sync::Arc;
 
 /// Create API key management routes (requires JWT authentication)
 pub fn create_api_key_routes() -> Router<Server> {
@@ -48,7 +47,8 @@ pub async fn create_api_key(
         .map(|days| Utc::now() + Duration::days(days as i64));
 
     // Check user's existing API key count
-    let existing_keys = server.database
+    let existing_keys = server
+        .database
         .api_keys()
         .find_by_user(user.id)
         .await
@@ -67,7 +67,8 @@ pub async fn create_api_key(
     let (api_key, raw_key) = ApiKey::new(user.id, request.name.trim().to_string(), expires_at);
 
     // Store in database
-    let key_id = server.database
+    let key_id = server
+        .database
         .api_keys()
         .store(&api_key)
         .await
@@ -88,7 +89,8 @@ pub async fn list_api_keys(
     State(server): State<Server>,
     UserExtractor(user): UserExtractor,
 ) -> Result<Json<Vec<ApiKeyInfo>>, AppError> {
-    let api_keys = server.database
+    let api_keys = server
+        .database
         .api_keys()
         .find_by_user(user.id)
         .await
@@ -106,7 +108,8 @@ pub async fn revoke_api_key(
     Path(key_id): Path<i32>,
 ) -> Result<Json<serde_json::Value>, AppError> {
     // Verify the API key belongs to the user
-    let api_keys = server.database
+    let api_keys = server
+        .database
         .api_keys()
         .find_by_user(user.id)
         .await
@@ -118,7 +121,8 @@ pub async fn revoke_api_key(
     }
 
     // Revoke the API key
-    server.database
+    server
+        .database
         .api_keys()
         .revoke(key_id)
         .await
@@ -138,7 +142,9 @@ mod tests {
         cache::CacheManager,
         config::Config,
         database::{DatabaseManager, entities::UserRecord},
+        server::Server,
     };
+    use std::sync::Arc;
     use axum::{
         body::Body,
         http::{Request, StatusCode},
