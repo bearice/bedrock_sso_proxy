@@ -2,6 +2,7 @@ pub mod anthropic;
 pub mod auth;
 pub mod config;
 pub mod cost_tracking;
+pub mod entities;
 pub mod error;
 pub mod health;
 pub mod metrics;

@@ -197,7 +197,7 @@ mod tests {
                 Config::default(),
                 jwt_service.clone(),
                 storage.clone(),
-            )),
+            ).unwrap()),
             health_service: Arc::new(crate::health::HealthService::new()),
             storage: storage.clone(),
         };
@@ -252,7 +252,7 @@ mod tests {
                 Config::default(),
                 jwt_service.clone(),
                 storage.clone(),
-            )),
+            ).unwrap()),
             health_service: Arc::new(crate::health::HealthService::new()),
             storage: storage.clone(),
         };
@@ -297,7 +297,7 @@ mod tests {
                 Config::default(),
                 jwt_service.clone(),
                 storage.clone(),
-            )),
+            ).unwrap()),
             health_service: Arc::new(crate::health::HealthService::new()),
             storage: storage.clone(),
         };

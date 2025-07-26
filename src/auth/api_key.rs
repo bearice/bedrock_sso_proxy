@@ -1,6 +1,6 @@
 use crate::error::AppError;
 use chrono::{DateTime, Utc};
-use rand::{distributions::Alphanumeric, Rng};
+use rand::{distr::Alphanumeric, Rng};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
@@ -22,7 +22,7 @@ impl ApiKey {
     pub fn new(user_id: i32, name: String, expires_at: Option<DateTime<Utc>>) -> (Self, String) {
         let raw_key = generate_api_key("SSOK_", 32);
         let key_hash = hash_api_key(&raw_key);
-        
+
         let api_key = Self {
             id: None,
             key_hash,
@@ -33,7 +33,7 @@ impl ApiKey {
             expires_at,
             revoked_at: None,
         };
-        
+
         (api_key, raw_key)
     }
 
@@ -108,12 +108,12 @@ impl From<ApiKey> for ApiKeyInfo {
 
 /// Generate a new API key with the given prefix and length
 pub fn generate_api_key(prefix: &str, length: usize) -> String {
-    let random_part: String = rand::thread_rng()
+    let random_part: String = rand::rng()
         .sample_iter(&Alphanumeric)
         .take(length)
         .map(char::from)
         .collect();
-    
+
     format!("{}{}", prefix, random_part)
 }
 
@@ -158,7 +158,7 @@ mod tests {
         let key = generate_api_key("SSOK_", 32);
         assert!(key.starts_with("SSOK_"));
         assert_eq!(key.len(), 37); // "SSOK_" + 32 chars
-        
+
         // Generate another key to ensure uniqueness
         let key2 = generate_api_key("SSOK_", 32);
         assert_ne!(key, key2);
@@ -169,11 +169,11 @@ mod tests {
         let key = "SSOK_test12345";
         let hash1 = hash_api_key(key);
         let hash2 = hash_api_key(key);
-        
+
         // Same input should produce same hash
         assert_eq!(hash1, hash2);
         assert_eq!(hash1.len(), 64); // SHA-256 hex string
-        
+
         // Different input should produce different hash
         let hash3 = hash_api_key("SSOK_different");
         assert_ne!(hash1, hash3);
@@ -184,13 +184,13 @@ mod tests {
         // Valid keys
         assert!(validate_api_key_format("SSOK_abcdef1234567890", "SSOK_").is_ok());
         assert!(validate_api_key_format("SSOK_ABC123DEF456789A", "SSOK_").is_ok());  // Fixed to be 16 chars
-        
+
         // Invalid prefix
         assert!(validate_api_key_format("INVALID_abcdef1234567890", "SSOK_").is_err());
-        
+
         // Too short
         assert!(validate_api_key_format("SSOK_short", "SSOK_").is_err());
-        
+
         // Invalid characters
         assert!(validate_api_key_format("SSOK_invalid-chars!", "SSOK_").is_err());
     }
@@ -198,19 +198,19 @@ mod tests {
     #[test]
     fn test_api_key_validity() {
         let (mut api_key, _) = ApiKey::new(1, "test".to_string(), None);
-        
+
         // Should be valid initially
         assert!(api_key.is_valid());
-        
+
         // Should be invalid after revoking
         api_key.revoke();
         assert!(!api_key.is_valid());
-        
+
         // Create expired key
         let past_date = Utc::now() - chrono::Duration::hours(1);
         let (expired_key, _) = ApiKey::new(1, "expired".to_string(), Some(past_date));
         assert!(!expired_key.is_valid());
-        
+
         // Create future expiry key
         let future_date = Utc::now() + chrono::Duration::hours(1);
         let (future_key, _) = ApiKey::new(1, "future".to_string(), Some(future_date));
@@ -221,7 +221,7 @@ mod tests {
     fn test_api_key_info_conversion() {
         let (api_key, _) = ApiKey::new(1, "test".to_string(), None);
         let info: ApiKeyInfo = api_key.into();
-        
+
         assert_eq!(info.name, "test");
         assert!(info.revoked_at.is_none());
     }

@@ -7,8 +7,7 @@ use crate::{
 };
 use chrono::{Duration as ChronoDuration, Utc};
 use oauth2::{
-    AuthUrl, AuthorizationCode, ClientId, ClientSecret, CsrfToken, RedirectUrl, Scope,
-    TokenResponse as OAuth2TokenResponse, TokenUrl, basic::BasicClient, reqwest::async_http_client,
+    basic::BasicClient, AuthUrl, AuthorizationCode, ClientId, ClientSecret, CsrfToken, EndpointNotSet, EndpointSet, RedirectUrl, Scope, TokenResponse as OAuth2TokenResponse, TokenUrl
 };
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
@@ -19,6 +18,9 @@ use uuid::Uuid;
 
 /// Default OAuth state token TTL (10 minutes)
 const OAUTH_STATE_TTL_SECONDS: i64 = 600;
+
+// Avoid oauth2 type madness
+pub type Oauth2Client = BasicClient<EndpointSet, EndpointNotSet, EndpointNotSet, EndpointNotSet, EndpointSet>;
 
 #[derive(Debug, Serialize)]
 pub struct AuthorizeResponse {
@@ -66,16 +68,20 @@ pub struct OAuthService {
     jwt_service: JwtService,
     http_client: Client,
     storage: Arc<Storage>,
+    oauth_clients: HashMap<String, Arc<Oauth2Client>>,
 }
 
 impl OAuthService {
-    pub fn new(config: Config, jwt_service: JwtService, storage: Arc<Storage>) -> Self {
-        Self {
+    pub fn new(config: Config, jwt_service: JwtService, storage: Arc<Storage>) -> Result<Self, AppError> {
+        let oauth_clients = Self::initialize_oauth_clients(&config)?;
+        
+        Ok(Self {
             config,
             jwt_service,
             http_client: Client::new(),
             storage,
-        }
+            oauth_clients,
+        })
     }
 
     /// Get user by database ID
@@ -101,7 +107,7 @@ impl OAuthService {
         // Use the configured redirect URI if available, otherwise use the provided one
         let actual_redirect_uri = provider.redirect_uri.as_deref().unwrap_or(redirect_uri);
 
-        let client = self.create_oauth_client(&provider)?;
+        let client = self.get_oauth_client(provider_name)?;
 
         // Create CSRF state token - store the actual redirect URI being used
         let state = self
@@ -195,12 +201,19 @@ impl OAuthService {
                 AppError::BadRequest(format!("Unknown OAuth provider: {}", request.provider))
             })?;
 
-        let client = self.create_oauth_client(&provider)?;
+        let client = self.get_oauth_client(&request.provider)?;
+        let http_client = reqwest::ClientBuilder::new()
+            // Following redirects opens the client up to SSRF vulnerabilities.
+            .redirect(reqwest::redirect::Policy::none())
+            .build()
+            .map_err(|e| {
+                AppError::Internal(format!("reqwest build error: {}", e))
+            })?;
 
         // Exchange authorization code for access token
         let token_result = client
             .exchange_code(AuthorizationCode::new(request.authorization_code))
-            .request_async(async_http_client)
+            .request_async(&http_client)
             .await
             .map_err(|e| AppError::BadRequest(format!("Token exchange failed: {}", e)))?;
 
@@ -526,7 +539,29 @@ impl OAuthService {
             .map(|state_data| state_data.redirect_uri)
     }
 
-    fn create_oauth_client(&self, provider: &OAuthProvider) -> Result<BasicClient, AppError> {
+    fn get_oauth_client(&self, provider_name: &str) -> Result<Arc<Oauth2Client>, AppError> {
+        self.oauth_clients
+            .get(provider_name)
+            .cloned()
+            .ok_or_else(|| {
+                AppError::BadRequest(format!("Unknown OAuth provider: {}", provider_name))
+            })
+    }
+
+    fn initialize_oauth_clients(config: &Config) -> Result<HashMap<String, Arc<Oauth2Client>>, AppError> {
+        let mut clients = HashMap::new();
+        
+        for provider_name in config.list_oauth_providers() {
+            if let Some(provider) = config.get_oauth_provider(&provider_name) {
+                let client = Arc::new(Self::create_oauth_client_static(&provider)?);
+                clients.insert(provider_name, client);
+            }
+        }
+        
+        Ok(clients)
+    }
+
+    fn create_oauth_client_static(provider: &OAuthProvider) -> Result<Oauth2Client, AppError> {
         let auth_url = AuthUrl::new(
             provider
                 .authorization_url
@@ -554,12 +589,10 @@ impl OAuthService {
             .transpose()
             .map_err(|e| AppError::BadRequest(format!("Invalid redirect URI: {}", e)))?;
 
-        let mut client = BasicClient::new(
-            ClientId::new(provider.client_id.clone()),
-            Some(ClientSecret::new(provider.client_secret.clone())),
-            auth_url,
-            Some(token_url),
-        );
+        let mut client = BasicClient::new(ClientId::new(provider.client_id.clone()))
+            .set_client_secret(ClientSecret::new(provider.client_secret.clone()))
+            .set_auth_uri(auth_url)
+            .set_token_uri(token_url);
 
         if let Some(redirect_url) = redirect_url {
             client = client.set_redirect_uri(redirect_url);
@@ -818,7 +851,7 @@ mod tests {
         let storage = create_test_storage().await;
         let jwt_service = JwtService::new("test-secret".to_string(), Algorithm::HS256).unwrap();
 
-        let oauth_service = OAuthService::new(config, jwt_service, storage);
+        let oauth_service = OAuthService::new(config, jwt_service, storage).unwrap();
 
         // Test that service was created successfully
         let providers = oauth_service.list_providers();
@@ -832,7 +865,7 @@ mod tests {
         let config = create_test_config();
         let storage = create_test_storage().await;
         let jwt_service = JwtService::new("test-secret".to_string(), Algorithm::HS256).unwrap();
-        let oauth_service = OAuthService::new(config, jwt_service, storage);
+        let oauth_service = OAuthService::new(config, jwt_service, storage).unwrap();
 
         let result = oauth_service
             .get_authorization_url("google", "http://localhost:3000/callback")
@@ -854,7 +887,7 @@ mod tests {
         let config = create_test_config();
         let storage = create_test_storage().await;
         let jwt_service = JwtService::new("test-secret".to_string(), Algorithm::HS256).unwrap();
-        let oauth_service = OAuthService::new(config, jwt_service, storage);
+        let oauth_service = OAuthService::new(config, jwt_service, storage).unwrap();
 
         let result = oauth_service
             .get_authorization_url("unknown", "http://localhost:3000/callback")
@@ -867,7 +900,7 @@ mod tests {
         let config = create_test_config();
         let storage = create_test_storage().await;
         let jwt_service = JwtService::new("test-secret".to_string(), Algorithm::HS256).unwrap();
-        let oauth_service = OAuthService::new(config, jwt_service, storage);
+        let oauth_service = OAuthService::new(config, jwt_service, storage).unwrap();
 
         let providers = oauth_service.list_providers();
         assert_eq!(providers.providers.len(), 1);
@@ -883,7 +916,7 @@ mod tests {
         let config = create_test_config();
         let storage = create_test_storage().await;
         let jwt_service = JwtService::new("test-secret".to_string(), Algorithm::HS256).unwrap();
-        let oauth_service = OAuthService::new(config, jwt_service, storage);
+        let oauth_service = OAuthService::new(config, jwt_service, storage).unwrap();
 
         assert_eq!(oauth_service.get_display_name("google"), "Google");
         assert_eq!(oauth_service.get_display_name("github"), "GitHub");

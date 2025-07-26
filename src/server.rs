@@ -81,7 +81,7 @@ impl Server {
             (*config).clone(),
             jwt_service.as_ref().clone(),
             storage.clone(),
-        ));
+        )?);
 
         // Initialize health service
         let health_service = Arc::new(HealthService::new());

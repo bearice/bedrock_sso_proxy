@@ -1,10 +1,12 @@
 use super::{
     CacheStorage, DatabaseStorage, Storage, StorageResult,
     blackhole::BlackholeStorage,
-    database::{DatabaseConfig, PostgresStorage, SqliteStorage},
+    database::DatabaseConfig,
     memory::MemoryCacheStorage,
     redis::{RedisCacheStorage, RedisConfig},
+    sea_orm_storage::SeaOrmStorage,
 };
+use sea_orm::Database;
 use crate::config::Config;
 
 /// Storage backend types
@@ -89,7 +91,7 @@ impl StorageFactory {
         }
     }
 
-    /// Create database storage backend
+    /// Create database storage backend using SeaORM
     async fn create_database_storage(
         config: &StorageFactoryConfig,
     ) -> StorageResult<Box<dyn DatabaseStorage>> {
@@ -99,12 +101,13 @@ impl StorageFactory {
                 let database = BlackholeStorage::new();
                 Ok(Box::new(database))
             }
-            DatabaseBackend::Sqlite => {
-                let database = SqliteStorage::new(&config.database_config.url).await?;
-                Ok(Box::new(database))
-            }
-            DatabaseBackend::Postgres => {
-                let database = PostgresStorage::new(&config.database_config.url).await?;
+            DatabaseBackend::Sqlite | DatabaseBackend::Postgres => {
+                // Use SeaORM for both SQLite and PostgreSQL
+                let db = Database::connect(&config.database_config.url)
+                    .await
+                    .map_err(|e| super::StorageError::Connection(e.to_string()))?;
+                
+                let database = SeaOrmStorage::new(db);
                 Ok(Box::new(database))
             }
         }

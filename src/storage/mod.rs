@@ -18,6 +18,7 @@ pub mod postgres;
 pub mod query_builder;
 pub mod redis;
 pub mod sqlite;
+pub mod sea_orm_storage;
 
 pub use factory::StorageFactory;
 

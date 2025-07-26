@@ -371,7 +371,7 @@ mod tests {
         ));
         storage.migrate().await.unwrap();
         let jwt_service = JwtService::new("test-secret".to_string(), Algorithm::HS256).unwrap();
-        Arc::new(OAuthService::new(config, jwt_service, storage))
+        Arc::new(OAuthService::new(config, jwt_service, storage).unwrap())
     }
 
     #[tokio::test]
