@@ -369,6 +369,9 @@ mod tests {
                 validation_ttl: 3600,
                 max_entries: 1000,
                 cleanup_interval: 300,
+                backend: "memory".to_string(),
+                redis_url: "redis://localhost:6379".to_string(),
+                redis_key_prefix: "test:".to_string(),
             },
             ..Default::default()
         };

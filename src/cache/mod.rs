@@ -17,6 +17,8 @@ pub use types::{CachedValidation, StateData};
 pub enum CacheError {
     #[error("Cache error: {0}")]
     Cache(String),
+    #[error("Connection error: {0}")]
+    Connection(String),
     #[error("Key not found")]
     NotFound,
     #[error("Serialization error: {0}")]
@@ -76,6 +78,19 @@ impl CacheManager {
     pub fn new_redis(redis_cache: redis::RedisCache) -> Self {
         Self {
             backend: CacheBackend::Redis(redis_cache),
+        }
+    }
+    
+    /// Create cache manager from configuration
+    pub async fn new_from_config(config: &crate::config::Config) -> CacheResult<Self> {
+        match config.cache.backend.as_str() {
+            "redis" => {
+                let redis_cache = redis::RedisCache::new(&config.cache.redis_url, config.cache.redis_key_prefix.clone())?;
+                Ok(Self::new_redis(redis_cache))
+            }
+            "memory" | _ => {
+                Ok(Self::new_memory())
+            }
         }
     }
 

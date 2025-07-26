@@ -23,6 +23,10 @@ jwt:
   # For asymmetric algorithms (RS*, PS*, ES*, EdDSA), provide the public key in PEM format or JWK format as the secret
   # JWK example: {"kty":"RSA","alg":"RS256","n":"...","e":"AQAB"}
   algorithm: "HS256"
+  
+  # Token TTL settings
+  access_token_ttl: 3600   # 1 hour
+  refresh_token_ttl: 86400 # 24 hours
 
 # AWS configuration
 aws:
@@ -37,23 +41,149 @@ aws:
   # Optional: AWS profile name (alternative to access keys)
   # profile: "bedrock-proxy"
 
+# Cache configuration
+cache:
+  # Cache backend: "memory" or "redis"
+  # Memory cache: Suitable for single-instance deployments, no external dependencies
+  # Redis cache: Suitable for production/distributed deployments, persistent across restarts
+  backend: "memory"
+  
+  # Redis configuration (only used when backend is "redis")
+  redis_url: "redis://localhost:6379"
+  redis_key_prefix: "bedrock_sso:"
+  
+  # Cache settings
+  validation_ttl: 3600      # JWT validation cache TTL (seconds)
+  max_entries: 10000        # Max cache entries (memory cache only)
+  cleanup_interval: 3600    # Cache cleanup interval (seconds)
+
+# OAuth configuration
+oauth:
+  providers:
+    google:
+      enabled: true
+      client_id: "your-google-client-id"
+      client_secret: "your-google-client-secret"
+      scopes: ["openid", "email", "profile"]
+    github:
+      enabled: false
+      client_id: "your-github-client-id"
+      client_secret: "your-github-client-secret"
+      scopes: ["user:email", "read:user"]
+    microsoft:
+      enabled: false
+      client_id: "your-microsoft-client-id"
+      client_secret: "your-microsoft-client-secret"
+      tenant_id: "your-tenant-id"
+      scopes: ["openid", "email", "profile"]
+
+# Frontend configuration
+frontend:
+  # Optional: serve from filesystem instead of embedded assets
+  # serve_path: "/path/to/frontend/files"
+  # base_url: "http://localhost:3000"
+
+# Admin configuration
+admin:
+  emails:
+    - "admin@example.com"
+    # - "another-admin@example.com"
+
+# Storage configuration
+storage:
+  # Database configuration
+  database:
+    enabled: true
+    url: "sqlite://./data/bedrock_sso.db"
+    # For PostgreSQL:
+    # url: "postgresql://user:password@localhost:5432/bedrock_sso"
+    max_connections: 10
+    migration_on_startup: true
+  
+  # Redis storage (separate from cache)
+  redis:
+    enabled: false
+    url: "redis://localhost:6379"
+    key_prefix: "bedrock_sso:"
+    command_timeout_seconds: 5
+    max_connections: 10
+
+# API Keys configuration
+api_keys:
+  enabled: true
+  prefix: "SSOK_"
+  key_length: 32
+  default_expiry_days: null  # null = no expiry, or number of days
+  max_keys_per_user: 10
+
 # Logging configuration
 logging:
   # Log level: trace, debug, info, warn, error
   level: "info"
-  # Enable request/response logging (logs each API request and its response)
-  log_request: true
+
+# Metrics configuration
+metrics:
+  enabled: true
+  endpoint: "/metrics"
+
+# Usage tracking configuration
+usage_tracking:
+  enabled: true
+  
+# Model mapping configuration
+model_mapping:
+  # Custom model mappings (optional)
+  # custom_mappings:
+  #   "custom-model": "anthropic.claude-3-sonnet-20240229-v1:0"
 
 # Environment Variable Overrides:
 # You can override any configuration value using environment variables
 # with the BEDROCK_ prefix and double underscores for nesting:
 #
+# Server:
 # BEDROCK_SERVER__HOST=127.0.0.1
 # BEDROCK_SERVER__PORT=8080
+#
+# JWT:
 # BEDROCK_JWT__SECRET=your-secret-here
 # BEDROCK_JWT__ALGORITHM=RS256
+# BEDROCK_JWT__ACCESS_TOKEN_TTL=3600
+# BEDROCK_JWT__REFRESH_TOKEN_TTL=86400
+#
+# AWS:
 # BEDROCK_AWS__REGION=us-west-2
 # BEDROCK_AWS__ACCESS_KEY_ID=your-access-key
 # BEDROCK_AWS__SECRET_ACCESS_KEY=your-secret-key
 # BEDROCK_AWS__PROFILE=your-profile
+#
+# Cache:
+# BEDROCK_CACHE__BACKEND=redis
+# BEDROCK_CACHE__REDIS_URL=redis://localhost:6379
+# BEDROCK_CACHE__REDIS_KEY_PREFIX=bedrock_sso:
+# BEDROCK_CACHE__VALIDATION_TTL=3600
+# BEDROCK_CACHE__MAX_ENTRIES=10000
+# BEDROCK_CACHE__CLEANUP_INTERVAL=3600
+#
+# OAuth:
+# BEDROCK_OAUTH__PROVIDERS__GOOGLE__ENABLED=true
+# BEDROCK_OAUTH__PROVIDERS__GOOGLE__CLIENT_ID=your-client-id
+# BEDROCK_OAUTH__PROVIDERS__GOOGLE__CLIENT_SECRET=your-client-secret
+#
+# Admin:
+# BEDROCK_ADMIN__EMAILS="admin@example.com,another@example.com"
+#
+# Storage:
+# BEDROCK_STORAGE__DATABASE__URL=postgresql://user:pass@localhost:5432/db
+# BEDROCK_STORAGE__DATABASE__MAX_CONNECTIONS=10
+# BEDROCK_STORAGE__REDIS__ENABLED=false
+#
+# API Keys:
+# BEDROCK_API_KEYS__ENABLED=true
+# BEDROCK_API_KEYS__MAX_KEYS_PER_USER=10
+#
+# Logging:
 # BEDROCK_LOGGING__LEVEL=debug
+#
+# Metrics:
+# BEDROCK_METRICS__ENABLED=true
+# BEDROCK_METRICS__ENDPOINT=/metrics

@@ -194,6 +194,13 @@ aws:
   secret_access_key: "optional"
 logging:
   level: "info"
+cache:
+  backend: "memory"  # or "redis"
+  redis_url: "redis://localhost:6379"
+  redis_key_prefix: "bedrock_sso:"
+  validation_ttl: 3600
+  max_entries: 10000
+  cleanup_interval: 3600
 ```
 
 ### Environment Variables
@@ -201,6 +208,38 @@ Use `BEDROCK_` prefix with double underscores for nesting:
 - `BEDROCK_SERVER__PORT=3000`
 - `BEDROCK_JWT__SECRET=secret`
 - `BEDROCK_AWS__REGION=us-east-1`
+- `BEDROCK_CACHE__BACKEND=redis`
+- `BEDROCK_CACHE__REDIS_URL=redis://localhost:6379`
+- `BEDROCK_CACHE__REDIS_KEY_PREFIX=bedrock_sso:`
+
+### Cache Configuration
+
+The proxy supports both in-memory and Redis caching:
+
+**Memory Cache (Default):**
+- Suitable for single-instance deployments
+- No external dependencies
+- Data lost on restart
+
+**Redis Cache:**
+- Suitable for production/distributed deployments
+- Persistent across restarts
+- Scalable for multiple instances
+
+```yaml
+cache:
+  backend: "redis"                    # "memory" or "redis"
+  redis_url: "redis://localhost:6379" # Redis connection URL
+  redis_key_prefix: "bedrock_sso:"    # Key prefix to avoid conflicts
+  validation_ttl: 3600               # JWT validation cache TTL (seconds)
+  max_entries: 10000                 # Max cache entries (memory only)
+  cleanup_interval: 3600             # Cache cleanup interval (seconds)
+```
+
+**Cache Usage:**
+- OAuth state tokens (temporary, ~10 minutes)
+- JWT validation results (configurable TTL)
+- API key lookups (until revoked)
 
 ## Development Best Practices
 

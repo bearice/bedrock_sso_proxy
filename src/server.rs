@@ -82,7 +82,7 @@ impl Server {
         // Initialize cache
         let cache = Arc::new(if config.storage.redis.enabled {
             CacheManager::new_redis(
-                crate::cache::redis::RedisCache::new(&config.storage.redis.url)
+                crate::cache::redis::RedisCache::new(&config.storage.redis.url, config.storage.redis.key_prefix.clone())
                     .map_err(AppError::Cache)?,
             )
         } else {

@@ -142,7 +142,6 @@ mod tests {
         cache::CacheManager,
         config::Config,
         database::{DatabaseManager, entities::UserRecord},
-        server::Server,
     };
     use std::sync::Arc;
     use axum::{

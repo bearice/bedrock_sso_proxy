@@ -135,6 +135,12 @@ pub struct CacheConfig {
     pub max_entries: usize,
     #[serde(default = "default_cleanup_interval")]
     pub cleanup_interval: u64,
+    #[serde(default = "default_cache_backend")]
+    pub backend: String,
+    #[serde(default = "default_redis_url")]
+    pub redis_url: String,
+    #[serde(default = "default_redis_key_prefix")]
+    pub redis_key_prefix: String,
 }
 
 fn default_user_id_field() -> String {
@@ -157,12 +163,27 @@ fn default_cleanup_interval() -> u64 {
     3600 // 1 hour
 }
 
+fn default_cache_backend() -> String {
+    "memory".to_string()
+}
+
+fn default_redis_url() -> String {
+    "redis://localhost:6379".to_string()
+}
+
+fn default_redis_key_prefix() -> String {
+    "bedrock_sso:".to_string()
+}
+
 impl Default for CacheConfig {
     fn default() -> Self {
         Self {
             validation_ttl: default_validation_ttl(),
             max_entries: default_max_entries(),
             cleanup_interval: default_cleanup_interval(),
+            backend: default_cache_backend(),
+            redis_url: default_redis_url(),
+            redis_key_prefix: default_redis_key_prefix(),
         }
     }
 }
@@ -214,14 +235,6 @@ pub struct DatabaseStorageConfig {
     pub max_connections: u32,
     #[serde(default = "default_database_migration_on_startup")]
     pub migration_on_startup: bool,
-}
-
-fn default_redis_url() -> String {
-    "redis://localhost:6379".to_string()
-}
-
-fn default_redis_key_prefix() -> String {
-    "bedrock_sso:".to_string()
 }
 
 fn default_redis_command_timeout() -> u64 {
