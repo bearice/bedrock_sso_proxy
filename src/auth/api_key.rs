@@ -66,14 +66,14 @@ impl ApiKey {
 }
 
 /// Request to create a new API key
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct CreateApiKeyRequest {
     pub name: String,
     pub expires_in_days: Option<u32>,
 }
 
 /// Response containing the new API key
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct CreateApiKeyResponse {
     pub id: i32,
     pub name: String,
@@ -83,7 +83,7 @@ pub struct CreateApiKeyResponse {
 }
 
 /// API key info without the actual key
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct ApiKeyInfo {
     pub id: i32,
     pub name: String,

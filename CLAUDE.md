@@ -35,9 +35,41 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 The proxy now supports both AWS Bedrock and standard Anthropic API formats for maximum compatibility.
 
+### Authentication
+
+The proxy supports **dual authentication** methods:
+
+1. **JWT Authentication**: OAuth-based web authentication for browser access
+2. **API Key Authentication**: Programmatic access for applications and scripts
+
+### API Key Management
+
+**Create API Key** (requires JWT authentication):
+```bash
+curl -X POST "http://localhost:3000/api/keys" \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "My App Key",
+    "expires_in_days": 90
+  }'
+```
+
+**List API Keys**:
+```bash
+curl "http://localhost:3000/api/keys" \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN"
+```
+
+**Revoke API Key**:
+```bash
+curl -X DELETE "http://localhost:3000/api/keys/{key_id}" \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN"
+```
+
 ### API Usage Examples
 
-**Bedrock Format:**
+**Bedrock Format (JWT Auth):**
 ```bash
 curl -X POST "http://localhost:3000/bedrock/model/anthropic.claude-sonnet-4-20250514-v1:0/invoke" \
   -H "Authorization: Bearer YOUR_JWT_TOKEN" \
@@ -49,10 +81,22 @@ curl -X POST "http://localhost:3000/bedrock/model/anthropic.claude-sonnet-4-2025
   }'
 ```
 
-**Anthropic Format:**
+**Bedrock Format (API Key Auth):**
+```bash
+curl -X POST "http://localhost:3000/bedrock/model/anthropic.claude-sonnet-4-20250514-v1:0/invoke" \
+  -H "Authorization: Bearer SSOK_your_api_key_here" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "anthropic_version": "bedrock-2023-05-31",
+    "max_tokens": 1000,
+    "messages": [{"role": "user", "content": "Hello!"}]
+  }'
+```
+
+**Anthropic Format (API Key with X-API-Key header):**
 ```bash
 curl -X POST "http://localhost:3000/anthropic/v1/messages" \
-  -H "Authorization: Bearer YOUR_JWT_TOKEN" \
+  -H "X-API-Key: SSOK_your_api_key_here" \
   -H "Content-Type: application/json" \
   -d '{
     "model": "claude-sonnet-4-20250514",
@@ -61,10 +105,10 @@ curl -X POST "http://localhost:3000/anthropic/v1/messages" \
   }'
 ```
 
-**Anthropic Format (Streaming):**
+**Anthropic Format (Streaming with API Key):**
 ```bash
 curl -X POST "http://localhost:3000/anthropic/v1/messages" \
-  -H "Authorization: Bearer YOUR_JWT_TOKEN" \
+  -H "Authorization: Bearer SSOK_your_api_key_here" \
   -H "Content-Type: application/json" \
   -d '{
     "model": "claude-sonnet-4-20250514",

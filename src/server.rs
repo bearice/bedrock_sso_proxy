@@ -10,7 +10,7 @@ use crate::{
     metrics,
     model_service::ModelService,
     routes::{
-        create_anthropic_routes, create_auth_routes, create_bedrock_routes, create_frontend_router,
+        create_anthropic_routes, create_api_key_routes, create_auth_routes, create_bedrock_routes, create_frontend_router,
         create_health_routes, create_protected_auth_routes,
     },
     shutdown::{HttpServerShutdown, ShutdownCoordinator, ShutdownManager, StorageShutdown},
@@ -190,6 +190,16 @@ impl Server {
             .nest(
                 "/api",
                 create_user_usage_routes()
+                    .with_state(self.storage.clone())
+                    .layer(middleware::from_fn_with_state(
+                        self.clone(),
+                        jwt_auth_middleware,
+                    )),
+            )
+            // Protected API key management routes (JWT auth required)
+            .nest(
+                "/api/keys",
+                create_api_key_routes()
                     .with_state(self.storage.clone())
                     .layer(middleware::from_fn_with_state(
                         self.clone(),
