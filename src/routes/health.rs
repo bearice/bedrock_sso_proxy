@@ -42,12 +42,7 @@ async fn health_check(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{
-        config::Config,
-        health::HealthService,
-        model_service::ModelService,
-        storage::{Storage, database::SqliteStorage},
-    };
+    use crate::{Server, config::Config, health::HealthService, model_service::ModelService};
     use axum::{
         body::Body,
         http::{Request, StatusCode},
@@ -58,13 +53,18 @@ mod tests {
         let health_service = Arc::new(HealthService::new());
 
         // Create ModelService for testing and register its AWS health checker
-        let config = Config::default();
-        let storage = Arc::new(Storage::new(
-            Box::new(crate::storage::memory::MemoryCacheStorage::new(3600)),
-            Box::new(SqliteStorage::new("sqlite::memory:").await.unwrap()),
-        ));
-        storage.migrate().await.unwrap();
-        let model_service = ModelService::new(storage, config);
+        let mut config = Config::default();
+        config.metrics.enabled = false; // Disable metrics for tests
+        config.storage.redis.enabled = false;
+        config.storage.database.enabled = true;
+        config.storage.database.url = "sqlite::memory:".to_string();
+
+        let server = Server::new(config.clone()).await.unwrap();
+
+        // Run migrations to create tables
+        server.database.migrate().await.unwrap();
+
+        let model_service = ModelService::new(server.database, config);
 
         health_service
             .register(model_service.aws_client().health_checker())

@@ -5,8 +5,8 @@ use axum::{
 use bedrock_sso_proxy::{
     auth::{api_key::CreateApiKeyRequest, jwt::JwtService},
     config::Config,
+    database::entities::UserRecord,
     server::Server,
-    storage::UserRecord,
 };
 use chrono::Utc;
 use tower::ServiceExt;
@@ -15,7 +15,7 @@ async fn create_test_server() -> Server {
     let mut config = Config::default();
     config.storage.redis.enabled = false;
     config.storage.database.enabled = true;
-    config.storage.database.url = ":memory:".to_string();
+    config.storage.database.url = "sqlite::memory:".to_string();
     config.metrics.enabled = false;
     config.api_keys.enabled = true;
 
@@ -24,7 +24,7 @@ async fn create_test_server() -> Server {
 
 async fn create_test_user(server: &Server, email: &str) -> i32 {
     let user = UserRecord {
-        id: None,
+        id: 0,
         provider_user_id: "test_user_123".to_string(),
         provider: "test".to_string(),
         email: email.to_string(),
@@ -33,7 +33,7 @@ async fn create_test_user(server: &Server, email: &str) -> i32 {
         updated_at: Utc::now(),
         last_login: Some(Utc::now()),
     };
-    server.storage.database.upsert_user(&user).await.unwrap()
+    server.database.users().upsert(&user).await.unwrap()
 }
 
 fn create_test_jwt(jwt_service: &JwtService, user_id: i32) -> String {
@@ -158,7 +158,7 @@ async fn test_api_key_disabled() {
     let mut config = Config::default();
     config.storage.redis.enabled = false;
     config.storage.database.enabled = true;
-    config.storage.database.url = ":memory:".to_string();
+    config.storage.database.url = "sqlite::memory:".to_string();
     config.metrics.enabled = false;
     config.api_keys.enabled = false; // Disable API keys
 

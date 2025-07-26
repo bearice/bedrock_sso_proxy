@@ -149,29 +149,28 @@ impl ShutdownManager {
     }
 }
 
-/// Storage component that implements graceful shutdown
-/// This is a placeholder for storage cleanup
-pub struct StorageShutdown {
+/// Database component that implements graceful shutdown
+pub struct DatabaseShutdown {
     name: String,
 }
 
-impl StorageShutdown {
-    pub fn new<T>(_storage: Arc<T>) -> Self {
+impl DatabaseShutdown {
+    pub fn new<T>(_database: Arc<T>) -> Self {
         Self {
-            name: "Storage".to_string(),
+            name: "Database".to_string(),
         }
     }
 }
 
 #[async_trait::async_trait]
-impl GracefulShutdown for StorageShutdown {
+impl GracefulShutdown for DatabaseShutdown {
     fn name(&self) -> &str {
         &self.name
     }
 
     async fn shutdown(&self) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-        info!("Shutting down storage connections...");
-        // Storage cleanup would go here
+        info!("Shutting down database connections...");
+        // Database cleanup would go here
         // For now, just a brief delay to simulate cleanup
         tokio::time::sleep(Duration::from_millis(100)).await;
         Ok(())

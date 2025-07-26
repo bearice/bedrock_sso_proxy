@@ -33,3 +33,4 @@ frontend/.eslintcache
 .DS_Store
 Thumbs.db
 data/*
+.claude/cclsp.json

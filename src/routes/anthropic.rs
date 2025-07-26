@@ -334,30 +334,33 @@ async fn handle_streaming_message(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{
-        auth::middleware::jwt_auth_middleware,
-        config::Config,
-    };
+    use crate::{auth::middleware::jwt_auth_middleware, config::Config};
     use axum::{
         body::Body,
         http::{Request, StatusCode},
         middleware,
     };
-    
+
     use tower::ServiceExt;
 
     async fn create_test_server() -> crate::server::Server {
         let mut config = Config::default();
         config.storage.redis.enabled = false;
         config.storage.database.enabled = true;
-        config.storage.database.url = ":memory:".to_string(); // Use in-memory database
+        config.storage.database.url = "sqlite::memory:".to_string(); // Use in-memory database
         config.metrics.enabled = false;
-        crate::server::Server::new(config).await.unwrap()
+
+        let server = crate::server::Server::new(config).await.unwrap();
+
+        // Run migrations to create tables
+        server.database.migrate().await.unwrap();
+
+        server
     }
 
     async fn create_test_user(server: &crate::server::Server, user_id: i32, email: &str) -> i32 {
-        let user = crate::storage::UserRecord {
-            id: None, // Let database assign ID
+        let user = crate::database::entities::UserRecord {
+            id: 0, // Let database assign ID
             provider_user_id: format!("test_user_{}", user_id),
             provider: "test".to_string(),
             email: email.to_string(),
@@ -366,7 +369,7 @@ mod tests {
             updated_at: chrono::Utc::now(),
             last_login: Some(chrono::Utc::now()),
         };
-        server.storage.database.upsert_user(&user).await.unwrap()
+        server.database.users().upsert(&user).await.unwrap()
     }
 
     fn create_test_anthropic_request_json() -> String {
@@ -402,9 +405,12 @@ mod tests {
     #[tokio::test]
     async fn test_create_message_basic() {
         let server = create_test_server().await;
-        let app = create_anthropic_routes().with_state(server.model_service.clone()).layer(
-            middleware::from_fn_with_state(server.clone(), jwt_auth_middleware),
-        );
+        let app = create_anthropic_routes()
+            .with_state(server.model_service.clone())
+            .layer(middleware::from_fn_with_state(
+                server.clone(),
+                jwt_auth_middleware,
+            ));
 
         let request = Request::builder()
             .uri("/v1/messages")
@@ -422,9 +428,12 @@ mod tests {
     #[tokio::test]
     async fn test_create_message_streaming() {
         let server = create_test_server().await;
-        let app = create_anthropic_routes().with_state(server.model_service.clone()).layer(
-            middleware::from_fn_with_state(server.clone(), jwt_auth_middleware),
-        );
+        let app = create_anthropic_routes()
+            .with_state(server.model_service.clone())
+            .layer(middleware::from_fn_with_state(
+                server.clone(),
+                jwt_auth_middleware,
+            ));
 
         let request = Request::builder()
             .uri("/v1/messages")
@@ -442,9 +451,12 @@ mod tests {
     #[tokio::test]
     async fn test_create_message_invalid_json() {
         let server = create_test_server().await;
-        let app = create_anthropic_routes().with_state(server.model_service.clone()).layer(
-            middleware::from_fn_with_state(server.clone(), jwt_auth_middleware),
-        );
+        let app = create_anthropic_routes()
+            .with_state(server.model_service.clone())
+            .layer(middleware::from_fn_with_state(
+                server.clone(),
+                jwt_auth_middleware,
+            ));
 
         // Create a valid JWT token for the test
         fn create_oauth_token(jwt_service: &crate::auth::jwt::JwtService, user_id: i32) -> String {
@@ -472,9 +484,12 @@ mod tests {
     #[tokio::test]
     async fn test_create_message_missing_required_fields() {
         let server = create_test_server().await;
-        let app = create_anthropic_routes().with_state(server.model_service.clone()).layer(
-            middleware::from_fn_with_state(server.clone(), jwt_auth_middleware),
-        );
+        let app = create_anthropic_routes()
+            .with_state(server.model_service.clone())
+            .layer(middleware::from_fn_with_state(
+                server.clone(),
+                jwt_auth_middleware,
+            ));
 
         let incomplete_request = serde_json::to_string(&serde_json::json!({
             "model": "claude-sonnet-4-20250514",
@@ -497,9 +512,12 @@ mod tests {
     #[tokio::test]
     async fn test_create_message_unsupported_model() {
         let server = create_test_server().await;
-        let app = create_anthropic_routes().with_state(server.model_service.clone()).layer(
-            middleware::from_fn_with_state(server.clone(), jwt_auth_middleware),
-        );
+        let app = create_anthropic_routes()
+            .with_state(server.model_service.clone())
+            .layer(middleware::from_fn_with_state(
+                server.clone(),
+                jwt_auth_middleware,
+            ));
 
         let request_with_unsupported_model = serde_json::to_string(&serde_json::json!({
             "model": "unsupported-model",
@@ -528,9 +546,12 @@ mod tests {
     #[tokio::test]
     async fn test_create_message_with_system_prompt() {
         let server = create_test_server().await;
-        let app = create_anthropic_routes().with_state(server.model_service.clone()).layer(
-            middleware::from_fn_with_state(server.clone(), jwt_auth_middleware),
-        );
+        let app = create_anthropic_routes()
+            .with_state(server.model_service.clone())
+            .layer(middleware::from_fn_with_state(
+                server.clone(),
+                jwt_auth_middleware,
+            ));
 
         let request_with_system = serde_json::to_string(&serde_json::json!({
             "model": "claude-sonnet-4-20250514",
@@ -561,9 +582,12 @@ mod tests {
     #[tokio::test]
     async fn test_create_message_with_all_parameters() {
         let server = create_test_server().await;
-        let app = create_anthropic_routes().with_state(server.model_service.clone()).layer(
-            middleware::from_fn_with_state(server.clone(), jwt_auth_middleware),
-        );
+        let app = create_anthropic_routes()
+            .with_state(server.model_service.clone())
+            .layer(middleware::from_fn_with_state(
+                server.clone(),
+                jwt_auth_middleware,
+            ));
 
         let full_request = serde_json::to_string(&serde_json::json!({
             "model": "claude-sonnet-4-20250514",
@@ -598,9 +622,12 @@ mod tests {
     #[tokio::test]
     async fn test_create_message_with_model_alias() {
         let server = create_test_server().await;
-        let app = create_anthropic_routes().with_state(server.model_service.clone()).layer(
-            middleware::from_fn_with_state(server.clone(), jwt_auth_middleware),
-        );
+        let app = create_anthropic_routes()
+            .with_state(server.model_service.clone())
+            .layer(middleware::from_fn_with_state(
+                server.clone(),
+                jwt_auth_middleware,
+            ));
 
         let request_with_alias = serde_json::to_string(&serde_json::json!({
             "model": "claude-3-sonnet", // Using alias instead of full name
@@ -630,9 +657,12 @@ mod tests {
     #[tokio::test]
     async fn test_create_message_large_request() {
         let server = create_test_server().await;
-        let app = create_anthropic_routes().with_state(server.model_service.clone()).layer(
-            middleware::from_fn_with_state(server.clone(), jwt_auth_middleware),
-        );
+        let app = create_anthropic_routes()
+            .with_state(server.model_service.clone())
+            .layer(middleware::from_fn_with_state(
+                server.clone(),
+                jwt_auth_middleware,
+            ));
 
         // Create a large content string
         let large_content = "A".repeat(5000);

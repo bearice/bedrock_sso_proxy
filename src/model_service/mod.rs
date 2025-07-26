@@ -1,10 +1,7 @@
 pub mod aws_http;
 
 use crate::{
-    config::Config,
-    cost_tracking::CostTrackingService,
-    error::AppError,
-    storage::{Storage, UsageRecord},
+    config::Config, cost_tracking::CostTrackingService, database::DatabaseManager, error::AppError,
 };
 use async_trait::async_trait;
 use aws_http::{AwsHttpClient, AwsResponse};
@@ -74,7 +71,7 @@ use std::{sync::Arc, time::Instant};
 /// Unified model service for AWS calls and usage tracking
 pub struct ModelService {
     aws_client: Box<dyn AwsClientTrait>,
-    storage: Arc<Storage>,
+    database: Arc<DatabaseManager>,
     config: Config,
 }
 
@@ -107,11 +104,11 @@ pub struct UsageMetadata {
 }
 
 impl ModelService {
-    pub fn new(storage: Arc<Storage>, config: Config) -> Self {
+    pub fn new(database: Arc<DatabaseManager>, config: Config) -> Self {
         let aws_client = AwsHttpClient::new(config.aws.clone());
         Self {
             aws_client: Box::new(aws_client),
-            storage,
+            database,
             config,
         }
     }
@@ -127,17 +124,12 @@ impl ModelService {
         tracing::info!("Initializing model costs from fallback data");
 
         let cost_service =
-            CostTrackingService::new(self.storage.clone(), self.config.aws.region.clone());
+            CostTrackingService::new(self.database.clone(), self.config.aws.region.clone());
 
         // Check if we already have cost data
-        let existing_costs = self
-            .storage
-            .database
-            .get_all_model_costs()
-            .await
-            .map_err(|e| {
-                AppError::Internal(format!("Failed to check existing model costs: {}", e))
-            })?;
+        let existing_costs = self.database.model_costs().get_all().await.map_err(|e| {
+            AppError::Internal(format!("Failed to check existing model costs: {}", e))
+        })?;
 
         if existing_costs.is_empty() {
             tracing::info!("No existing model costs found, populating with embedded fallback data");
@@ -272,8 +264,8 @@ impl ModelService {
             .await
             .map(|d| d.to_string().parse::<f64>().unwrap_or(0.0));
 
-        let usage_record = UsageRecord {
-            id: None,
+        let usage_record = crate::database::entities::usage_records::Model {
+            id: 0, // Will be set by database
             user_id,
             model_id: request.model_id.clone(),
             endpoint_type: request.endpoint_type.clone(),
@@ -289,9 +281,9 @@ impl ModelService {
         };
 
         // Store usage record
-        self.storage
-            .database
-            .store_usage_record(&usage_record)
+        self.database
+            .usage()
+            .store_record(&usage_record)
             .await
             .map_err(|e| AppError::Internal(format!("Failed to store usage record: {}", e)))?;
 
@@ -346,7 +338,7 @@ impl ModelService {
         input_tokens: u32,
         output_tokens: u32,
     ) -> Option<Decimal> {
-        match self.storage.database.get_model_cost(model_id).await {
+        match self.database.model_costs().find_by_model(model_id).await {
             Ok(Some(cost_data)) => {
                 let input_cost = Decimal::from(input_tokens) * cost_data.input_cost_per_1k_tokens
                     / Decimal::from(1000);
@@ -372,8 +364,8 @@ impl ModelService {
     }
 
     /// Get the storage layer for direct access if needed
-    pub fn storage(&self) -> &Arc<Storage> {
-        &self.storage
+    pub fn database(&self) -> &Arc<DatabaseManager> {
+        &self.database
     }
 }
 
@@ -381,8 +373,9 @@ impl ModelService {
 mod tests {
     use super::*;
     use crate::{
+        Server,
         config::{AwsConfig, Config},
-        storage::{Storage, database::SqliteStorage},
+        database::{UsageQuery, entities::*},
     };
 
     fn create_test_config() -> Config {
@@ -398,21 +391,26 @@ mod tests {
         }
     }
 
-    async fn create_test_storage() -> Arc<Storage> {
-        let sqlite_storage = SqliteStorage::new(":memory:").await.unwrap();
-        sqlite_storage.migrate().await.unwrap();
-        Arc::new(Storage::new(
-            Box::new(crate::storage::memory::MemoryCacheStorage::new(3600)),
-            Box::new(sqlite_storage),
-        ))
+    async fn create_test_server() -> (Server, Config) {
+        let mut config = create_test_config();
+        config.storage.redis.enabled = false;
+        config.storage.database.enabled = true;
+        config.storage.database.url = "sqlite::memory:".to_string();
+        config.metrics.enabled = false;
+
+        let server = Server::new(config.clone()).await.unwrap();
+
+        // Run migrations to create tables
+        server.database.migrate().await.unwrap();
+
+        (server, config)
     }
 
     #[tokio::test]
     async fn test_model_service_creation() {
-        let config = create_test_config();
-        let storage = create_test_storage().await;
-
-        let model_service = ModelService::new(storage, config);
+        let (server, config) = create_test_server().await;
+        let database = server.database.clone();
+        let model_service = ModelService::new(database.clone(), config);
 
         // Verify service was created successfully
         assert_eq!(model_service.config.aws.region, "us-east-1");
@@ -420,9 +418,9 @@ mod tests {
 
     #[tokio::test]
     async fn test_extract_usage_metadata() {
-        let config = create_test_config();
-        let storage = create_test_storage().await;
-        let model_service = ModelService::new(storage, config);
+        let (server, config) = create_test_server().await;
+        let database = server.database.clone();
+        let model_service = ModelService::new(database.clone(), config);
 
         let mut headers = HeaderMap::new();
         headers.insert("x-amzn-bedrock-input-token-count", "100".parse().unwrap());
@@ -438,23 +436,19 @@ mod tests {
 
     #[tokio::test]
     async fn test_calculate_cost() {
-        let config = create_test_config();
-        let storage = create_test_storage().await;
-        let model_service = ModelService::new(storage.clone(), config);
+        let (server, config) = create_test_server().await;
+        let database = server.database;
+        let model_service = ModelService::new(database.clone(), config);
 
         // Add a model cost to storage
-        let model_cost = crate::storage::StoredModelCost {
-            id: None,
+        let model_cost = StoredModelCost {
+            id: 0,
             model_id: "test-model".to_string(),
             input_cost_per_1k_tokens: Decimal::new(3, 3), // 0.003 exactly
             output_cost_per_1k_tokens: Decimal::new(15, 3), // 0.015 exactly
             updated_at: Utc::now(),
         };
-        storage
-            .database
-            .upsert_model_cost(&model_cost)
-            .await
-            .unwrap();
+        database.model_costs().upsert(&model_cost).await.unwrap();
 
         // Calculate cost for 100 input tokens, 50 output tokens
         let cost = model_service.calculate_cost("test-model", 100, 50).await;
@@ -476,13 +470,13 @@ mod tests {
 
     #[tokio::test]
     async fn test_track_usage() {
-        let config = create_test_config();
-        let storage = create_test_storage().await;
-        let model_service = ModelService::new(storage.clone(), config);
+        let (server, config) = create_test_server().await;
+        let database = server.database.clone();
+        let model_service = ModelService::new(database.clone(), config);
 
         // Create a test user first
-        let user_record = crate::storage::UserRecord {
-            id: None,
+        let user_record = UserRecord {
+            id: 0,
             provider_user_id: "test-user".to_string(),
             provider: "google".to_string(),
             email: "test@example.com".to_string(),
@@ -491,7 +485,7 @@ mod tests {
             updated_at: Utc::now(),
             last_login: Some(Utc::now()),
         };
-        let user_id = storage.database.upsert_user(&user_record).await.unwrap();
+        let user_id = database.users().upsert(&user_record).await.unwrap();
 
         let request = ModelRequest {
             model_id: "test-model".to_string(),
@@ -515,9 +509,12 @@ mod tests {
             .unwrap();
 
         // Verify usage was recorded
-        let records = storage
-            .database
-            .get_user_usage_records(user_id, 10, 0, None, None, None)
+        let records = database
+            .usage()
+            .get_records(&UsageQuery {
+                user_id: Some(user_id),
+                ..Default::default()
+            })
             .await
             .unwrap();
         assert_eq!(records.len(), 1);

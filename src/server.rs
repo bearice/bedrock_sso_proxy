@@ -1,24 +1,29 @@
 use crate::{
     auth::{
-        jwt::{parse_algorithm, JwtService},
+        jwt::{JwtService, parse_algorithm},
         middleware::{admin_middleware, auth_middleware, jwt_auth_middleware},
         oauth::OAuthService,
     },
+    cache::CacheManager,
     config::Config,
+    database::{DatabaseManager, entities::UserRecord},
     error::AppError,
     health::HealthService,
     metrics,
     model_service::ModelService,
     routes::{
-        create_anthropic_routes, create_api_key_routes, create_auth_routes, create_bedrock_routes, create_frontend_router,
-        create_health_routes, create_protected_auth_routes,
+        create_anthropic_routes, create_api_key_routes, create_auth_routes, create_bedrock_routes,
+        create_frontend_router, create_health_routes, create_protected_auth_routes,
     },
-    shutdown::{HttpServerShutdown, ShutdownCoordinator, ShutdownManager, StorageShutdown},
-    storage::{factory::StorageFactory, UserRecord},
+    shutdown::{DatabaseShutdown, HttpServerShutdown, ShutdownCoordinator, ShutdownManager},
     usage_tracking::{create_admin_usage_routes, create_user_usage_routes},
 };
 use axum::{
-    body::Body, extract::{ConnectInfo, DefaultBodyLimit, Request}, middleware::{self, Next}, response::Response, Router
+    Router,
+    body::Body,
+    extract::{ConnectInfo, DefaultBodyLimit, Request},
+    middleware::{self, Next},
+    response::Response,
 };
 use std::{net::SocketAddr, sync::Arc, time::Duration};
 use tokio::net::TcpListener;
@@ -34,7 +39,8 @@ pub struct Server {
     pub model_service: Arc<ModelService>,
     pub oauth_service: Arc<OAuthService>,
     pub health_service: Arc<HealthService>,
-    pub storage: Arc<crate::storage::Storage>,
+    pub database: Arc<DatabaseManager>,
+    pub cache: Arc<CacheManager>,
 }
 
 impl Server {
@@ -66,21 +72,32 @@ impl Server {
         let jwt_algorithm = parse_algorithm(&config.jwt.algorithm)?;
         let jwt_service = Arc::new(JwtService::new(config.jwt.secret.clone(), jwt_algorithm)?);
 
-        // Initialize storage
-        let storage = Arc::new(
-            StorageFactory::create_from_config(&config)
+        // Initialize database
+        let database = Arc::new(
+            DatabaseManager::new_from_config(&config)
                 .await
-                .map_err(AppError::Storage)?,
+                .map_err(AppError::Database)?,
         );
 
+        // Initialize cache
+        let cache = Arc::new(if config.storage.redis.enabled {
+            CacheManager::new_redis(
+                crate::cache::redis::RedisCache::new(&config.storage.redis.url)
+                    .map_err(AppError::Cache)?,
+            )
+        } else {
+            CacheManager::new_memory()
+        });
+
         // Initialize model service
-        let model_service = Arc::new(ModelService::new(storage.clone(), (*config).clone()));
+        let model_service = Arc::new(ModelService::new(database.clone(), (*config).clone()));
 
         // Initialize OAuth service
         let oauth_service = Arc::new(OAuthService::new(
             (*config).clone(),
             jwt_service.as_ref().clone(),
-            storage.clone(),
+            database.clone(),
+            cache.clone(),
         )?);
 
         // Initialize health service
@@ -92,7 +109,8 @@ impl Server {
             model_service,
             oauth_service,
             health_service,
-            storage,
+            database,
+            cache,
         })
     }
 
@@ -109,8 +127,8 @@ impl Server {
             }
         });
 
-        // Register storage for graceful shutdown
-        shutdown_manager.register(StorageShutdown::new(self.storage.clone()));
+        // Register database for graceful shutdown
+        shutdown_manager.register(DatabaseShutdown::new(self.database.clone()));
 
         let app = self.create_app();
 
@@ -189,27 +207,25 @@ impl Server {
             // Protected usage tracking API routes (user routes only)
             .nest(
                 "/api",
-                create_user_usage_routes()
-                    .with_state(self.storage.clone())
-                    .layer(middleware::from_fn_with_state(
-                        self.clone(),
-                        jwt_auth_middleware,
-                    )),
+                create_user_usage_routes().with_state(self.clone()).layer(
+                    middleware::from_fn_with_state(self.clone(), jwt_auth_middleware),
+                ),
             )
             // Protected API key management routes (JWT auth required)
             .nest(
                 "/api/keys",
                 create_api_key_routes()
-                    .with_state(self.storage.clone())
+                    .with_state(self.database.clone())
                     .layer(middleware::from_fn_with_state(
                         self.clone(),
                         jwt_auth_middleware,
                     )),
             )
             // Protected admin usage tracking API routes
-            .nest("/api",
+            .nest(
+                "/api",
                 create_admin_usage_routes()
-                    .with_state(self.storage.clone())
+                    .with_state(self.clone())
                     .layer(middleware::from_fn_with_state(
                         self.clone(),
                         jwt_auth_middleware,
@@ -217,7 +233,7 @@ impl Server {
                     .layer(middleware::from_fn_with_state(
                         self.clone(),
                         admin_middleware,
-                    ))
+                    )),
             )
             // Protected Bedrock API routes - Unified authentication (JWT or API key)
             .nest(
@@ -328,10 +344,15 @@ mod tests {
     async fn create_test_server() -> (Server, Config) {
         let mut config = Config::default();
         config.storage.redis.enabled = false;
-        config.storage.database.enabled = false;
+        config.storage.database.enabled = true;
+        config.storage.database.url = "sqlite::memory:".to_string();
         config.metrics.enabled = false;
 
         let server = Server::new(config.clone()).await.unwrap();
+
+        // Run migrations to create tables
+        server.database.migrate().await.unwrap();
+
         (server, config)
     }
 

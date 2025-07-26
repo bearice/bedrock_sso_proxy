@@ -3,20 +3,20 @@ use crate::{
         api_key::{ApiKey, ApiKeyInfo, CreateApiKeyRequest, CreateApiKeyResponse},
         middleware::UserExtractor,
     },
+    database::DatabaseManager,
     error::AppError,
-    storage::Storage,
 };
 use axum::{
+    Router,
     extract::{Path, State},
     response::Json,
     routing::{delete, get, post},
-    Router,
 };
 use chrono::{Duration, Utc};
 use std::sync::Arc;
 
 /// Create API key management routes (requires JWT authentication)
-pub fn create_api_key_routes() -> Router<Arc<Storage>> {
+pub fn create_api_key_routes() -> Router<Arc<DatabaseManager>> {
     Router::new()
         .route("/", post(create_api_key))
         .route("/", get(list_api_keys))
@@ -25,28 +25,32 @@ pub fn create_api_key_routes() -> Router<Arc<Storage>> {
 
 /// Create a new API key for the authenticated user
 pub async fn create_api_key(
-    State(storage): State<Arc<Storage>>,
+    State(storage): State<Arc<DatabaseManager>>,
     UserExtractor(user): UserExtractor,
     Json(request): Json<CreateApiKeyRequest>,
 ) -> Result<Json<CreateApiKeyResponse>, AppError> {
     // Validate request
     if request.name.trim().is_empty() {
-        return Err(AppError::BadRequest("API key name cannot be empty".to_string()));
+        return Err(AppError::BadRequest(
+            "API key name cannot be empty".to_string(),
+        ));
     }
 
     if request.name.len() > 100 {
-        return Err(AppError::BadRequest("API key name too long (max 100 characters)".to_string()));
+        return Err(AppError::BadRequest(
+            "API key name too long (max 100 characters)".to_string(),
+        ));
     }
 
     // Calculate expiration date if provided
-    let expires_at = request.expires_in_days.map(|days| {
-        Utc::now() + Duration::days(days as i64)
-    });
+    let expires_at = request
+        .expires_in_days
+        .map(|days| Utc::now() + Duration::days(days as i64));
 
     // Check user's existing API key count
     let existing_keys = storage
-        .database
-        .get_api_keys_for_user(user.id.unwrap())
+        .api_keys()
+        .find_by_user(user.id)
         .await
         .map_err(|e| AppError::Internal(format!("Failed to check existing API keys: {}", e)))?;
 
@@ -60,12 +64,12 @@ pub async fn create_api_key(
     }
 
     // Create new API key
-    let (api_key, raw_key) = ApiKey::new(user.id.unwrap(), request.name.trim().to_string(), expires_at);
+    let (api_key, raw_key) = ApiKey::new(user.id, request.name.trim().to_string(), expires_at);
 
     // Store in database
     let key_id = storage
-        .database
-        .store_api_key(&api_key)
+        .api_keys()
+        .store(&api_key)
         .await
         .map_err(|e| AppError::Internal(format!("Failed to store API key: {}", e)))?;
 
@@ -81,12 +85,12 @@ pub async fn create_api_key(
 
 /// List all API keys for the authenticated user
 pub async fn list_api_keys(
-    State(storage): State<Arc<Storage>>,
+    State(storage): State<Arc<DatabaseManager>>,
     UserExtractor(user): UserExtractor,
 ) -> Result<Json<Vec<ApiKeyInfo>>, AppError> {
     let api_keys = storage
-        .database
-        .get_api_keys_for_user(user.id.unwrap())
+        .api_keys()
+        .find_by_user(user.id)
         .await
         .map_err(|e| AppError::Internal(format!("Failed to get API keys: {}", e)))?;
 
@@ -97,26 +101,26 @@ pub async fn list_api_keys(
 
 /// Revoke an API key (mark as revoked)
 pub async fn revoke_api_key(
-    State(storage): State<Arc<Storage>>,
+    State(storage): State<Arc<DatabaseManager>>,
     UserExtractor(user): UserExtractor,
     Path(key_id): Path<i32>,
 ) -> Result<Json<serde_json::Value>, AppError> {
     // Verify the API key belongs to the user
     let api_keys = storage
-        .database
-        .get_api_keys_for_user(user.id.unwrap())
+        .api_keys()
+        .find_by_user(user.id)
         .await
         .map_err(|e| AppError::Internal(format!("Failed to get API keys: {}", e)))?;
 
-    let key_exists = api_keys.iter().any(|key| key.id == Some(key_id));
+    let key_exists = api_keys.iter().any(|key| key.id == key_id);
     if !key_exists {
         return Err(AppError::NotFound("API key not found".to_string()));
     }
 
     // Revoke the API key
     storage
-        .database
-        .revoke_api_key(key_id)
+        .api_keys()
+        .revoke(key_id)
         .await
         .map_err(|e| AppError::Internal(format!("Failed to revoke API key: {}", e)))?;
 
@@ -131,8 +135,9 @@ mod tests {
     use super::*;
     use crate::{
         auth::{jwt::JwtService, middleware::jwt_auth_middleware},
+        cache::CacheManager,
         config::Config,
-        storage::{Storage, UserRecord},
+        database::{DatabaseManager, entities::UserRecord},
     };
     use axum::{
         body::Body,
@@ -144,22 +149,24 @@ mod tests {
     use serde_json;
     use tower::ServiceExt;
 
-    async fn create_test_storage() -> Arc<Storage> {
-        let storage = Arc::new(Storage::new(
-            Box::new(crate::storage::memory::MemoryCacheStorage::new(3600)),
-            Box::new(
-                crate::storage::database::SqliteStorage::new("sqlite::memory:")
-                    .await
-                    .unwrap(),
-            ),
-        ));
-        storage.migrate().await.unwrap();
-        storage
+    async fn create_test_components() -> (Arc<DatabaseManager>, Arc<CacheManager>) {
+        let mut config = Config::default();
+        config.storage.redis.enabled = false;
+        config.storage.database.enabled = true;
+        config.storage.database.url = "sqlite::memory:".to_string();
+
+        let database = Arc::new(DatabaseManager::new_from_config(&config).await.unwrap());
+        let cache = Arc::new(CacheManager::new_memory());
+
+        // Run migrations to create tables
+        database.migrate().await.unwrap();
+
+        (database, cache)
     }
 
-    async fn create_test_user(storage: &Arc<Storage>) -> i32 {
+    async fn create_test_user(database: &Arc<DatabaseManager>) -> i32 {
         let user = UserRecord {
-            id: None,
+            id: 0,
             provider_user_id: "test_user_123".to_string(),
             provider: "test".to_string(),
             email: "test@example.com".to_string(),
@@ -168,7 +175,7 @@ mod tests {
             updated_at: Utc::now(),
             last_login: Some(Utc::now()),
         };
-        storage.database.upsert_user(&user).await.unwrap()
+        database.users().upsert(&user).await.unwrap()
     }
 
     fn create_test_jwt(jwt_service: &JwtService, user_id: i32) -> String {
@@ -176,34 +183,42 @@ mod tests {
         jwt_service.create_oauth_token(&claims).unwrap()
     }
 
-    async fn create_test_server() -> (Arc<Storage>, JwtService) {
-        let storage = create_test_storage().await;
+    async fn create_test_server() -> (Arc<DatabaseManager>, Arc<CacheManager>, JwtService) {
+        let (database, cache) = create_test_components().await;
         let jwt_service = JwtService::new("test-secret".to_string(), Algorithm::HS256).unwrap();
-        (storage, jwt_service)
+        (database, cache, jwt_service)
     }
 
     #[tokio::test]
     async fn test_create_api_key() {
-        let (storage, jwt_service) = create_test_server().await;
-        let user_id = create_test_user(&storage).await;
+        let (database, cache, jwt_service) = create_test_server().await;
+        let user_id = create_test_user(&database).await;
 
         // Create server state for middleware
         let config = Config::default();
         let server = crate::server::Server {
             config: Arc::new(config),
             jwt_service: Arc::new(jwt_service.clone()),
-            model_service: Arc::new(crate::model_service::ModelService::new(storage.clone(), Config::default())),
-            oauth_service: Arc::new(crate::auth::oauth::OAuthService::new(
+            model_service: Arc::new(crate::model_service::ModelService::new(
+                database.clone(),
                 Config::default(),
-                jwt_service.clone(),
-                storage.clone(),
-            ).unwrap()),
+            )),
+            oauth_service: Arc::new(
+                crate::auth::oauth::OAuthService::new(
+                    Config::default(),
+                    jwt_service.clone(),
+                    database.clone(),
+                    cache.clone(),
+                )
+                .unwrap(),
+            ),
             health_service: Arc::new(crate::health::HealthService::new()),
-            storage: storage.clone(),
+            database: database.clone(),
+            cache: cache.clone(),
         };
 
         let app = create_api_key_routes()
-            .with_state(storage.clone())
+            .with_state(database.clone())
             .layer(middleware::from_fn_with_state(server, jwt_auth_middleware));
 
         let token = create_test_jwt(&jwt_service, user_id);
@@ -235,30 +250,38 @@ mod tests {
 
     #[tokio::test]
     async fn test_list_api_keys() {
-        let (storage, jwt_service) = create_test_server().await;
-        let user_id = create_test_user(&storage).await;
+        let (database, cache, jwt_service) = create_test_server().await;
+        let user_id = create_test_user(&database).await;
 
         // Create a test API key first
         let (api_key, _) = ApiKey::new(user_id, "Test Key".to_string(), None);
-        storage.database.store_api_key(&api_key).await.unwrap();
+        database.api_keys().store(&api_key).await.unwrap();
 
         // Create server state for middleware
         let config = Config::default();
         let server = crate::server::Server {
             config: Arc::new(config),
             jwt_service: Arc::new(jwt_service.clone()),
-            model_service: Arc::new(crate::model_service::ModelService::new(storage.clone(), Config::default())),
-            oauth_service: Arc::new(crate::auth::oauth::OAuthService::new(
+            model_service: Arc::new(crate::model_service::ModelService::new(
+                database.clone(),
                 Config::default(),
-                jwt_service.clone(),
-                storage.clone(),
-            ).unwrap()),
+            )),
+            oauth_service: Arc::new(
+                crate::auth::oauth::OAuthService::new(
+                    Config::default(),
+                    jwt_service.clone(),
+                    database.clone(),
+                    cache.clone(),
+                )
+                .unwrap(),
+            ),
             health_service: Arc::new(crate::health::HealthService::new()),
-            storage: storage.clone(),
+            database: database.clone(),
+            cache: cache.clone(),
         };
 
         let app = create_api_key_routes()
-            .with_state(storage.clone())
+            .with_state(database.clone())
             .layer(middleware::from_fn_with_state(server, jwt_auth_middleware));
 
         let token = create_test_jwt(&jwt_service, user_id);
@@ -284,26 +307,34 @@ mod tests {
 
     #[tokio::test]
     async fn test_create_api_key_invalid_name() {
-        let (storage, jwt_service) = create_test_server().await;
-        let user_id = create_test_user(&storage).await;
+        let (database, cache, jwt_service) = create_test_server().await;
+        let user_id = create_test_user(&database).await;
 
         // Create server state for middleware
         let config = Config::default();
         let server = crate::server::Server {
             config: Arc::new(config),
             jwt_service: Arc::new(jwt_service.clone()),
-            model_service: Arc::new(crate::model_service::ModelService::new(storage.clone(), Config::default())),
-            oauth_service: Arc::new(crate::auth::oauth::OAuthService::new(
+            model_service: Arc::new(crate::model_service::ModelService::new(
+                database.clone(),
                 Config::default(),
-                jwt_service.clone(),
-                storage.clone(),
-            ).unwrap()),
+            )),
+            oauth_service: Arc::new(
+                crate::auth::oauth::OAuthService::new(
+                    Config::default(),
+                    jwt_service.clone(),
+                    database.clone(),
+                    cache.clone(),
+                )
+                .unwrap(),
+            ),
             health_service: Arc::new(crate::health::HealthService::new()),
-            storage: storage.clone(),
+            database: database.clone(),
+            cache: cache.clone(),
         };
 
         let app = create_api_key_routes()
-            .with_state(storage.clone())
+            .with_state(database.clone())
             .layer(middleware::from_fn_with_state(server, jwt_auth_middleware));
 
         let token = create_test_jwt(&jwt_service, user_id);

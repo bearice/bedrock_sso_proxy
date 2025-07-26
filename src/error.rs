@@ -1,4 +1,5 @@
-use crate::storage::StorageError;
+use crate::cache::CacheError;
+use crate::database::DatabaseError;
 use axum::{
     Json,
     http::StatusCode,
@@ -51,8 +52,11 @@ pub enum AppError {
     #[error("AWS signing params error: {0}")]
     AwsSigningParams(#[from] aws_sigv4::sign::v4::signing_params::BuildError),
 
-    #[error("Storage error: {0}")]
-    Storage(#[from] StorageError),
+    #[error("Database error: {0}")]
+    Database(#[from] DatabaseError),
+
+    #[error("Cache error: {0}")]
+    Cache(#[from] CacheError),
 
     #[error("Not found: {0}")]
     NotFound(String),

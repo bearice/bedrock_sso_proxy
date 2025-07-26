@@ -1,13 +1,15 @@
 use crate::{
     auth::{OAuthClaims, jwt::JwtService},
+    cache::{CacheManager, StateData},
     config::{Config, OAuthProvider},
+    database::{DatabaseManager, entities::UserRecord},
     error::AppError,
     health::{HealthCheckResult, HealthChecker},
-    storage::{StateData, Storage},
 };
 use chrono::{Duration as ChronoDuration, Utc};
 use oauth2::{
-    basic::BasicClient, AuthUrl, AuthorizationCode, ClientId, ClientSecret, CsrfToken, EndpointNotSet, EndpointSet, RedirectUrl, Scope, TokenResponse as OAuth2TokenResponse, TokenUrl
+    AuthUrl, AuthorizationCode, ClientId, ClientSecret, CsrfToken, EndpointNotSet, EndpointSet,
+    RedirectUrl, Scope, TokenResponse as OAuth2TokenResponse, TokenUrl, basic::BasicClient,
 };
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
@@ -20,7 +22,8 @@ use uuid::Uuid;
 const OAUTH_STATE_TTL_SECONDS: i64 = 600;
 
 // Avoid oauth2 type madness
-pub type Oauth2Client = BasicClient<EndpointSet, EndpointNotSet, EndpointNotSet, EndpointNotSet, EndpointSet>;
+pub type Oauth2Client =
+    BasicClient<EndpointSet, EndpointNotSet, EndpointNotSet, EndpointNotSet, EndpointSet>;
 
 #[derive(Debug, Serialize)]
 pub struct AuthorizeResponse {
@@ -67,19 +70,26 @@ pub struct OAuthService {
     config: Config,
     jwt_service: JwtService,
     http_client: Client,
-    storage: Arc<Storage>,
+    database: Arc<DatabaseManager>,
+    cache: Arc<CacheManager>,
     oauth_clients: HashMap<String, Arc<Oauth2Client>>,
 }
 
 impl OAuthService {
-    pub fn new(config: Config, jwt_service: JwtService, storage: Arc<Storage>) -> Result<Self, AppError> {
+    pub fn new(
+        config: Config,
+        jwt_service: JwtService,
+        database: Arc<DatabaseManager>,
+        cache: Arc<CacheManager>,
+    ) -> Result<Self, AppError> {
         let oauth_clients = Self::initialize_oauth_clients(&config)?;
-        
+
         Ok(Self {
             config,
             jwt_service,
             http_client: Client::new(),
-            storage,
+            database,
+            cache,
             oauth_clients,
         })
     }
@@ -88,8 +98,8 @@ impl OAuthService {
     pub async fn get_user_by_id(
         &self,
         user_id: i32,
-    ) -> Result<Option<crate::storage::UserRecord>, crate::storage::StorageError> {
-        self.storage.database.get_user_by_id(user_id).await
+    ) -> Result<Option<UserRecord>, crate::database::DatabaseError> {
+        self.database.users().find_by_id(user_id).await
     }
 
     pub async fn get_authorization_url(
@@ -134,11 +144,10 @@ impl OAuthService {
         match self.exchange_code_for_token_internal(request.clone()).await {
             Ok(response) => Ok(response),
             Err(e) => {
-                // Log authentication failure if storage is available
-                let storage = &self.storage;
+                // Log authentication failure if database is available
                 {
-                    let audit_entry = crate::storage::AuditLogEntry {
-                        id: None,
+                    let audit_entry = crate::database::entities::audit_logs::Model {
+                        id: 0, // Will be set by database
                         user_id: None,
                         event_type: "oauth_login_failed".to_string(),
                         provider: Some(request.provider.clone()),
@@ -157,12 +166,12 @@ impl OAuthService {
                                 "redirect_uri".to_string(),
                                 serde_json::Value::String(request.redirect_uri.clone()),
                             );
-                            metadata
+                            serde_json::to_string(&metadata).unwrap_or_default()
                         }),
                     };
 
                     // Store audit log (log errors but don't mask the original error)
-                    if let Err(audit_err) = storage.database.store_audit_log(&audit_entry).await {
+                    if let Err(audit_err) = self.database.audit_logs().store(&audit_entry).await {
                         tracing::warn!(
                             "Failed to store OAuth authorization failure audit log: {}",
                             audit_err
@@ -206,9 +215,7 @@ impl OAuthService {
             // Following redirects opens the client up to SSRF vulnerabilities.
             .redirect(reqwest::redirect::Policy::none())
             .build()
-            .map_err(|e| {
-                AppError::Internal(format!("reqwest build error: {}", e))
-            })?;
+            .map_err(|e| AppError::Internal(format!("reqwest build error: {}", e)))?;
 
         // Exchange authorization code for access token
         let token_result = client
@@ -246,11 +253,10 @@ impl OAuthService {
             .map(|s| s.to_string());
 
         // Store user information persistently if storage is available
-        let storage = &self.storage;
         let db_user_id = {
             let now = Utc::now();
-            let user_record = crate::storage::UserRecord {
-                id: None,
+            let user_record = UserRecord {
+                id: 0, // Will be set by database
                 provider_user_id: user_id.to_string(),
                 provider: request.provider.clone(),
                 email: email.to_string(),
@@ -260,22 +266,23 @@ impl OAuthService {
                 last_login: Some(now),
             };
 
-            let db_user_id = storage
+            let db_user_id = self
                 .database
-                .upsert_user(&user_record)
+                .users()
+                .upsert(&user_record)
                 .await
                 .map_err(|e| AppError::Internal(format!("Failed to store user: {}", e)))?;
 
             // Update last login time
-            storage
-                .database
+            self.database
+                .users()
                 .update_last_login(db_user_id)
                 .await
                 .map_err(|e| AppError::Internal(format!("Failed to update last login: {}", e)))?;
 
             // Log successful authentication
-            let audit_entry = crate::storage::AuditLogEntry {
-                id: None,
+            let audit_entry = crate::database::entities::audit_logs::Model {
+                id: 0, // Will be set by database
                 user_id: Some(db_user_id),
                 event_type: "oauth_login".to_string(),
                 provider: Some(request.provider.clone()),
@@ -298,12 +305,12 @@ impl OAuthService {
                         "email".to_string(),
                         serde_json::Value::String(email.to_string()),
                     );
-                    metadata
+                    serde_json::to_string(&metadata).unwrap_or_default()
                 }),
             };
 
             // Store audit log (log errors but don't block authentication)
-            if let Err(audit_err) = storage.database.store_audit_log(&audit_entry).await {
+            if let Err(audit_err) = self.database.audit_logs().store(&audit_entry).await {
                 tracing::warn!(
                     "Failed to store OAuth token exchange success audit log: {}",
                     audit_err
@@ -335,11 +342,10 @@ impl OAuthService {
         match self.refresh_token_internal(request.clone()).await {
             Ok(response) => Ok(response),
             Err(e) => {
-                // Log refresh token failure if storage is available
-                let storage = &self.storage;
+                // Log refresh token failure if database is available
                 {
-                    let audit_entry = crate::storage::AuditLogEntry {
-                        id: None,
+                    let audit_entry = crate::database::entities::audit_logs::Model {
+                        id: 0, // Will be set by database
                         user_id: None,
                         event_type: "token_refresh_failed".to_string(),
                         provider: None,   // Provider unknown at this point
@@ -352,7 +358,7 @@ impl OAuthService {
                     };
 
                     // Store audit log (log errors but don't mask the original error)
-                    if let Err(audit_err) = storage.database.store_audit_log(&audit_entry).await {
+                    if let Err(audit_err) = self.database.audit_logs().store(&audit_entry).await {
                         tracing::warn!(
                             "Failed to store OAuth token validation failure audit log: {}",
                             audit_err
@@ -368,16 +374,16 @@ impl OAuthService {
         &self,
         request: RefreshRequest,
     ) -> Result<TokenResponse, AppError> {
-        // Use database storage if available, otherwise fall back to cache
+        // Use database storage
         let (token_data, new_refresh_token) = {
-            let storage = &self.storage;
             // Hash the token for database lookup
             let token_hash = self.hash_token(&request.refresh_token);
 
             // Get refresh token data from database
-            let token_data = storage
+            let token_data = self
                 .database
-                .get_refresh_token(&token_hash)
+                .refresh_tokens()
+                .find_by_hash(&token_hash)
                 .await
                 .map_err(|e| AppError::Internal(format!("Database error: {}", e)))?
                 .ok_or_else(|| {
@@ -392,16 +398,17 @@ impl OAuthService {
             }
 
             // Revoke old token
-            storage
-                .database
-                .revoke_refresh_token(&token_hash)
+            self.database
+                .refresh_tokens()
+                .revoke(&token_hash)
                 .await
                 .map_err(|e| AppError::Internal(format!("Failed to revoke token: {}", e)))?;
 
             // Create new refresh token
             let new_token = Uuid::new_v4().to_string();
             let new_token_hash = self.hash_token(&new_token);
-            let new_token_data = crate::storage::RefreshTokenData {
+            let new_token_data = crate::database::entities::refresh_tokens::Model {
+                id: 0, // Will be set by database
                 token_hash: new_token_hash,
                 user_id: token_data.user_id.clone(),
                 provider: token_data.provider.clone(),
@@ -414,15 +421,15 @@ impl OAuthService {
             };
 
             // Store new refresh token
-            storage
-                .database
-                .store_refresh_token(&new_token_data)
+            self.database
+                .refresh_tokens()
+                .store(&new_token_data)
                 .await
                 .map_err(|e| AppError::Internal(format!("Failed to store new token: {}", e)))?;
 
             // Log successful token refresh
-            let audit_entry = crate::storage::AuditLogEntry {
-                id: None,
+            let audit_entry = crate::database::entities::audit_logs::Model {
+                id: 0,         // Will be set by database
                 user_id: None, // Would need user lookup by composite ID
                 event_type: "token_refresh".to_string(),
                 provider: Some(token_data.provider.clone()),
@@ -447,12 +454,12 @@ impl OAuthService {
                             new_token_data.rotation_count,
                         )),
                     );
-                    metadata
+                    serde_json::to_string(&metadata).unwrap_or_default()
                 }),
             };
 
             // Store audit log (log errors but don't block token refresh)
-            if let Err(audit_err) = storage.database.store_audit_log(&audit_entry).await {
+            if let Err(audit_err) = self.database.audit_logs().store(&audit_entry).await {
                 tracing::warn!(
                     "Failed to store OAuth token refresh success audit log: {}",
                     audit_err
@@ -487,12 +494,12 @@ impl OAuthService {
             .unwrap_or(&token_data.user_id);
 
         let db_user_id = self
-            .storage
             .database
-            .get_user_by_provider(&token_data.provider, provider_user_id)
+            .users()
+            .find_by_provider(&token_data.provider, provider_user_id)
             .await
             .map_err(|e| AppError::Internal(format!("Failed to lookup user: {}", e)))?
-            .and_then(|user| user.id)
+            .map(|user| user.id)
             .ok_or_else(|| AppError::NotFound("User not found in database".to_string()))?;
 
         // Create new OAuth JWT token
@@ -548,16 +555,18 @@ impl OAuthService {
             })
     }
 
-    fn initialize_oauth_clients(config: &Config) -> Result<HashMap<String, Arc<Oauth2Client>>, AppError> {
+    fn initialize_oauth_clients(
+        config: &Config,
+    ) -> Result<HashMap<String, Arc<Oauth2Client>>, AppError> {
         let mut clients = HashMap::new();
-        
+
         for provider_name in config.list_oauth_providers() {
             if let Some(provider) = config.get_oauth_provider(&provider_name) {
                 let client = Arc::new(Self::create_oauth_client_static(&provider)?);
                 clients.insert(provider_name, client);
             }
         }
-        
+
         Ok(clients)
     }
 
@@ -752,8 +761,7 @@ impl OAuthService {
             expires_at: now + ChronoDuration::seconds(OAUTH_STATE_TTL_SECONDS),
         };
 
-        self.storage
-            .cache
+        self.cache
             .store_state(&state, &state_data, OAUTH_STATE_TTL_SECONDS as u64)
             .await
             .map_err(|e| AppError::Internal(format!("Failed to store state: {}", e)))?;
@@ -762,8 +770,7 @@ impl OAuthService {
     }
 
     async fn get_state_data_internal(&self, state: &str) -> Result<Option<StateData>, AppError> {
-        self.storage
-            .cache
+        self.cache
             .get_state(state)
             .await
             .map_err(|e| AppError::Internal(format!("Failed to get state: {}", e)))
@@ -775,8 +782,7 @@ impl OAuthService {
     ) -> Result<Option<StateData>, AppError> {
         let state_data = self.get_state_data_internal(state).await?;
         if state_data.is_some() {
-            self.storage
-                .cache
+            self.cache
                 .delete_state(state)
                 .await
                 .map_err(|e| AppError::Internal(format!("Failed to delete state: {}", e)))?;
@@ -832,26 +838,25 @@ mod tests {
         }
     }
 
-    async fn create_test_storage() -> Arc<Storage> {
-        let storage = Arc::new(Storage::new(
-            Box::new(crate::storage::memory::MemoryCacheStorage::new(3600)),
-            Box::new(
-                crate::storage::database::SqliteStorage::new("sqlite::memory:")
-                    .await
-                    .unwrap(),
-            ),
-        ));
-        storage.migrate().await.unwrap();
-        storage
+    async fn create_test_components() -> (Arc<DatabaseManager>, Arc<CacheManager>) {
+        let mut config = Config::default();
+        config.storage.redis.enabled = false;
+        config.storage.database.enabled = true;
+        config.storage.database.url = "sqlite::memory:".to_string();
+
+        let database = Arc::new(DatabaseManager::new_from_config(&config).await.unwrap());
+        let cache = Arc::new(CacheManager::new_memory());
+
+        (database, cache)
     }
 
     #[tokio::test]
     async fn test_oauth_service_creation() {
         let config = create_test_config();
-        let storage = create_test_storage().await;
+        let (database, cache) = create_test_components().await;
         let jwt_service = JwtService::new("test-secret".to_string(), Algorithm::HS256).unwrap();
 
-        let oauth_service = OAuthService::new(config, jwt_service, storage).unwrap();
+        let oauth_service = OAuthService::new(config, jwt_service, database, cache).unwrap();
 
         // Test that service was created successfully
         let providers = oauth_service.list_providers();
@@ -863,9 +868,9 @@ mod tests {
     #[tokio::test]
     async fn test_get_authorization_url() {
         let config = create_test_config();
-        let storage = create_test_storage().await;
+        let (database, cache) = create_test_components().await;
         let jwt_service = JwtService::new("test-secret".to_string(), Algorithm::HS256).unwrap();
-        let oauth_service = OAuthService::new(config, jwt_service, storage).unwrap();
+        let oauth_service = OAuthService::new(config, jwt_service, database, cache).unwrap();
 
         let result = oauth_service
             .get_authorization_url("google", "http://localhost:3000/callback")
@@ -885,9 +890,9 @@ mod tests {
     #[tokio::test]
     async fn test_get_authorization_url_unknown_provider() {
         let config = create_test_config();
-        let storage = create_test_storage().await;
+        let (database, cache) = create_test_components().await;
         let jwt_service = JwtService::new("test-secret".to_string(), Algorithm::HS256).unwrap();
-        let oauth_service = OAuthService::new(config, jwt_service, storage).unwrap();
+        let oauth_service = OAuthService::new(config, jwt_service, database, cache).unwrap();
 
         let result = oauth_service
             .get_authorization_url("unknown", "http://localhost:3000/callback")
@@ -898,9 +903,9 @@ mod tests {
     #[tokio::test]
     async fn test_list_providers() {
         let config = create_test_config();
-        let storage = create_test_storage().await;
+        let (database, cache) = create_test_components().await;
         let jwt_service = JwtService::new("test-secret".to_string(), Algorithm::HS256).unwrap();
-        let oauth_service = OAuthService::new(config, jwt_service, storage).unwrap();
+        let oauth_service = OAuthService::new(config, jwt_service, database, cache).unwrap();
 
         let providers = oauth_service.list_providers();
         assert_eq!(providers.providers.len(), 1);
@@ -914,9 +919,9 @@ mod tests {
     #[tokio::test]
     async fn test_display_names() {
         let config = create_test_config();
-        let storage = create_test_storage().await;
+        let (database, cache) = create_test_components().await;
         let jwt_service = JwtService::new("test-secret".to_string(), Algorithm::HS256).unwrap();
-        let oauth_service = OAuthService::new(config, jwt_service, storage).unwrap();
+        let oauth_service = OAuthService::new(config, jwt_service, database, cache).unwrap();
 
         assert_eq!(oauth_service.get_display_name("google"), "Google");
         assert_eq!(oauth_service.get_display_name("github"), "GitHub");

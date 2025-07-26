@@ -3,10 +3,7 @@
 
 #[cfg(test)]
 mod tests {
-    use crate::{
-        auth::jwt::JwtService,
-        storage::{Storage, StoredModelCost, UsageRecord, UserRecord},
-    };
+    use crate::{auth::jwt::JwtService, database::DatabaseManager, database::entities::*};
     use axum::{
         Router,
         body::Body,
@@ -15,21 +12,27 @@ mod tests {
         middleware,
     };
     use chrono::Utc;
-    
+
     use rust_decimal::Decimal;
     use serde_json::Value;
-    
+
     use tower::ServiceExt;
 
     async fn create_test_server() -> crate::server::Server {
         let mut config = crate::config::Config::default();
         config.storage.redis.enabled = false;
         config.storage.database.enabled = true;
-        config.storage.database.url = ":memory:".to_string(); // Use in-memory database
+        config.storage.database.url = "sqlite::memory:".to_string(); // Use in-memory database
         config.metrics.enabled = false;
         // Add admin email for tests
         config.admin.emails = vec!["admin@admin.example.com".to_string()];
-        crate::server::Server::new(config).await.unwrap()
+
+        let server = crate::server::Server::new(config).await.unwrap();
+
+        // Run migrations to create tables
+        server.database.migrate().await.unwrap();
+
+        server
     }
 
     fn create_test_router(server: &crate::server::Server) -> Router {
@@ -37,7 +40,7 @@ mod tests {
         Router::new()
             .merge(
                 crate::usage_tracking::create_user_usage_routes()
-                    .with_state(server.storage.clone())
+                    .with_state(server.clone())
                     .layer(middleware::from_fn_with_state(
                         server.clone(),
                         crate::auth::middleware::jwt_auth_middleware,
@@ -45,7 +48,7 @@ mod tests {
             )
             .merge(
                 crate::usage_tracking::create_admin_usage_routes()
-                    .with_state(server.storage.clone())
+                    .with_state(server.clone())
                     .layer(middleware::from_fn_with_state(
                         server.clone(),
                         crate::auth::middleware::admin_middleware,
@@ -53,7 +56,7 @@ mod tests {
                     .layer(middleware::from_fn_with_state(
                         server.clone(),
                         crate::auth::middleware::jwt_auth_middleware,
-                    ))
+                    )),
             )
     }
 
@@ -68,10 +71,10 @@ mod tests {
         jwt_service.create_oauth_token(&claims).unwrap()
     }
 
-    async fn setup_test_data(storage: &Storage) -> (i32, i32) {
+    async fn setup_test_data(database: &DatabaseManager) -> (i32, i32) {
         // Create test users
         let user1 = UserRecord {
-            id: None,
+            id: 0,
             provider: "google".to_string(),
             provider_user_id: "test-user-1".to_string(),
             email: "user1@example.com".to_string(),
@@ -80,10 +83,10 @@ mod tests {
             updated_at: Utc::now(),
             last_login: Some(Utc::now()),
         };
-        let user1_id = storage.database.upsert_user(&user1).await.unwrap();
+        let user1_id = database.users().upsert(&user1).await.unwrap();
 
         let admin_user = UserRecord {
-            id: None,
+            id: 0,
             provider: "google".to_string(),
             provider_user_id: "admin-user".to_string(),
             email: "admin@admin.example.com".to_string(),
@@ -92,7 +95,7 @@ mod tests {
             updated_at: Utc::now(),
             last_login: Some(Utc::now()),
         };
-        let admin_id = storage.database.upsert_user(&admin_user).await.unwrap();
+        let admin_id = database.users().upsert(&admin_user).await.unwrap();
 
         // Create usage records for user1 with exact decimal costs
         let models = [
@@ -118,7 +121,7 @@ mod tests {
 
         for (i, (model, input, output, cost)) in models.iter().enumerate() {
             let record = UsageRecord {
-                id: None,
+                id: 0,
                 user_id: user1_id,
                 model_id: model.to_string(),
                 endpoint_type: if i % 2 == 0 { "bedrock" } else { "anthropic" }.to_string(),
@@ -132,7 +135,7 @@ mod tests {
                 error_message: None,
                 cost_usd: Some(*cost),
             };
-            storage.database.store_usage_record(&record).await.unwrap();
+            database.usage().store_record(&record).await.unwrap();
         }
 
         // Create model costs with exact decimal values
@@ -152,13 +155,13 @@ mod tests {
 
         for (model_id, input_cost, output_cost) in model_costs {
             let cost = StoredModelCost {
-                id: None,
+                id: 0,
                 model_id: model_id.to_string(),
                 input_cost_per_1k_tokens: input_cost,
                 output_cost_per_1k_tokens: output_cost,
                 updated_at: Utc::now(),
             };
-            storage.database.upsert_model_cost(&cost).await.unwrap();
+            database.model_costs().upsert(&cost).await.unwrap();
         }
 
         (user1_id, admin_id)
@@ -167,7 +170,7 @@ mod tests {
     #[tokio::test]
     async fn test_get_user_usage_records_success() {
         let server = create_test_server().await;
-        let (user_id, _) = setup_test_data(&server.storage).await;
+        let (user_id, _) = setup_test_data(&server.database).await;
 
         let token = create_test_token(&server.jwt_service, "user1@example.com", false, user_id);
         let app = create_test_router(&server);
@@ -197,7 +200,7 @@ mod tests {
     #[tokio::test]
     async fn test_get_user_usage_stats_success() {
         let server = create_test_server().await;
-        let (user_id, _) = setup_test_data(&server.storage).await;
+        let (user_id, _) = setup_test_data(&server.database).await;
 
         let token = create_test_token(&server.jwt_service, "user1@example.com", false, user_id);
         let app = create_test_router(&server);
@@ -236,7 +239,7 @@ mod tests {
     #[tokio::test]
     async fn test_get_user_usage_with_filters() {
         let server = create_test_server().await;
-        let (user_id, _) = setup_test_data(&server.storage).await;
+        let (user_id, _) = setup_test_data(&server.database).await;
 
         let token = create_test_token(&server.jwt_service, "user1@example.com", false, user_id);
         let app = create_test_router(&server);
@@ -268,10 +271,14 @@ mod tests {
     #[tokio::test]
     async fn test_admin_get_system_usage_records() {
         let server = create_test_server().await;
-        let (_user_id, admin_id) = setup_test_data(&server.storage).await;
+        let (_user_id, admin_id) = setup_test_data(&server.database).await;
 
-        let admin_token =
-            create_test_token(&server.jwt_service, "admin@admin.example.com", true, admin_id);
+        let admin_token = create_test_token(
+            &server.jwt_service,
+            "admin@admin.example.com",
+            true,
+            admin_id,
+        );
         let app = create_test_router(&server);
 
         let request = Request::builder()
@@ -296,10 +303,14 @@ mod tests {
     #[tokio::test]
     async fn test_admin_get_top_models() {
         let server = create_test_server().await;
-        let (_user_id, admin_id) = setup_test_data(&server.storage).await;
+        let (_user_id, admin_id) = setup_test_data(&server.database).await;
 
-        let admin_token =
-            create_test_token(&server.jwt_service, "admin@admin.example.com", true, admin_id);
+        let admin_token = create_test_token(
+            &server.jwt_service,
+            "admin@admin.example.com",
+            true,
+            admin_id,
+        );
         let app = create_test_router(&server);
 
         let request = Request::builder()
@@ -331,10 +342,14 @@ mod tests {
     #[tokio::test]
     async fn test_admin_model_cost_management() {
         let server = create_test_server().await;
-        let (_, admin_id) = setup_test_data(&server.storage).await;
+        let (_, admin_id) = setup_test_data(&server.database).await;
 
-        let admin_token =
-            create_test_token(&server.jwt_service, "admin@admin.example.com", true, admin_id);
+        let admin_token = create_test_token(
+            &server.jwt_service,
+            "admin@admin.example.com",
+            true,
+            admin_id,
+        );
 
         // Test get all model costs
         let app1 = create_test_router(&server);
@@ -440,9 +455,10 @@ mod tests {
     #[tokio::test]
     async fn test_non_admin_access_denied() {
         let server = create_test_server().await;
-        let (user1_id, _) = setup_test_data(&server.storage).await;
+        let (user1_id, _) = setup_test_data(&server.database).await;
 
-        let user_token = create_test_token(&server.jwt_service, "user1@example.com", false, user1_id);
+        let user_token =
+            create_test_token(&server.jwt_service, "user1@example.com", false, user1_id);
         let app = create_test_router(&server);
 
         // Test admin endpoint access with non-admin token
@@ -460,7 +476,7 @@ mod tests {
     #[tokio::test]
     async fn test_unauthorized_access() {
         let server = create_test_server().await;
-        setup_test_data(&server.storage).await;
+        setup_test_data(&server.database).await;
 
         // Test without authorization header
         let app1 = create_test_router(&server);
@@ -489,7 +505,7 @@ mod tests {
     #[tokio::test]
     async fn test_pagination_limits() {
         let server = create_test_server().await;
-        let (user1_id, _) = setup_test_data(&server.storage).await;
+        let (user1_id, _) = setup_test_data(&server.database).await;
 
         let token = create_test_token(&server.jwt_service, "user1@example.com", false, user1_id);
         let app = create_test_router(&server);
@@ -515,10 +531,14 @@ mod tests {
     #[tokio::test]
     async fn test_error_handling() {
         let server = create_test_server().await;
-        let (_, admin_id) = setup_test_data(&server.storage).await;
+        let (_, admin_id) = setup_test_data(&server.database).await;
 
-        let admin_token =
-            create_test_token(&server.jwt_service, "admin@admin.example.com", true, admin_id);
+        let admin_token = create_test_token(
+            &server.jwt_service,
+            "admin@admin.example.com",
+            true,
+            admin_id,
+        );
 
         // Test invalid model cost data
         let app1 = create_test_router(&server);

@@ -3,8 +3,8 @@ use crate::{
         jwt::OAuthClaims,
         oauth::{OAuthService, RefreshRequest, TokenRequest},
     },
+    database::entities::UserRecord,
     error::AppError,
-    storage::UserRecord,
 };
 use axum::{
     Extension, Router,
@@ -361,17 +361,19 @@ mod tests {
             ..Default::default()
         };
 
-        let storage = Arc::new(crate::storage::Storage::new(
-            Box::new(crate::storage::memory::MemoryCacheStorage::new(3600)),
-            Box::new(
-                crate::storage::database::SqliteStorage::new("sqlite::memory:")
-                    .await
-                    .unwrap(),
-            ),
-        ));
-        storage.migrate().await.unwrap();
+        let mut db_config = crate::config::Config::default();
+        db_config.storage.redis.enabled = false;
+        db_config.storage.database.enabled = true;
+        db_config.storage.database.url = "sqlite::memory:".to_string();
+
+        let database = Arc::new(
+            crate::database::DatabaseManager::new_from_config(&db_config)
+                .await
+                .unwrap(),
+        );
+        let cache = Arc::new(crate::cache::CacheManager::new_memory());
         let jwt_service = JwtService::new("test-secret".to_string(), Algorithm::HS256).unwrap();
-        Arc::new(OAuthService::new(config, jwt_service, storage).unwrap())
+        Arc::new(OAuthService::new(config, jwt_service, database, cache).unwrap())
     }
 
     #[tokio::test]

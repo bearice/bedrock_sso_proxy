@@ -9,8 +9,8 @@ use axum::http::HeaderMap;
 use bedrock_sso_proxy::{
     config::{AwsConfig, Config},
     cost_tracking::CostTrackingService,
+    database::{DatabaseManager, entities::StoredModelCost},
     model_service::{ModelRequest, ModelService, UsageMetadata},
-    storage::Storage,
 };
 use chrono::Utc;
 use rust_decimal::Decimal;
@@ -24,8 +24,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     info!("🚀 Cost Tracking Demonstration Starting");
 
-    // 1. Setup test storage and config
-    let config = Config {
+    // 1. Setup test database and config
+    let mut config = Config {
         aws: AwsConfig {
             region: "us-east-1".to_string(),
             access_key_id: Some("demo".to_string()),
@@ -35,29 +35,22 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         },
         ..Default::default()
     };
+    config.storage.database.enabled = true;
+    config.storage.database.url = "sqlite::memory:".to_string();
 
-    let storage = Arc::new(Storage::new(
-        Box::new(bedrock_sso_proxy::storage::memory::MemoryCacheStorage::new(
-            3600,
-        )),
-        Box::new(
-            bedrock_sso_proxy::storage::database::SqliteStorage::new("sqlite::memory:")
-                .await
-                .unwrap(),
-        ),
-    ));
+    let database = Arc::new(DatabaseManager::new_from_config(&config).await.unwrap());
 
     // Run database migrations
-    storage.migrate().await?;
+    database.migrate().await?;
 
     // 2. Initialize ModelService with cost tracking
-    let model_service = Arc::new(ModelService::new(storage.clone(), config.clone()));
+    let model_service = Arc::new(ModelService::new(database.clone(), config.clone()));
 
     info!("📊 Initializing model costs...");
     model_service.initialize_model_costs().await?;
 
     // 3. Demonstrate cost tracking service
-    let cost_service = CostTrackingService::new(storage.clone(), "us-east-1".to_string());
+    let cost_service = CostTrackingService::new(database.clone(), "us-east-1".to_string());
 
     // Show supported models from embedded pricing
     info!("🤖 Available Models from Embedded Pricing:");
@@ -98,23 +91,19 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     };
 
     // Manually store some model costs for demonstration
-    let claude_sonnet_cost = bedrock_sso_proxy::storage::StoredModelCost {
-        id: None,
+    let claude_sonnet_cost = StoredModelCost {
+        id: 0,
         model_id: "anthropic.claude-sonnet-4-20250514-v1:0".to_string(),
         input_cost_per_1k_tokens: Decimal::from_f64_retain(0.003).unwrap(), // $3 per million tokens
         output_cost_per_1k_tokens: Decimal::from_f64_retain(0.015).unwrap(), // $15 per million tokens
         updated_at: Utc::now(),
     };
-    storage
-        .database
-        .upsert_model_cost(&claude_sonnet_cost)
-        .await?;
+    database.model_costs().upsert(&claude_sonnet_cost).await?;
 
     info!("💰 Cost Calculation Demo:");
-    if let Some(cost) = model_service
-        .storage()
-        .database
-        .get_model_cost(&model_request.model_id)
+    if let Some(cost) = database
+        .model_costs()
+        .find_by_model(&model_request.model_id)
         .await?
     {
         let input_cost = Decimal::from_f64_retain(usage_metadata.input_tokens as f64 / 1000.0)

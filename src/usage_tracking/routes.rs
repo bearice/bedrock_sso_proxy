@@ -1,8 +1,11 @@
 use crate::{
     auth::middleware::UserExtractor,
     cost_tracking::{CostSummary, CostTrackingService, UpdateCostsResult},
+    database::{
+        dao::usage::{UsageQuery, UsageStats},
+        entities::{StoredModelCost, UsageRecord},
+    },
     error::AppError,
-    storage::{Storage, StoredModelCost, UsageQuery, UsageRecord, UsageStats},
 };
 use axum::{
     Router,
@@ -14,17 +17,16 @@ use axum::{
 use chrono::{DateTime, Utc};
 use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
-use std::sync::Arc;
 
 /// Create usage tracking API routes for regular users
-pub fn create_user_usage_routes() -> Router<Arc<Storage>> {
+pub fn create_user_usage_routes() -> Router<crate::server::Server> {
     Router::new()
         .route("/usage/records", get(get_user_usage_records))
         .route("/usage/stats", get(get_user_usage_stats))
 }
 
 /// Create admin usage tracking API routes
-pub fn create_admin_usage_routes() -> Router<Arc<Storage>> {
+pub fn create_admin_usage_routes() -> Router<crate::server::Server> {
     Router::new()
         // Admin endpoints (system-wide usage)
         .route("/admin/usage/records", get(get_system_usage_records))
@@ -90,27 +92,27 @@ pub struct ModelCostRequest {
 
 /// Get user's usage records
 async fn get_user_usage_records(
+    State(server): State<crate::server::Server>,
     UserExtractor(user): UserExtractor,
-    State(storage): State<Arc<Storage>>,
     Query(params): Query<UsageRecordsQuery>,
 ) -> Result<Json<UsageRecordsResponse>, AppError> {
     // Get user ID from JWT claims (sub field contains database user ID)
-    let user_id = user.id.unwrap();
+    let user_id: i32 = user.id;
 
     let limit = params.limit.unwrap_or(50).min(500); // Max 500 records
     let offset = params.offset.unwrap_or(0);
 
-    let records = storage
-        .database
-        .get_user_usage_records(
-            user_id,
-            limit,
-            offset,
-            params.model.as_deref(),
-            params.start_date,
-            params.end_date,
-        )
-        .await?;
+    let query = UsageQuery {
+        user_id: Some(user_id),
+        model_id: params.model.clone(),
+        start_date: params.start_date,
+        end_date: params.end_date,
+        success_only: None,
+        limit: Some(limit),
+        offset: Some(offset),
+    };
+
+    let records = server.database.usage().get_records(&query).await?;
 
     // Get total count for pagination (simplified for now)
     let total = records.len() as u32;
@@ -125,24 +127,31 @@ async fn get_user_usage_records(
 
 /// Get user's usage statistics
 async fn get_user_usage_stats(
+    State(server): State<crate::server::Server>,
     UserExtractor(user): UserExtractor,
-    State(storage): State<Arc<Storage>>,
     Query(params): Query<UsageStatsQuery>,
 ) -> Result<Json<UsageStats>, AppError> {
     // Get user ID from JWT claims (sub field contains database user ID)
-    let user_id = user.id.unwrap();
+    let user_id: i32 = user.id;
 
-    let stats = storage
-        .database
-        .get_user_usage_stats(user_id, params.start_date, params.end_date)
-        .await?;
+    let query = UsageQuery {
+        user_id: Some(user_id),
+        model_id: None,
+        start_date: params.start_date,
+        end_date: params.end_date,
+        success_only: None,
+        limit: None,
+        offset: None,
+    };
+
+    let stats = server.database.usage().get_stats(&query).await?;
 
     Ok(Json(stats))
 }
 
 /// Get system-wide usage records (admin only)
 async fn get_system_usage_records(
-    State(storage): State<Arc<Storage>>,
+    State(server): State<crate::server::Server>,
     Query(params): Query<UsageRecordsQuery>,
 ) -> Result<Json<UsageRecordsResponse>, AppError> {
     // Admin permissions already checked by middleware
@@ -160,7 +169,7 @@ async fn get_system_usage_records(
         offset: Some(offset),
     };
 
-    let records = storage.database.get_usage_records(&query).await?;
+    let records = server.database.usage().get_records(&query).await?;
     let total = records.len() as u32; // Simplified
 
     Ok(Json(UsageRecordsResponse {
@@ -173,38 +182,65 @@ async fn get_system_usage_records(
 
 /// Get system-wide usage statistics (admin only)
 async fn get_system_usage_stats(
-    State(storage): State<Arc<Storage>>,
+    State(server): State<crate::server::Server>,
     Query(params): Query<UsageStatsQuery>,
 ) -> Result<Json<UsageStats>, AppError> {
     // Admin permissions already checked by middleware
 
-    let stats = storage
-        .database
-        .get_system_usage_stats(params.start_date, params.end_date)
-        .await?;
+    let query = UsageQuery {
+        user_id: None, // All users
+        model_id: None,
+        start_date: params.start_date,
+        end_date: params.end_date,
+        success_only: None,
+        limit: None,
+        offset: None,
+    };
+
+    let stats = server.database.usage().get_stats(&query).await?;
 
     Ok(Json(stats))
 }
 
 /// Get top models by usage (admin only)
 async fn get_top_models(
-    State(storage): State<Arc<Storage>>,
+    State(server): State<crate::server::Server>,
     Query(params): Query<UsageStatsQuery>,
 ) -> Result<Json<TopModelsResponse>, AppError> {
     // Admin permissions already checked by middleware
 
-    let models = storage
-        .database
-        .get_top_models_by_usage(10, params.start_date, params.end_date)
-        .await?;
+    let query = UsageQuery {
+        user_id: None,  // All users
+        model_id: None, // All models
+        start_date: params.start_date,
+        end_date: params.end_date,
+        success_only: None,
+        limit: Some(10), // Top 10 models
+        offset: None,
+    };
 
-    let model_usage: Vec<ModelUsage> = models
+    // Get usage records and aggregate by model
+    let records = server.database.usage().get_records(&query).await?;
+
+    // Group by model_id and sum total_tokens
+    let mut model_usage_map = std::collections::HashMap::new();
+    for record in records {
+        let entry = model_usage_map
+            .entry(record.model_id.clone())
+            .or_insert(0u64);
+        *entry += record.total_tokens as u64;
+    }
+
+    // Sort by total_tokens (descending) and take top results
+    let mut model_usage: Vec<ModelUsage> = model_usage_map
         .into_iter()
         .map(|(model_id, total_tokens)| ModelUsage {
             model_id,
             total_tokens,
         })
         .collect();
+
+    model_usage.sort_by(|a, b| b.total_tokens.cmp(&a.total_tokens));
 
     Ok(Json(TopModelsResponse {
         models: model_usage,
@@ -213,23 +249,24 @@ async fn get_top_models(
 
 /// Get all model costs (admin only)
 async fn get_all_model_costs(
-    State(storage): State<Arc<Storage>>,
+    State(server): State<crate::server::Server>,
 ) -> Result<Json<Vec<StoredModelCost>>, AppError> {
     // Admin permissions already checked by middleware
-    let costs = storage.database.get_all_model_costs().await?;
+    let costs = server.database.model_costs().get_all().await?;
     Ok(Json(costs))
 }
 
 /// Get specific model cost (admin only)
 async fn get_model_cost(
-    State(storage): State<Arc<Storage>>,
+    State(server): State<crate::server::Server>,
     Path(model_id): Path<String>,
 ) -> Result<Json<StoredModelCost>, AppError> {
     // Admin permissions already checked by middleware
 
-    let cost = storage
+    let cost = server
         .database
-        .get_model_cost(&model_id)
+        .model_costs()
+        .find_by_model(&model_id)
         .await?
         .ok_or_else(|| AppError::NotFound(format!("Model cost not found: {}", model_id)))?;
 
@@ -238,13 +275,13 @@ async fn get_model_cost(
 
 /// Create or update model cost (admin only)
 async fn create_model_cost(
-    State(storage): State<Arc<Storage>>,
+    State(server): State<crate::server::Server>,
     Json(request): Json<ModelCostRequest>,
 ) -> Result<StatusCode, AppError> {
     // Admin permissions already checked by middleware
 
     let cost = StoredModelCost {
-        id: None,
+        id: 0, // Will be set by database
         model_id: request.model_id,
         input_cost_per_1k_tokens: Decimal::from_f64_retain(request.input_cost_per_1k_tokens)
             .unwrap_or_default(),
@@ -253,27 +290,28 @@ async fn create_model_cost(
         updated_at: Utc::now(),
     };
 
-    storage.database.upsert_model_cost(&cost).await?;
+    server.database.model_costs().upsert(&cost).await?;
     Ok(StatusCode::CREATED)
 }
 
 /// Update model cost (admin only)
 async fn update_model_cost(
-    State(storage): State<Arc<Storage>>,
+    State(server): State<crate::server::Server>,
     Path(model_id): Path<String>,
     Json(request): Json<ModelCostRequest>,
 ) -> Result<StatusCode, AppError> {
     // Admin permissions already checked by middleware
 
     // Verify model exists
-    storage
+    server
         .database
-        .get_model_cost(&model_id)
+        .model_costs()
+        .find_by_model(&model_id)
         .await?
         .ok_or_else(|| AppError::NotFound(format!("Model cost not found: {}", model_id)))?;
 
     let cost = StoredModelCost {
-        id: None,
+        id: 0, // Will be set by database
         model_id: model_id.clone(),
         input_cost_per_1k_tokens: Decimal::from_f64_retain(request.input_cost_per_1k_tokens)
             .unwrap_or_default(),
@@ -282,30 +320,30 @@ async fn update_model_cost(
         updated_at: Utc::now(),
     };
 
-    storage.database.upsert_model_cost(&cost).await?;
+    server.database.model_costs().upsert(&cost).await?;
     Ok(StatusCode::OK)
 }
 
 /// Delete model cost (admin only)
 async fn delete_model_cost(
-    State(storage): State<Arc<Storage>>,
+    State(server): State<crate::server::Server>,
     Path(model_id): Path<String>,
 ) -> Result<StatusCode, AppError> {
     // Admin permissions already checked by middleware
 
-    storage.database.delete_model_cost(&model_id).await?;
+    server.database.model_costs().delete(&model_id).await?;
     Ok(StatusCode::NO_CONTENT)
 }
 
 /// Update all model costs from AWS Price List API (admin only)
 /// Fails if AWS API is unavailable - leaves current pricing unchanged
 async fn update_all_model_costs(
-    State(storage): State<Arc<Storage>>,
+    State(server): State<crate::server::Server>,
 ) -> Result<Json<UpdateCostsResult>, AppError> {
     // Admin permissions already checked by middleware
 
     // Create cost tracking service with us-east-1 region for pricing data
-    let cost_service = CostTrackingService::new(storage, "us-east-1".to_string());
+    let cost_service = CostTrackingService::new(server.database.clone(), "us-east-1".to_string());
 
     // Update model costs from AWS API only (no fallback - preserves existing data on failure)
     let result = cost_service.update_all_model_costs().await?;
@@ -315,11 +353,11 @@ async fn update_all_model_costs(
 
 /// Get cost summary for all models (admin only)
 async fn get_cost_summary(
-    State(storage): State<Arc<Storage>>,
+    State(server): State<crate::server::Server>,
 ) -> Result<Json<CostSummary>, AppError> {
     // Admin permissions already checked by middleware
 
-    let cost_service = CostTrackingService::new(storage, "us-east-1".to_string());
+    let cost_service = CostTrackingService::new(server.database.clone(), "us-east-1".to_string());
     let summary = cost_service.get_cost_summary().await?;
 
     Ok(Json(summary))
@@ -332,23 +370,29 @@ async fn get_cost_summary(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::storage::memory::MemoryCacheStorage;
+    // Removed unused import
     use axum::{body::Body, http::Request};
     use tower::ServiceExt;
 
     #[tokio::test]
     async fn test_create_user_usage_routes() {
-        let storage = Arc::new(crate::storage::Storage::new(
-            Box::new(MemoryCacheStorage::new(3600)),
-            Box::new(
-                crate::storage::database::SqliteStorage::new("sqlite::memory:")
-                    .await
-                    .unwrap(),
-            ),
-        ));
-        storage.migrate().await.unwrap();
+        async fn create_test_server() -> crate::server::Server {
+            let mut config = crate::config::Config::default();
+            config.storage.redis.enabled = false;
+            config.storage.database.enabled = true;
+            config.storage.database.url = "sqlite::memory:".to_string();
+            config.metrics.enabled = false;
 
-        let app = create_user_usage_routes().with_state(storage);
+            let server = crate::server::Server::new(config).await.unwrap();
+
+            // Run migrations to create tables
+            server.database.migrate().await.unwrap();
+
+            server
+        }
+
+        let server = create_test_server().await;
+        let app = create_user_usage_routes().with_state(server);
 
         // Test that routes are properly configured
         let request = Request::builder()

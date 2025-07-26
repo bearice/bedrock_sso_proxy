@@ -1,17 +1,17 @@
-use crate::auth::api_key::{hash_api_key, validate_api_key_format};
 use crate::auth::jwt::JwtService;
 use crate::config::Config;
+use crate::database::DatabaseManager;
+use crate::database::entities::UserRecord;
+use crate::database::entities::api_keys::{hash_api_key, validate_api_key_format};
 use crate::error::AppError;
 use crate::server::Server;
-use crate::storage::{Storage, UserRecord};
 use axum::{
     extract::{FromRequestParts, Request, State},
-    http::{header::AUTHORIZATION, HeaderName, request::Parts},
+    http::{HeaderName, header::AUTHORIZATION, request::Parts},
     middleware::Next,
     response::Response,
 };
 use std::sync::Arc;
-
 
 /// Static header name for API key
 static X_API_KEY: HeaderName = HeaderName::from_static("x-api-key");
@@ -30,31 +30,41 @@ pub async fn auth_middleware(
                 // Check if it's an API key (has the configured prefix)
                 if token.starts_with(&server.config.api_keys.prefix) {
                     if !server.config.api_keys.enabled {
-                        return Err(AppError::Unauthorized("API key authentication is disabled".to_string()));
+                        return Err(AppError::Unauthorized(
+                            "API key authentication is disabled".to_string(),
+                        ));
                     }
-                    authenticate_with_api_key(token, &server.storage, &server.config).await?
+                    authenticate_with_api_key(token, &server.database, &server.config).await?
                 } else {
                     // Try JWT authentication
-                    authenticate_with_jwt(token, &server.storage, &server.jwt_service).await?
+                    authenticate_with_jwt(token, &server.database, &server.jwt_service).await?
                 }
             } else {
-                return Err(AppError::Unauthorized("Invalid Authorization format".to_string()));
+                return Err(AppError::Unauthorized(
+                    "Invalid Authorization format".to_string(),
+                ));
             }
         } else {
-            return Err(AppError::Unauthorized("Invalid Authorization header".to_string()));
+            return Err(AppError::Unauthorized(
+                "Invalid Authorization header".to_string(),
+            ));
         }
     } else if let Some(api_key_header) = request.headers().get(&X_API_KEY) {
         // Try X-API-Key header
         if !server.config.api_keys.enabled {
-            return Err(AppError::Unauthorized("API key authentication is disabled".to_string()));
+            return Err(AppError::Unauthorized(
+                "API key authentication is disabled".to_string(),
+            ));
         }
         if let Ok(api_key) = api_key_header.to_str() {
-            authenticate_with_api_key(api_key, &server.storage, &server.config).await?
+            authenticate_with_api_key(api_key, &server.database, &server.config).await?
         } else {
             return Err(AppError::Unauthorized("Invalid API key header".to_string()));
         }
     } else {
-        return Err(AppError::Unauthorized("Missing authentication credentials".to_string()));
+        return Err(AppError::Unauthorized(
+            "Missing authentication credentials".to_string(),
+        ));
     };
 
     // Add UserRecord to request extensions for downstream handlers
@@ -67,11 +77,10 @@ pub async fn auth_middleware(
     Ok(next.run(request).await)
 }
 
-
 /// Authenticate with JWT token and return cached UserRecord
 async fn authenticate_with_jwt(
     token: &str,
-    storage: &Arc<Storage>,
+    database: &Arc<DatabaseManager>,
     jwt_service: &Arc<JwtService>,
 ) -> Result<UserRecord, AppError> {
     // Validate JWT token and get claims
@@ -79,13 +88,13 @@ async fn authenticate_with_jwt(
     let user_id = claims.sub;
 
     // Get cached or lookup UserRecord
-    get_cached_user_record(user_id, storage).await
+    get_cached_user_record(user_id, database).await
 }
 
 /// Authenticate with API key and return cached UserRecord
 async fn authenticate_with_api_key(
     api_key: &str,
-    storage: &Arc<Storage>,
+    database: &Arc<DatabaseManager>,
     config: &Arc<Config>,
 ) -> Result<UserRecord, AppError> {
     // Validate API key format
@@ -95,38 +104,40 @@ async fn authenticate_with_api_key(
     let key_hash = hash_api_key(api_key);
 
     // Look up API key in database
-    let stored_key = storage
-        .database
-        .get_api_key_by_hash(&key_hash)
+    let stored_key = database
+        .api_keys()
+        .find_by_hash(&key_hash)
         .await
         .map_err(|e| AppError::Internal(format!("Database error: {}", e)))?
         .ok_or_else(|| AppError::Unauthorized("Invalid API key".to_string()))?;
 
     // Check if API key is valid (not expired, not revoked)
     if !stored_key.is_valid() {
-        return Err(AppError::Unauthorized("API key expired or revoked".to_string()));
+        return Err(AppError::Unauthorized(
+            "API key expired or revoked".to_string(),
+        ));
     }
 
     // // Update API key last used timestamp asynchronously
-    // let storage_clone = storage.clone();
+    // let database_clone = database.clone();
     // let key_hash_clone = key_hash.clone();
     // tokio::spawn(async move {
-    //     let _ = storage_clone.database.update_api_key_last_used(&key_hash_clone).await;
+    //     let _ = database_clone.api_keys().update_last_used(&key_hash_clone).await;
     // });
 
     // Get cached or lookup UserRecord
-    get_cached_user_record(stored_key.user_id, storage).await
+    get_cached_user_record(stored_key.user_id, database).await
 }
 
 /// Get UserRecord with caching support
 async fn get_cached_user_record(
     user_id: i32,
-    storage: &Arc<Storage>,
+    database: &Arc<DatabaseManager>,
 ) -> Result<UserRecord, AppError> {
     // let cache_key = format!("user:id:{}", user_id);
 
     // Try cache first
-    // match storage.cache.cache_get::<UserRecord>(&cache_key).await {
+    // match cache.get::<UserRecord>(&cache_key).await {
     //     Ok(Some(user)) => {
     //         tracing::debug!("User {} found in cache", user_id);
     //         return Ok(user);
@@ -140,19 +151,19 @@ async fn get_cached_user_record(
     // }
 
     // Cache miss - fetch from database
-    let user = storage
-        .database
-        .get_user_by_id(user_id)
+    let user = database
+        .users()
+        .find_by_id(user_id)
         .await
         .map_err(|e| AppError::Internal(format!("Database error: {}", e)))?
         .ok_or_else(|| AppError::Unauthorized("User not found".to_string()))?;
 
     // Store in cache (fire-and-forget to avoid blocking request)
-    // let storage_clone = storage.clone();
+    // let cache_clone = cache.clone();
     // let cache_key_clone = cache_key.clone();
     // let user_clone = user.clone();
     // tokio::spawn(async move {
-    //     if let Err(e) = storage_clone.cache.cache_set(&cache_key_clone, &user_clone, 900).await {
+    //     if let Err(e) = cache_clone.set(&cache_key_clone, &user_clone, Some(std::time::Duration::from_secs(900))).await {
     //         tracing::warn!("Failed to cache user {}: {}", user_id, e);
     //     }
     // });
@@ -163,7 +174,7 @@ async fn get_cached_user_record(
 /// JWT-only authentication middleware (for web UI routes that don't support API keys)
 pub async fn jwt_only_middleware(
     State(jwt_service): State<Arc<JwtService>>,
-    State(storage): State<Arc<Storage>>,
+    State(database): State<Arc<DatabaseManager>>,
     mut request: Request,
     next: Next,
 ) -> Result<Response, AppError> {
@@ -182,7 +193,7 @@ pub async fn jwt_only_middleware(
     let token = &auth_header[7..];
 
     // Authenticate with JWT and get UserRecord
-    let user = authenticate_with_jwt(token, &storage, &jwt_service).await?;
+    let user = authenticate_with_jwt(token, &database, &jwt_service).await?;
 
     // Add UserRecord to request extensions for downstream handlers
     request.extensions_mut().insert(user);
@@ -200,7 +211,6 @@ pub async fn jwt_auth_middleware(
     mut request: Request,
     next: Next,
 ) -> Result<Response, AppError> {
-
     let auth_header = request
         .headers()
         .get(AUTHORIZATION)
@@ -219,7 +229,7 @@ pub async fn jwt_auth_middleware(
     let claims = server.jwt_service.validate_oauth_token(token)?;
 
     // Get UserRecord for the user
-    let user = get_cached_user_record(claims.sub, &server.storage).await?;
+    let user = get_cached_user_record(claims.sub, &server.database).await?;
 
     // Add both claims and UserRecord to request extensions for downstream handlers
     request.extensions_mut().insert(claims.clone());
@@ -251,7 +261,6 @@ pub async fn admin_middleware(
 
     Ok(next.run(request).await)
 }
-
 
 /// Custom extractor for UserRecord from request extensions
 /// Use this in route handlers that need access to authenticated user information
@@ -308,14 +317,24 @@ mod tests {
         let mut config = crate::config::Config::default();
         config.storage.redis.enabled = false;
         config.storage.database.enabled = true;
-        config.storage.database.url = ":memory:".to_string(); // Use in-memory database
+        config.storage.database.url = "sqlite::memory:".to_string(); // Use in-memory database
         config.metrics.enabled = false;
-        crate::server::Server::new(config).await.unwrap()
+
+        let server = crate::server::Server::new(config).await.unwrap();
+
+        // Run migrations to create tables
+        server.database.migrate().await.unwrap();
+
+        server
     }
 
-    async fn create_test_user(server: &crate::server::Server, requested_id: i32, email: &str) -> i32 {
-        let user = crate::storage::UserRecord {
-            id: None, // Let database assign ID
+    async fn create_test_user(
+        server: &crate::server::Server,
+        requested_id: i32,
+        email: &str,
+    ) -> i32 {
+        let user = crate::database::entities::UserRecord {
+            id: 0, // Let database assign ID
             provider_user_id: format!("test_user_{}", requested_id),
             provider: "test".to_string(),
             email: email.to_string(),
@@ -324,7 +343,7 @@ mod tests {
             updated_at: chrono::Utc::now(),
             last_login: Some(chrono::Utc::now()),
         };
-        server.storage.database.upsert_user(&user).await.unwrap()
+        server.database.users().upsert(&user).await.unwrap()
     }
 
     #[tokio::test]
@@ -544,22 +563,34 @@ mod tests {
         use super::*;
         use crate::config::Config;
 
-        use crate::storage::UserRecord;
+        use crate::database::entities::UserRecord;
         use chrono::Utc;
 
-        async fn create_test_server_with_admins(admin_emails: Vec<String>) -> crate::server::Server {
+        async fn create_test_server_with_admins(
+            admin_emails: Vec<String>,
+        ) -> crate::server::Server {
             let mut config = Config::default();
             config.admin.emails = admin_emails;
             config.storage.redis.enabled = false;
             config.storage.database.enabled = true;
-            config.storage.database.url = ":memory:".to_string(); // Use in-memory database
+            config.storage.database.url = "sqlite::memory:".to_string(); // Use in-memory database
             config.metrics.enabled = false;
-            crate::server::Server::new(config).await.unwrap()
+
+            let server = crate::server::Server::new(config).await.unwrap();
+
+            // Run migrations to create tables
+            server.database.migrate().await.unwrap();
+
+            server
         }
 
-        async fn create_admin_test_user(server: &crate::server::Server, user_id: i32, email: &str) -> i32 {
+        async fn create_admin_test_user(
+            server: &crate::server::Server,
+            user_id: i32,
+            email: &str,
+        ) -> i32 {
             let user = UserRecord {
-                id: None, // Let database assign ID
+                id: 0, // Let database assign ID
                 provider_user_id: format!("provider_user_{}", user_id),
                 provider: "test".to_string(),
                 email: email.to_string(),
@@ -568,7 +599,7 @@ mod tests {
                 updated_at: Utc::now(),
                 last_login: None,
             };
-            server.storage.database.upsert_user(&user).await.unwrap()
+            server.database.users().upsert(&user).await.unwrap()
         }
 
         fn create_test_app(server: crate::server::Server) -> Router {
@@ -586,7 +617,8 @@ mod tests {
 
         #[tokio::test]
         async fn test_admin_middleware_success() {
-            let server = create_test_server_with_admins(vec!["admin@example.com".to_string()]).await;
+            let server =
+                create_test_server_with_admins(vec!["admin@example.com".to_string()]).await;
 
             // Create test user with admin email and get the actual user ID
             let user_id = create_admin_test_user(&server, 123, "admin@example.com").await;
@@ -606,7 +638,8 @@ mod tests {
 
         #[tokio::test]
         async fn test_admin_middleware_forbidden_non_admin() {
-            let server = create_test_server_with_admins(vec!["admin@example.com".to_string()]).await;
+            let server =
+                create_test_server_with_admins(vec!["admin@example.com".to_string()]).await;
 
             // Create test user with non-admin email
             let user_id = create_admin_test_user(&server, 123, "user@example.com").await;
@@ -626,7 +659,8 @@ mod tests {
 
         #[tokio::test]
         async fn test_admin_middleware_case_insensitive() {
-            let server = create_test_server_with_admins(vec!["ADMIN@EXAMPLE.COM".to_string()]).await;
+            let server =
+                create_test_server_with_admins(vec!["ADMIN@EXAMPLE.COM".to_string()]).await;
 
             // Create test user with lowercase email
             let user_id = create_admin_test_user(&server, 123, "admin@example.com").await;
@@ -646,13 +680,11 @@ mod tests {
 
         #[tokio::test]
         async fn test_admin_middleware_missing_claims() {
-            let server = create_test_server_with_admins(vec!["admin@example.com".to_string()]).await;
+            let server =
+                create_test_server_with_admins(vec!["admin@example.com".to_string()]).await;
 
             let app = Router::new().route("/admin", get(test_handler)).layer(
-                middleware::from_fn_with_state(
-                    server.clone(),
-                    admin_middleware,
-                ),
+                middleware::from_fn_with_state(server.clone(), admin_middleware),
             );
 
             let request = Request::builder()
@@ -666,7 +698,8 @@ mod tests {
 
         #[tokio::test]
         async fn test_admin_middleware_user_not_found() {
-            let server = create_test_server_with_admins(vec!["admin@example.com".to_string()]).await;
+            let server =
+                create_test_server_with_admins(vec!["admin@example.com".to_string()]).await;
 
             // Don't create user - user ID 999 won't exist
 
@@ -709,7 +742,8 @@ mod tests {
                 "admin1@example.com".to_string(),
                 "admin2@example.com".to_string(),
                 "superuser@company.com".to_string(),
-            ]).await;
+            ])
+            .await;
 
             // Test first admin
             let user_id1 = create_admin_test_user(&server, 1, "admin1@example.com").await;
