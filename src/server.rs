@@ -215,7 +215,7 @@ impl Server {
             .nest(
                 "/api/keys",
                 create_api_key_routes()
-                    .with_state(self.database.clone())
+                    .with_state(self.clone())
                     .layer(middleware::from_fn_with_state(
                         self.clone(),
                         jwt_auth_middleware,

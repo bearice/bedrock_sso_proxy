@@ -3,8 +3,8 @@ use crate::{
         api_key::{ApiKey, ApiKeyInfo, CreateApiKeyRequest, CreateApiKeyResponse},
         middleware::UserExtractor,
     },
-    database::DatabaseManager,
     error::AppError,
+    server::Server,
 };
 use axum::{
     Router,
@@ -16,7 +16,7 @@ use chrono::{Duration, Utc};
 use std::sync::Arc;
 
 /// Create API key management routes (requires JWT authentication)
-pub fn create_api_key_routes() -> Router<Arc<DatabaseManager>> {
+pub fn create_api_key_routes() -> Router<Server> {
     Router::new()
         .route("/", post(create_api_key))
         .route("/", get(list_api_keys))
@@ -25,7 +25,7 @@ pub fn create_api_key_routes() -> Router<Arc<DatabaseManager>> {
 
 /// Create a new API key for the authenticated user
 pub async fn create_api_key(
-    State(storage): State<Arc<DatabaseManager>>,
+    State(server): State<Server>,
     UserExtractor(user): UserExtractor,
     Json(request): Json<CreateApiKeyRequest>,
 ) -> Result<Json<CreateApiKeyResponse>, AppError> {
@@ -48,18 +48,18 @@ pub async fn create_api_key(
         .map(|days| Utc::now() + Duration::days(days as i64));
 
     // Check user's existing API key count
-    let existing_keys = storage
+    let existing_keys = server.database
         .api_keys()
         .find_by_user(user.id)
         .await
         .map_err(|e| AppError::Internal(format!("Failed to check existing API keys: {}", e)))?;
 
-    // TODO: Get max keys from config (hardcoded to 10 for now)
-    const MAX_KEYS_PER_USER: usize = 10;
-    if existing_keys.len() >= MAX_KEYS_PER_USER {
+    // Get max keys from config
+    let max_keys_per_user = server.config.api_keys.max_keys_per_user as usize;
+    if existing_keys.len() >= max_keys_per_user {
         return Err(AppError::BadRequest(format!(
             "Maximum number of API keys exceeded ({})",
-            MAX_KEYS_PER_USER
+            max_keys_per_user
         )));
     }
 
@@ -67,7 +67,7 @@ pub async fn create_api_key(
     let (api_key, raw_key) = ApiKey::new(user.id, request.name.trim().to_string(), expires_at);
 
     // Store in database
-    let key_id = storage
+    let key_id = server.database
         .api_keys()
         .store(&api_key)
         .await
@@ -85,10 +85,10 @@ pub async fn create_api_key(
 
 /// List all API keys for the authenticated user
 pub async fn list_api_keys(
-    State(storage): State<Arc<DatabaseManager>>,
+    State(server): State<Server>,
     UserExtractor(user): UserExtractor,
 ) -> Result<Json<Vec<ApiKeyInfo>>, AppError> {
-    let api_keys = storage
+    let api_keys = server.database
         .api_keys()
         .find_by_user(user.id)
         .await
@@ -101,12 +101,12 @@ pub async fn list_api_keys(
 
 /// Revoke an API key (mark as revoked)
 pub async fn revoke_api_key(
-    State(storage): State<Arc<DatabaseManager>>,
+    State(server): State<Server>,
     UserExtractor(user): UserExtractor,
     Path(key_id): Path<i32>,
 ) -> Result<Json<serde_json::Value>, AppError> {
     // Verify the API key belongs to the user
-    let api_keys = storage
+    let api_keys = server.database
         .api_keys()
         .find_by_user(user.id)
         .await
@@ -118,7 +118,7 @@ pub async fn revoke_api_key(
     }
 
     // Revoke the API key
-    storage
+    server.database
         .api_keys()
         .revoke(key_id)
         .await
@@ -218,7 +218,7 @@ mod tests {
         };
 
         let app = create_api_key_routes()
-            .with_state(database.clone())
+            .with_state(server.clone())
             .layer(middleware::from_fn_with_state(server, jwt_auth_middleware));
 
         let token = create_test_jwt(&jwt_service, user_id);
@@ -281,7 +281,7 @@ mod tests {
         };
 
         let app = create_api_key_routes()
-            .with_state(database.clone())
+            .with_state(server.clone())
             .layer(middleware::from_fn_with_state(server, jwt_auth_middleware));
 
         let token = create_test_jwt(&jwt_service, user_id);
@@ -334,7 +334,7 @@ mod tests {
         };
 
         let app = create_api_key_routes()
-            .with_state(database.clone())
+            .with_state(server.clone())
             .layer(middleware::from_fn_with_state(server, jwt_auth_middleware));
 
         let token = create_test_jwt(&jwt_service, user_id);
