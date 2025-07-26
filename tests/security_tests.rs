@@ -3,18 +3,17 @@ use axum::{
     http::{Method, Request, StatusCode},
 };
 use base64::Engine;
-use bedrock_sso_proxy::auth::jwt::Claims;
+use bedrock_sso_proxy::auth::jwt::OAuthClaims;
 use jsonwebtoken::{EncodingKey, Header, encode};
-use std::{sync::Arc, time::{SystemTime, UNIX_EPOCH}};
+use std::sync::Arc;
 
 mod common;
 use common::{RequestBuilder, TestHarness, helpers};
 
-
 #[tokio::test]
 async fn test_security_sql_injection_attempts() {
     let harness = TestHarness::new().await;
-    let token = harness.create_integration_token("user123", 456);
+    let token = harness.create_integration_token(123);
 
     // Test SQL injection attempts in model ID
     let malicious_model_ids = vec![
@@ -45,7 +44,7 @@ async fn test_security_sql_injection_attempts() {
             "SQL injection should not bypass authentication for model ID: {}",
             model_id
         );
-        
+
         // Expect AWS call to fail with test credentials (500) but auth should succeed
         helpers::assert_status_with_context(
             &response,
@@ -58,7 +57,7 @@ async fn test_security_sql_injection_attempts() {
 #[tokio::test]
 async fn test_security_xss_attempts() {
     let harness = TestHarness::new().await;
-    let token = harness.create_security_token("user123", 3600);
+    let token = harness.create_security_token(123, 3600);
 
     // Test XSS payloads in request body
     let xss_payloads = vec![
@@ -79,7 +78,7 @@ async fn test_security_xss_attempts() {
             "XSS payload should not bypass authentication: {}",
             payload
         );
-        
+
         helpers::assert_status_with_context(
             &response,
             StatusCode::INTERNAL_SERVER_ERROR, // AWS call fails with test credentials
@@ -91,7 +90,7 @@ async fn test_security_xss_attempts() {
 #[tokio::test]
 async fn test_security_oversized_requests() {
     let harness = TestHarness::new().await;
-    let token = harness.create_security_token("user123", 3600);
+    let token = harness.create_security_token(123, 3600);
 
     // Create extremely large payload (1MB)
     let large_content = "A".repeat(1024 * 1024);
@@ -110,7 +109,7 @@ async fn test_security_oversized_requests() {
         StatusCode::UNAUTHORIZED,
         "Large payload should not bypass authentication"
     );
-    
+
     helpers::assert_status_with_context(
         &response,
         StatusCode::INTERNAL_SERVER_ERROR, // AWS call fails with test credentials
@@ -121,7 +120,7 @@ async fn test_security_oversized_requests() {
 #[tokio::test]
 async fn test_security_header_injection() {
     let harness = TestHarness::new().await;
-    let token = harness.create_security_token("user123", 3600);
+    let token = harness.create_security_token(123, 3600);
 
     // Test header injection attempts
     let malicious_headers = vec![
@@ -148,9 +147,10 @@ async fn test_security_header_injection() {
                 response.status(),
                 StatusCode::UNAUTHORIZED,
                 "Header injection should not bypass authentication: {} = {}",
-                header_name, header_value
+                header_name,
+                header_value
             );
-            
+
             helpers::assert_status_with_context(
                 &response,
                 StatusCode::INTERNAL_SERVER_ERROR, // AWS call fails with test credentials
@@ -163,7 +163,7 @@ async fn test_security_header_injection() {
 #[tokio::test]
 async fn test_security_invalid_content_types() {
     let harness = TestHarness::new().await;
-    let token = harness.create_security_token("user123", 3600);
+    let token = harness.create_security_token(123, 3600);
 
     // Test various invalid or unusual content types
     let invalid_content_types = vec![
@@ -194,7 +194,7 @@ async fn test_security_invalid_content_types() {
                     "Invalid content type should not bypass authentication: {}",
                     content_type
                 );
-                
+
                 helpers::assert_status_with_context(
                     &response,
                     StatusCode::INTERNAL_SERVER_ERROR, // AWS call fails with test credentials
@@ -212,7 +212,7 @@ async fn test_security_invalid_content_types() {
 #[tokio::test]
 async fn test_security_path_traversal() {
     let harness = TestHarness::new().await;
-    let token = harness.create_security_token("user123", 3600);
+    let token = harness.create_security_token(123, 3600);
 
     // Test path traversal attempts
     let path_traversal_attempts = vec![
@@ -249,7 +249,7 @@ async fn test_security_path_traversal() {
 #[tokio::test]
 async fn test_security_malformed_json_bodies() {
     let harness = TestHarness::new().await;
-    let token = harness.create_security_token("user123", 3600);
+    let token = harness.create_security_token(123, 3600);
 
     // Test various malformed JSON bodies
     let malformed_json = vec![
@@ -288,7 +288,7 @@ async fn test_security_malformed_json_bodies() {
 #[tokio::test]
 async fn test_security_http_method_tampering() {
     let harness = TestHarness::new().await;
-    let token = harness.create_security_token("user123", 3600);
+    let token = harness.create_security_token(123, 3600);
 
     // Test various HTTP methods on protected endpoints
     let methods = vec![
@@ -331,16 +331,7 @@ async fn test_security_http_method_tampering() {
 async fn test_security_jwt_algorithm_confusion() {
     let harness = TestHarness::new().await;
 
-    let now = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap()
-        .as_secs() as usize;
-    
-    let claims = Claims {
-        sub: "malicious_user".to_string(),
-        exp: now + 3600,
-        user_id: 999,
-    };
+    let claims = OAuthClaims::new(999, 3600);
 
     // Test 1: Create a manually crafted "none" algorithm token
     // This simulates the classic algorithm confusion attack
@@ -415,7 +406,7 @@ async fn test_security_jwt_algorithm_confusion() {
 #[tokio::test]
 async fn test_security_rate_limiting_simulation() {
     let harness = Arc::new(TestHarness::new().await);
-    let token = harness.create_security_token("rate_limit_user", 3600);
+    let token = harness.create_security_token(123, 3600);
 
     // Simulate rapid fire requests (potential DoS attempt)
     let mut handles = vec![];

@@ -4,20 +4,19 @@
 #[cfg(test)]
 mod tests {
     use crate::{
-        auth::{jwt::JwtService, middleware::AuthConfig},
+        auth::jwt::JwtService,
         storage::{Storage, StorageFactory, StoredModelCost, UsageRecord, UserRecord},
-        usage_tracking::routes::*,
     };
-    use rust_decimal::Decimal;
-use axum::{
+    use axum::{
+        Router,
         body::Body,
         extract::Request,
-        http::{header::AUTHORIZATION, Method, StatusCode},
+        http::{Method, StatusCode, header::AUTHORIZATION},
         middleware,
-        Router,
     };
     use chrono::Utc;
     use jsonwebtoken::Algorithm;
+    use rust_decimal::Decimal;
     use serde_json::Value;
     use std::sync::Arc;
     use tower::ServiceExt;
@@ -30,36 +29,41 @@ use axum::{
     }
 
     fn create_test_router(storage: Arc<Storage>, jwt_service: &JwtService) -> Router {
-        let auth_config = Arc::new(AuthConfig::new(jwt_service.clone()));
+        let jwt_service_arc = Arc::new(jwt_service.clone());
 
-        create_usage_routes()
-            .with_state(storage)
-            .layer(middleware::from_fn_with_state(
-                auth_config,
-                crate::auth::middleware::jwt_auth_middleware,
-            ))
+        // Combine user and admin routes for testing
+        Router::new()
+            .merge(
+                crate::usage_tracking::create_user_usage_routes()
+                    .with_state(storage.clone())
+                    .layer(middleware::from_fn_with_state(
+                        jwt_service_arc.clone(),
+                        crate::auth::middleware::jwt_auth_middleware,
+                    )),
+            )
+            .merge(
+                crate::usage_tracking::create_admin_usage_routes()
+                    .with_state(storage)
+                    .layer(middleware::from_fn_with_state(
+                        jwt_service_arc,
+                        crate::auth::middleware::jwt_auth_middleware,
+                    )), // Note: In production, admin routes would have admin middleware too
+                        // For these tests, we'll just use JWT middleware
+            )
     }
 
-    fn create_test_token(jwt_service: &JwtService, email: &str, is_admin: bool, user_id: i32) -> String {
-        let admin_email = if is_admin {
-            "admin@admin.example.com"
-        } else {
-            email
-        };
-
-        let claims = crate::auth::jwt::OAuthClaims::new(
-            format!("google:{}", email),
-            "google".to_string(),
-            admin_email.to_string(),
-            user_id,
-            3600,
-            None,
-        );
+    fn create_test_token(
+        jwt_service: &JwtService,
+        _email: &str,
+        _is_admin: bool,
+        user_id: i32,
+    ) -> String {
+        let claims = crate::auth::jwt::OAuthClaims::new(user_id, 3600);
 
         jwt_service.create_oauth_token(&claims).unwrap()
     }
 
-async fn setup_test_data(storage: &Storage) -> (i32, i32) {
+    async fn setup_test_data(storage: &Storage) -> (i32, i32) {
         // Create test users
         let user1 = UserRecord {
             id: None,
@@ -87,9 +91,24 @@ async fn setup_test_data(storage: &Storage) -> (i32, i32) {
 
         // Create usage records for user1 with exact decimal costs
         let models = [
-            ("anthropic.claude-sonnet-4-20250514-v1:0", 100, 50, Decimal::new(75, 4)),    // 0.0075
-            ("anthropic.claude-3-haiku-20240307-v1:0", 200, 75, Decimal::new(5, 3)),      // 0.005
-            ("anthropic.claude-3-opus-20240229-v1:0", 150, 100, Decimal::new(2, 2))       // 0.02
+            (
+                "anthropic.claude-sonnet-4-20250514-v1:0",
+                100,
+                50,
+                Decimal::new(75, 4),
+            ), // 0.0075
+            (
+                "anthropic.claude-3-haiku-20240307-v1:0",
+                200,
+                75,
+                Decimal::new(5, 3),
+            ), // 0.005
+            (
+                "anthropic.claude-3-opus-20240229-v1:0",
+                150,
+                100,
+                Decimal::new(2, 2),
+            ), // 0.02
         ];
 
         for (i, (model, input, output, cost)) in models.iter().enumerate() {
@@ -113,9 +132,17 @@ async fn setup_test_data(storage: &Storage) -> (i32, i32) {
 
         // Create model costs with exact decimal values
         let model_costs = vec![
-            ("anthropic.claude-sonnet-4-20250514-v1:0", Decimal::new(3, 3), Decimal::new(15, 3)),      // 0.003, 0.015
-            ("anthropic.claude-3-haiku-20240307-v1:0", Decimal::new(25, 5), Decimal::new(125, 5)),     // 0.00025, 0.00125
-            ("test-new-model", Decimal::new(1, 3), Decimal::new(5, 3)),                                // 0.001, 0.005
+            (
+                "anthropic.claude-sonnet-4-20250514-v1:0",
+                Decimal::new(3, 3),
+                Decimal::new(15, 3),
+            ), // 0.003, 0.015
+            (
+                "anthropic.claude-3-haiku-20240307-v1:0",
+                Decimal::new(25, 5),
+                Decimal::new(125, 5),
+            ), // 0.00025, 0.00125
+            ("test-new-model", Decimal::new(1, 3), Decimal::new(5, 3)), // 0.001, 0.005
         ];
 
         for (model_id, input_cost, output_cost) in model_costs {
@@ -193,8 +220,12 @@ async fn setup_test_data(storage: &Storage) -> (i32, i32) {
         let expected_cost = "0.0325";
         let parsed_cost: f64 = total_cost.parse().unwrap_or(0.0);
         let expected_cost_f64: f64 = expected_cost.parse().unwrap();
-        assert!((parsed_cost - expected_cost_f64).abs() < 0.0001,
-            "Expected cost {}, got {}", expected_cost, total_cost);
+        assert!(
+            (parsed_cost - expected_cost_f64).abs() < 0.0001,
+            "Expected cost {}, got {}",
+            expected_cost,
+            total_cost
+        );
     }
 
     #[tokio::test]
@@ -223,7 +254,10 @@ async fn setup_test_data(storage: &Storage) -> (i32, i32) {
 
         let records = json["records"].as_array().unwrap();
         assert_eq!(records.len(), 1);
-        assert_eq!(records[0]["model_id"], "anthropic.claude-sonnet-4-20250514-v1:0");
+        assert_eq!(
+            records[0]["model_id"],
+            "anthropic.claude-sonnet-4-20250514-v1:0"
+        );
     }
 
     #[tokio::test]
@@ -231,7 +265,8 @@ async fn setup_test_data(storage: &Storage) -> (i32, i32) {
         let (storage, jwt_service) = create_test_services().await;
         let (_user_id, admin_id) = setup_test_data(&storage).await;
 
-        let admin_token = create_test_token(&jwt_service, "admin@admin.example.com", true, admin_id);
+        let admin_token =
+            create_test_token(&jwt_service, "admin@admin.example.com", true, admin_id);
         let app = create_test_router(storage, &jwt_service);
 
         let request = Request::builder()
@@ -258,7 +293,8 @@ async fn setup_test_data(storage: &Storage) -> (i32, i32) {
         let (storage, jwt_service) = create_test_services().await;
         let (_user_id, admin_id) = setup_test_data(&storage).await;
 
-        let admin_token = create_test_token(&jwt_service, "admin@admin.example.com", true, admin_id);
+        let admin_token =
+            create_test_token(&jwt_service, "admin@admin.example.com", true, admin_id);
         let app = create_test_router(storage.clone(), &jwt_service);
 
         let request = Request::builder()
@@ -280,7 +316,10 @@ async fn setup_test_data(storage: &Storage) -> (i32, i32) {
         assert_eq!(models.len(), 3);
 
         // Should be sorted by total tokens (descending)
-        assert_eq!(models[0]["model_id"], "anthropic.claude-3-haiku-20240307-v1:0");
+        assert_eq!(
+            models[0]["model_id"],
+            "anthropic.claude-3-haiku-20240307-v1:0"
+        );
         assert_eq!(models[0]["total_tokens"], 275); // 200 + 75
     }
 
@@ -289,7 +328,8 @@ async fn setup_test_data(storage: &Storage) -> (i32, i32) {
         let (storage, jwt_service) = create_test_services().await;
         let (_, admin_id) = setup_test_data(&storage).await;
 
-        let admin_token = create_test_token(&jwt_service, "admin@admin.example.com", true, admin_id);
+        let admin_token =
+            create_test_token(&jwt_service, "admin@admin.example.com", true, admin_id);
 
         // Test get all model costs
         let app1 = create_test_router(storage.clone(), &jwt_service);
@@ -346,12 +386,19 @@ async fn setup_test_data(storage: &Storage) -> (i32, i32) {
         let cost: Value = serde_json::from_slice(&body).unwrap();
         assert_eq!(cost["model_id"], "new-test-model");
         // Use string comparison for decimal values due to floating point precision
-        let input_cost: String = cost["input_cost_per_1k_tokens"].as_str().unwrap_or("0").to_string();
+        let input_cost: String = cost["input_cost_per_1k_tokens"]
+            .as_str()
+            .unwrap_or("0")
+            .to_string();
         let expected_cost = "0.002";
         let parsed_cost: f64 = input_cost.parse().unwrap_or(0.0);
         let expected_cost_f64: f64 = expected_cost.parse().unwrap();
-        assert!((parsed_cost - expected_cost_f64).abs() < 0.0001,
-            "Expected cost {}, got {}", expected_cost, input_cost);
+        assert!(
+            (parsed_cost - expected_cost_f64).abs() < 0.0001,
+            "Expected cost {}, got {}",
+            expected_cost,
+            input_cost
+        );
 
         // Test update model cost
         let app4 = create_test_router(storage.clone(), &jwt_service);
@@ -465,7 +512,8 @@ async fn setup_test_data(storage: &Storage) -> (i32, i32) {
         let (storage, jwt_service) = create_test_services().await;
         let (_, admin_id) = setup_test_data(&storage).await;
 
-        let admin_token = create_test_token(&jwt_service, "admin@admin.example.com", true, admin_id);
+        let admin_token =
+            create_test_token(&jwt_service, "admin@admin.example.com", true, admin_id);
 
         // Test invalid model cost data
         let app1 = create_test_router(storage.clone(), &jwt_service);

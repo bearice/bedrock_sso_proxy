@@ -225,6 +225,9 @@ pub trait DatabaseStorage: Send + Sync {
         provider_user_id: &str,
     ) -> StorageResult<Option<UserRecord>>;
 
+    /// Get user by database ID
+    async fn get_user_by_id(&self, user_id: i32) -> StorageResult<Option<UserRecord>>;
+
     /// Get user by email
     async fn get_user_by_email(&self, email: &str) -> StorageResult<Option<UserRecord>>;
 

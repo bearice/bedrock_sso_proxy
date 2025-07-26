@@ -64,7 +64,7 @@ pub fn transform_anthropic_to_bedrock(
                 system.as_str().unwrap_or("").to_string()
             }
         };
-        
+
         if !system_string.is_empty() {
             bedrock_request["system"] = json!(system_string);
         }
@@ -525,7 +525,7 @@ mod tests {
     fn test_system_field_as_array() {
         let mapper = create_test_mapper();
         let mut request = create_test_anthropic_request();
-        
+
         // Set system field as array of content blocks (like the failing request)
         request.system = Some(json!([{
             "type": "text",
@@ -543,7 +543,7 @@ mod tests {
     fn test_system_field_as_string() {
         let mapper = create_test_mapper();
         let mut request = create_test_anthropic_request();
-        
+
         // Set system field as simple string
         request.system = Some(json!("You are a helpful assistant."));
 

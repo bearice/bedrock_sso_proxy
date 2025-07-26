@@ -112,15 +112,17 @@ async fn build_pricing_data() -> Result<(), Box<dyn std::error::Error>> {
     let pricing_json_path = Path::new("aws_pricing.json");
 
     // Check if we should fetch fresh pricing data
-    let should_fetch = env::var("BEDROCK_FETCH_PRICING").is_ok() ||
-                      env::var("PROFILE").unwrap_or_default() == "release" ||
-                      !pricing_json_path.exists() ||
-                      is_file_too_old(pricing_json_path, 30)?;
+    let should_fetch = env::var("BEDROCK_FETCH_PRICING").is_ok()
+        || env::var("PROFILE").unwrap_or_default() == "release"
+        || !pricing_json_path.exists()
+        || is_file_too_old(pricing_json_path, 30)?;
 
     if should_fetch {
         println!("cargo:warning=Fetching AWS Bedrock pricing data...");
 
-        fetch_and_save_pricing_json(pricing_json_path).await.expect("");
+        fetch_and_save_pricing_json(pricing_json_path)
+            .await
+            .expect("");
     }
     // Tell cargo to watch the pricing directory
     println!("cargo:rerun-if-changed=pricing/");
@@ -129,7 +131,10 @@ async fn build_pricing_data() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 /// Check if file is older than specified days
-fn is_file_too_old(path: &std::path::Path, max_age_days: u64) -> Result<bool, Box<dyn std::error::Error>> {
+fn is_file_too_old(
+    path: &std::path::Path,
+    max_age_days: u64,
+) -> Result<bool, Box<dyn std::error::Error>> {
     let metadata = std::fs::metadata(path)?;
     let modified = metadata.modified()?;
     let age = std::time::SystemTime::now().duration_since(modified)?;
@@ -138,11 +143,17 @@ fn is_file_too_old(path: &std::path::Path, max_age_days: u64) -> Result<bool, Bo
 }
 
 /// Fetch pricing data from AWS and save as JSON
-async fn fetch_and_save_pricing_json(json_path: &std::path::Path) -> Result<(), Box<dyn std::error::Error>> {
+async fn fetch_and_save_pricing_json(
+    json_path: &std::path::Path,
+) -> Result<(), Box<dyn std::error::Error>> {
     let client = reqwest::Client::new();
-    let pricing_url = "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonBedrock/current/index.json";
+    let pricing_url =
+        "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonBedrock/current/index.json";
 
-    println!("cargo:warning=Downloading AWS Bedrock pricing from: {}", pricing_url);
+    println!(
+        "cargo:warning=Downloading AWS Bedrock pricing from: {}",
+        pricing_url
+    );
 
     let response = client
         .get(pricing_url)
@@ -159,7 +170,10 @@ async fn fetch_and_save_pricing_json(json_path: &std::path::Path) -> Result<(), 
     // Save the raw JSON data
     std::fs::write(json_path, serde_json::to_string_pretty(&pricing_data)?)?;
 
-    println!("cargo:warning=Successfully saved AWS pricing data to: {}", json_path.display());
+    println!(
+        "cargo:warning=Successfully saved AWS pricing data to: {}",
+        json_path.display()
+    );
 
     Ok(())
 }

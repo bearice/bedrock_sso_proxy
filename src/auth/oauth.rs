@@ -3,7 +3,7 @@ use crate::{
     config::{Config, OAuthProvider},
     error::AppError,
     health::{HealthCheckResult, HealthChecker},
-    storage::{CachedValidation, StateData, Storage},
+    storage::{StateData, Storage},
 };
 use chrono::{Duration as ChronoDuration, Utc};
 use oauth2::{
@@ -61,14 +61,6 @@ pub struct ProvidersResponse {
     pub providers: Vec<ProviderInfo>,
 }
 
-#[derive(Debug, Serialize)]
-pub struct ValidationResponse {
-    pub valid: bool,
-    pub sub: String,
-    pub provider: String,
-    pub expires_at: i64,
-}
-
 pub struct OAuthService {
     config: Config,
     jwt_service: JwtService,
@@ -84,6 +76,14 @@ impl OAuthService {
             http_client: Client::new(),
             storage,
         }
+    }
+
+    /// Get user by database ID
+    pub async fn get_user_by_id(
+        &self,
+        user_id: i32,
+    ) -> Result<Option<crate::storage::UserRecord>, crate::storage::StorageError> {
+        self.storage.database.get_user_by_id(user_id).await
     }
 
     pub async fn get_authorization_url(
@@ -296,21 +296,14 @@ impl OAuthService {
                     audit_err
                 );
             }
-            
+
             db_user_id
         };
 
-        // Create composite user ID
-        let composite_user_id = format!("{}:{}", request.provider, user_id);
-
         // Create OAuth JWT token (long-lived, no refresh token needed for Claude Code)
         let oauth_claims = OAuthClaims::new(
-            composite_user_id,
-            request.provider.clone(),
-            email.to_string(),
-            db_user_id,
+            db_user_id, // Use database user ID as subject
             self.config.jwt.access_token_ttl,
-            None, // No refresh token - JWT is long-lived
         );
 
         let access_token = self.jwt_service.create_oauth_token(&oauth_claims)?;
@@ -465,7 +458,7 @@ impl OAuthService {
             })?;
 
         // Use email from token data (available from database storage)
-        let email = if token_data.email.is_empty() {
+        let _email = if token_data.email.is_empty() {
             // Fallback for cache-based tokens that don't have email
             format!("user@{}.com", token_data.provider)
         } else {
@@ -474,12 +467,14 @@ impl OAuthService {
 
         // Lookup database user ID from composite user_id
         // Extract provider user ID from composite (format: "provider:user_id")
-        let provider_user_id = token_data.user_id
+        let provider_user_id = token_data
+            .user_id
             .split_once(':')
             .map(|(_, id)| id)
             .unwrap_or(&token_data.user_id);
-            
-        let db_user_id = self.storage
+
+        let db_user_id = self
+            .storage
             .database
             .get_user_by_provider(&token_data.provider, provider_user_id)
             .await
@@ -489,12 +484,8 @@ impl OAuthService {
 
         // Create new OAuth JWT token
         let oauth_claims = OAuthClaims::new(
-            token_data.user_id,
-            token_data.provider.clone(),
-            email,
-            db_user_id,
+            db_user_id, // Use database user ID as subject
             self.config.jwt.access_token_ttl,
-            Some(new_refresh_token.clone()),
         );
 
         let access_token = self.jwt_service.create_oauth_token(&oauth_claims)?;
@@ -533,31 +524,6 @@ impl OAuthService {
             .ok()
             .flatten()
             .map(|state_data| state_data.redirect_uri)
-    }
-
-    pub async fn validate_token(&self, token: &str) -> Result<ValidationResponse, AppError> {
-        // Check cache first
-        if let Some(cached) = self.get_validation_internal(token).await? {
-            return Ok(ValidationResponse {
-                valid: true,
-                sub: cached.user_id,
-                provider: cached.provider,
-                expires_at: cached.expires_at.timestamp(),
-            });
-        }
-
-        // Validate token with JWT service
-        let claims = self.jwt_service.validate_oauth_token(token)?;
-
-        // Cache the validation result (claims are cloned into cache)
-        self.set_validation_internal(token, &claims).await?;
-
-        Ok(ValidationResponse {
-            valid: true,
-            sub: claims.sub,
-            provider: claims.provider,
-            expires_at: claims.exp as i64,
-        })
     }
 
     fn create_oauth_client(&self, provider: &OAuthProvider) -> Result<BasicClient, AppError> {
@@ -737,13 +703,6 @@ impl HealthChecker for OAuthHealthChecker {
     }
 }
 
-// Helper functions for cache operations
-fn hash_token(token: &str) -> String {
-    let mut hasher = Sha256::new();
-    hasher.update(token.as_bytes());
-    format!("{:x}", hasher.finalize())
-}
-
 impl OAuthService {
     // State management methods
     async fn create_state_internal(
@@ -793,41 +752,6 @@ impl OAuthService {
     }
 
     // Refresh token methods - removed unused internal methods
-
-    // Validation cache methods
-    async fn get_validation_internal(
-        &self,
-        token: &str,
-    ) -> Result<Option<CachedValidation>, AppError> {
-        let token_hash = hash_token(token);
-        self.storage
-            .cache
-            .get_validation(&token_hash)
-            .await
-            .map_err(|e| AppError::Internal(format!("Failed to get validation: {}", e)))
-    }
-
-    async fn set_validation_internal(
-        &self,
-        token: &str,
-        claims: &OAuthClaims,
-    ) -> Result<(), AppError> {
-        let token_hash = hash_token(token);
-        let validation = CachedValidation {
-            user_id: claims.sub.clone(),
-            provider: claims.provider.clone(),
-            email: claims.email.clone(),
-            validated_at: Utc::now(),
-            expires_at: Utc::now() + ChronoDuration::seconds(claims.exp as i64),
-            scopes: vec!["bedrock:invoke".to_string()],
-        };
-
-        self.storage
-            .cache
-            .store_validation(&token_hash, &validation, self.config.cache.validation_ttl)
-            .await
-            .map_err(|e| AppError::Internal(format!("Failed to store validation: {}", e)))
-    }
 }
 
 #[cfg(test)]
@@ -878,7 +802,11 @@ mod tests {
     async fn create_test_storage() -> Arc<Storage> {
         let storage = Arc::new(Storage::new(
             Box::new(crate::storage::memory::MemoryCacheStorage::new(3600)),
-            Box::new(crate::storage::database::SqliteStorage::new("sqlite::memory:").await.unwrap()),
+            Box::new(
+                crate::storage::database::SqliteStorage::new("sqlite::memory:")
+                    .await
+                    .unwrap(),
+            ),
         ));
         storage.migrate().await.unwrap();
         storage
@@ -964,34 +892,5 @@ mod tests {
         assert_eq!(oauth_service.get_display_name("auth0"), "Auth0");
         assert_eq!(oauth_service.get_display_name("okta"), "Okta");
         assert_eq!(oauth_service.get_display_name("custom"), "custom");
-    }
-
-    #[tokio::test]
-    async fn test_validate_oauth_token() {
-        let config = create_test_config();
-        let storage = create_test_storage().await;
-        let jwt_service = JwtService::new("test-secret".to_string(), Algorithm::HS256).unwrap();
-        let oauth_service = OAuthService::new(config, jwt_service.clone(), storage);
-
-        // Create a test OAuth token
-        let claims = OAuthClaims::new(
-            "google:123".to_string(),
-            "google".to_string(),
-            "test@example.com".to_string(),
-            1, // user_id
-            3600,
-            None,
-        );
-
-        let token = jwt_service.create_oauth_token(&claims).unwrap();
-
-        // Validate the token
-        let result = oauth_service.validate_token(&token).await;
-        assert!(result.is_ok());
-
-        let validation = result.unwrap();
-        assert!(validation.valid);
-        assert_eq!(validation.sub, "google:123");
-        assert_eq!(validation.provider, "google");
     }
 }

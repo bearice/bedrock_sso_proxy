@@ -1,6 +1,4 @@
-use super::{
-    CacheStorage, CachedValidation,  StateData, StorageResult
-};
+use super::{CacheStorage, CachedValidation, StateData, StorageResult};
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use dashmap::DashMap;
@@ -137,7 +135,6 @@ impl CacheStorage for MemoryCacheStorage {
         Ok(())
     }
 }
-
 
 #[cfg(test)]
 mod tests {

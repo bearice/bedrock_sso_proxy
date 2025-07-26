@@ -22,13 +22,6 @@ export interface TokenResponse {
   scope: string;
 }
 
-export interface ValidationResponse {
-  valid: boolean;
-  sub: string;
-  provider: string;
-  expires_at: number;
-  scopes: string[];
-}
 
 export interface TokenRequest {
   provider: string;

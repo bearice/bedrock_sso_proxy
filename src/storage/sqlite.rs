@@ -1,12 +1,11 @@
 use super::{
     AuditLogEntry, DatabaseStorage, RefreshTokenData, StorageError, StorageResult, StoredModelCost,
-    UsageQuery, UsageRecord, UsageStats, UsageSummary, UserRecord,
-    query_builder::UsageQueryHelper,
+    UsageQuery, UsageRecord, UsageStats, UsageSummary, UserRecord, query_builder::UsageQueryHelper,
 };
-use rust_decimal::Decimal;
 use async_trait::async_trait;
 use chrono::Utc;
-use sqlx::{Pool, Sqlite, Row, migrate::MigrateDatabase};
+use rust_decimal::Decimal;
+use sqlx::{Pool, Row, Sqlite, migrate::MigrateDatabase};
 
 /// SQLite database storage implementation
 pub struct SqliteStorage {
@@ -18,7 +17,7 @@ impl SqliteStorage {
     fn f64_to_decimal(value: f64) -> Decimal {
         Decimal::from_f64_retain(value).unwrap_or_default()
     }
-    
+
     /// Convert Option<f64> to Option<Decimal> for SQLite compatibility
     fn f64_to_decimal_opt(value: Option<f64>) -> Option<Decimal> {
         value.and_then(Decimal::from_f64_retain)
@@ -103,6 +102,30 @@ impl DatabaseStorage for SqliteStorage {
         .fetch_optional(&self.pool)
         .await
         .map_err(|e| StorageError::Database(format!("Failed to get user by provider: {}", e)))?;
+
+        match row {
+            Some(row) => Ok(Some(UserRecord {
+                id: Some(row.get("id")),
+                provider_user_id: row.get("provider_user_id"),
+                provider: row.get("provider"),
+                email: row.get("email"),
+                display_name: row.get("display_name"),
+                created_at: row.get("created_at"),
+                updated_at: row.get("updated_at"),
+                last_login: row.get("last_login"),
+            })),
+            None => Ok(None),
+        }
+    }
+
+    async fn get_user_by_id(&self, user_id: i32) -> StorageResult<Option<UserRecord>> {
+        let row = sqlx::query(
+            "SELECT id, provider_user_id, provider, email, display_name, created_at, updated_at, last_login FROM users WHERE id = ?1",
+        )
+        .bind(user_id)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(|e| StorageError::Database(format!("Failed to get user by ID: {}", e)))?;
 
         match row {
             Some(row) => Ok(Some(UserRecord {
@@ -428,7 +451,9 @@ impl DatabaseStorage for SqliteStorage {
                 id: Some(row.get("id")),
                 model_id: row.get("model_id"),
                 input_cost_per_1k_tokens: Self::f64_to_decimal(row.get("input_cost_per_1k_tokens")),
-                output_cost_per_1k_tokens: Self::f64_to_decimal(row.get("output_cost_per_1k_tokens")),
+                output_cost_per_1k_tokens: Self::f64_to_decimal(
+                    row.get("output_cost_per_1k_tokens"),
+                ),
                 updated_at: row.get("updated_at"),
             })),
             None => Ok(None),
@@ -472,7 +497,9 @@ impl DatabaseStorage for SqliteStorage {
                 id: Some(row.get("id")),
                 model_id: row.get("model_id"),
                 input_cost_per_1k_tokens: Self::f64_to_decimal(row.get("input_cost_per_1k_tokens")),
-                output_cost_per_1k_tokens: Self::f64_to_decimal(row.get("output_cost_per_1k_tokens")),
+                output_cost_per_1k_tokens: Self::f64_to_decimal(
+                    row.get("output_cost_per_1k_tokens"),
+                ),
                 updated_at: row.get("updated_at"),
             });
         }
@@ -578,7 +605,9 @@ impl DatabaseStorage for SqliteStorage {
         let rows = sqlx::query("SELECT DISTINCT model_id FROM usage_records ORDER BY model_id")
             .fetch_all(&self.pool)
             .await
-            .map_err(|e| StorageError::Database(format!("Failed to get unique model IDs: {}", e)))?;
+            .map_err(|e| {
+                StorageError::Database(format!("Failed to get unique model IDs: {}", e))
+            })?;
 
         let mut model_ids = Vec::new();
         for row in rows {

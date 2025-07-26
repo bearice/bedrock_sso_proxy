@@ -2,7 +2,6 @@ import {
   ProvidersResponse,
   AuthorizeResponse,
   TokenResponse,
-  ValidationResponse,
   TokenRequest,
   RefreshRequest,
 } from '../types/auth';
@@ -77,15 +76,6 @@ export const authApi = {
     return fetchApi<TokenResponse>('/auth/refresh', {
       method: 'POST',
       body: JSON.stringify(request),
-    });
-  },
-
-  // Validate JWT token
-  async validateToken(token: string): Promise<ValidationResponse> {
-    return fetchApi<ValidationResponse>('/auth/validate', {
-      headers: {
-        Authorization: `Bearer ${token}`,
-      },
     });
   },
 

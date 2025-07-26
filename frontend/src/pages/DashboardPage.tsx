@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { useAuth } from '../hooks/useAuth';
 import {
   LogOut,
@@ -13,12 +13,47 @@ import {
   FileText,
 } from 'lucide-react';
 
+interface UserInfo {
+  id?: number;
+  provider_user_id: string;
+  provider: string;
+  email: string;
+  display_name?: string;
+  created_at: string;
+  last_login?: string;
+}
+
 export function DashboardPage() {
   const { token, refreshToken, provider, user, expiresAt, scopes, refreshTokens, logout } =
     useAuth();
 
   const [copied, setCopied] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
+  const [userInfo, setUserInfo] = useState<UserInfo | null>(null);
+
+  // Fetch user info from /auth/me API
+  useEffect(() => {
+    const fetchUserInfo = async () => {
+      if (!token) return;
+      
+      try {
+        const response = await fetch('/auth/me', {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+          },
+        });
+        
+        if (response.ok) {
+          const data = await response.json();
+          setUserInfo(data);
+        }
+      } catch (error) {
+        console.error('Failed to fetch user info:', error);
+      }
+    };
+
+    fetchUserInfo();
+  }, [token]);
 
   const copyToClipboard = useCallback(async (text: string, type: string) => {
     try {
@@ -56,26 +91,30 @@ export function DashboardPage() {
   const formatExpirationTime = (timestamp: number) => {
     const now = Date.now() / 1000;
     const diff = timestamp - now;
+    const expirationDate = new Date(timestamp * 1000);
 
     if (diff <= 0) {
-      return 'Expired';
+      return `Expired on ${expirationDate.toLocaleDateString()}`;
     }
 
     const days = Math.floor(diff / (24 * 3600));
     const hours = Math.floor((diff % (24 * 3600)) / 3600);
 
+    let relativeTime = '';
     if (days > 30) {
       const months = Math.floor(days / 30);
-      return `${months} month${months > 1 ? 's' : ''} remaining`;
+      relativeTime = `${months} month${months > 1 ? 's' : ''} remaining`;
     } else if (days > 0) {
-      return `${days} day${days > 1 ? 's' : ''} remaining`;
+      relativeTime = `${days} day${days > 1 ? 's' : ''} remaining`;
     } else if (hours > 0) {
       const minutes = Math.floor((diff % 3600) / 60);
-      return `${hours}h ${minutes}m remaining`;
+      relativeTime = `${hours}h ${minutes}m remaining`;
     } else {
       const minutes = Math.floor(diff / 60);
-      return `${minutes} minute${minutes > 1 ? 's' : ''} remaining`;
+      relativeTime = `${minutes} minute${minutes > 1 ? 's' : ''} remaining`;
     }
+
+    return `${relativeTime} (expires ${expirationDate.toLocaleDateString()} at ${expirationDate.toLocaleTimeString()})`;
   };
 
   const getProviderDisplayName = (provider: string) => {
@@ -100,10 +139,10 @@ export function DashboardPage() {
           <div className="user-details">
             <h3>
               <User size={20} style={{ marginRight: '0.5rem', verticalAlign: 'text-bottom' }} />
-              Welcome back!
+              Welcome back, {userInfo?.display_name || userInfo?.email || user}!
             </h3>
             <p>
-              <strong>User ID:</strong> {user}
+              <strong>Email:</strong> {userInfo?.email || user}
             </p>
             <p>
               <strong>Provider:</strong> {getProviderDisplayName(provider || '')}
@@ -147,6 +186,76 @@ export function DashboardPage() {
             )}
           </div>
         )}
+      </div>
+
+      {/* Claude Code Quick Start */}
+      <div className="card" style={{ background: '#f8fafc', border: '2px solid #4f46e5', borderRadius: '12px' }}>
+        <h2 style={{ color: '#4f46e5', fontSize: '1.5rem', marginBottom: '1rem' }}>
+          <Terminal size={24} style={{ marginRight: '0.5rem', verticalAlign: 'text-bottom' }} />
+          🚀 Use with Claude Code
+        </h2>
+        <p style={{ fontSize: '1.1rem', marginBottom: '1.5rem', color: '#374151', fontWeight: '500' }}>
+          Ready to use! Copy this command to use Claude Code with your authenticated proxy:
+        </p>
+
+        <div style={{
+          background: '#1f2937',
+          color: '#f9fafb',
+          padding: '1rem',
+          borderRadius: '8px',
+          marginBottom: '1rem',
+          fontFamily: 'monospace',
+          fontSize: '0.9rem',
+          wordBreak: 'break-all',
+          border: '1px solid #374151'
+        }}>
+          export ANTHROPIC_AUTH_TOKEN={token?.substring(0, 40)}...<br />
+          export ANTHROPIC_BASE_URL={currentDomain}/anthropic<br />
+          claude
+        </div>
+
+        <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
+          <button
+            onClick={() => copyToClipboard(
+              `export ANTHROPIC_AUTH_TOKEN=${token}\nexport ANTHROPIC_BASE_URL=${currentDomain}/anthropic\nclaude`,
+              'claude-command'
+            )}
+            className="btn"
+            style={{
+              background: '#4f46e5',
+              color: 'white',
+              border: '1px solid #4f46e5'
+            }}
+          >
+            <Copy size={16} />
+            {copied === 'claude-command' ? 'Copied!' : 'Copy Full Command'}
+          </button>
+
+          <button
+            onClick={() => copyToClipboard(token!, 'token-quick')}
+            className="btn"
+            style={{
+              background: '#6b7280',
+              color: 'white',
+              border: '1px solid #6b7280'
+            }}
+          >
+            <Key size={16} />
+            {copied === 'token-quick' ? 'Copied!' : 'Copy Token Only'}
+          </button>
+        </div>
+
+        <div style={{
+          background: '#ecfdf5',
+          color: '#047857',
+          padding: '0.75rem',
+          borderRadius: '6px',
+          marginTop: '1rem',
+          fontSize: '0.9rem',
+          border: '1px solid #a7f3d0'
+        }}>
+          💡 <strong>Quick tip:</strong> Run this command in your terminal to start using Claude Code with this proxy immediately!
+        </div>
       </div>
 
       {/* Token Display */}

@@ -351,10 +351,10 @@ mod tests {
     #[tokio::test]
     async fn test_postgres_storage_factory() {
         use crate::storage::postgres::tests::create_test_postgres_db;
-        
+
         let test_db = create_test_postgres_db().await
             .expect("PostgreSQL database must be available for testing. Set POSTGRES_ADMIN_URL or ensure PostgreSQL is running.");
-        
+
         let database_url = format!("postgres://localhost/{}", test_db.db_name);
 
         let config = StorageFactoryConfig {
@@ -415,7 +415,10 @@ mod tests {
             .unwrap();
         let retrieved_validation = storage.cache.get_validation("factory-key").await.unwrap();
         assert!(retrieved_validation.is_some());
-        assert_eq!(retrieved_validation.unwrap().user_id, "factory-user-postgres");
+        assert_eq!(
+            retrieved_validation.unwrap().user_id,
+            "factory-user-postgres"
+        );
     }
 
     #[tokio::test]
@@ -518,13 +521,14 @@ mod tests {
         let postgres_url = std::env::var("POSTGRES_TEST_URL")
             .unwrap_or_else(|_| "postgres://localhost/bedrock_sso_test".to_string());
 
-        let storage = match StorageFactory::create_production_storage(redis_url, &postgres_url).await {
-            Ok(storage) => storage,
-            Err(_) => {
-                eprintln!("Skipping production storage test - services not available");
-                return;
-            }
-        };
+        let storage =
+            match StorageFactory::create_production_storage(redis_url, &postgres_url).await {
+                Ok(storage) => storage,
+                Err(_) => {
+                    eprintln!("Skipping production storage test - services not available");
+                    return;
+                }
+            };
 
         // Test health check works for production configuration
         storage.health_check().await.unwrap();

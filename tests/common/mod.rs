@@ -3,14 +3,10 @@ use axum::{
     body::Body,
     http::{Method, Request, StatusCode},
 };
-use bedrock_sso_proxy::{
-    Config, Server,
-    auth::jwt::Claims,
-};
+use bedrock_sso_proxy::{Config, Server, auth::OAuthClaims};
 use jsonwebtoken::{Algorithm, DecodingKey, EncodingKey, Header, Validation, decode, encode};
 use std::time::{SystemTime, UNIX_EPOCH};
 use tower::ServiceExt;
-
 
 /// Unified test harness that handles app setup and token management
 pub struct TestHarness {
@@ -19,7 +15,6 @@ pub struct TestHarness {
     pub app: Router,
     pub jwt_secret: String,
 }
-
 
 impl TestHarness {
     /// Create test harness with default secret
@@ -34,7 +29,7 @@ impl TestHarness {
         config.storage.redis.enabled = false;
         config.storage.database.enabled = false;
         config.metrics.enabled = false;
-        
+
         // Add test AWS credentials for integration tests
         config.aws.access_key_id = Some("test-access-key".to_string());
         config.aws.secret_access_key = Some("test-secret-key".to_string());
@@ -49,9 +44,8 @@ impl TestHarness {
         }
     }
 
-
     /// Create JWT token from claims
-    pub fn create_token(&self, claims: &Claims) -> String {
+    pub fn create_token(&self, claims: &OAuthClaims) -> String {
         encode(
             &Header::default(),
             claims,
@@ -62,60 +56,29 @@ impl TestHarness {
 
     /// Create JWT token for integration tests
     #[allow(dead_code)]
-    pub fn create_integration_token(
-        &self,
-        sub: &str,
-        user_id: i32,
-    ) -> String {
-        let now = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_secs() as usize;
-
-        let claims = Claims {
-            sub: sub.to_string(),
-            exp: now + 3600, // 1 hour expiry
-            user_id,
-        };
+    pub fn create_integration_token(&self, sub: i32) -> String {
+        let claims = OAuthClaims::new(sub, 3600);
         self.create_token(&claims)
     }
 
     /// Create JWT token for security tests
     #[allow(dead_code)]
-    pub fn create_security_token(&self, sub: &str, exp_offset: i64) -> String {
+    pub fn create_security_token(&self, sub: i32, exp_offset: i64) -> String {
         let now = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap()
             .as_secs() as i64;
         let exp = (now + exp_offset) as usize;
 
-        let claims = Claims {
-            sub: sub.to_string(),
-            exp,
-            user_id: 456, // Test user ID for security tests
-        };
+        let mut claims = OAuthClaims::new(sub, 3600);
+        claims.exp = exp;
         self.create_token(&claims)
     }
 
     /// Create JWT token with custom expiry
     #[allow(dead_code)]
-    pub fn create_token_with_expiry(
-        &self,
-        sub: &str,
-        exp_offset: i64,
-        user_id: i32,
-    ) -> String {
-        let now = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_secs() as i64;
-        let exp = (now + exp_offset) as usize;
-
-        let claims = Claims {
-            sub: sub.to_string(),
-            exp,
-            user_id,
-        };
+    pub fn create_token_with_expiry(&self, sub: i32, exp: u64) -> String {
+        let claims: OAuthClaims = OAuthClaims::new(sub, exp);
         self.create_token(&claims)
     }
 
@@ -126,11 +89,11 @@ impl TestHarness {
 
     /// Verify JWT token
     #[allow(dead_code)]
-    pub fn verify_token(&self, token: &str) -> Result<Claims, jsonwebtoken::errors::Error> {
+    pub fn verify_token(&self, token: &str) -> Result<OAuthClaims, jsonwebtoken::errors::Error> {
         let mut validation = Validation::new(Algorithm::HS256);
         validation.validate_exp = true;
 
-        let token_data = decode::<Claims>(
+        let token_data = decode::<OAuthClaims>(
             token,
             &DecodingKey::from_secret(self.jwt_secret.as_ref()),
             &validation,

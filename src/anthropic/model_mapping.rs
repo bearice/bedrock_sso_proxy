@@ -495,7 +495,8 @@ mod tests {
         for anthropic_model in test_models {
             let bedrock_model = mapper.anthropic_to_bedrock(anthropic_model).unwrap();
             // Strip region prefix for reverse mapping test
-            let bedrock_without_prefix = bedrock_model.strip_prefix("us.").unwrap_or(&bedrock_model);
+            let bedrock_without_prefix =
+                bedrock_model.strip_prefix("us.").unwrap_or(&bedrock_model);
             let back_to_anthropic = mapper.bedrock_to_anthropic(bedrock_without_prefix).unwrap();
             assert_eq!(anthropic_model, back_to_anthropic);
         }

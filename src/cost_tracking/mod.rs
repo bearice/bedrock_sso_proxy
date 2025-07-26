@@ -24,7 +24,7 @@ impl CostTrackingService {
     /// Update costs for all models from AWS API (no fallback - fails if API unavailable)
     pub async fn update_all_model_costs(&self) -> Result<UpdateCostsResult, AppError> {
         info!("Starting cost update for all models from AWS API");
-        
+
         let mut result = UpdateCostsResult {
             updated_models: Vec::new(),
             failed_models: Vec::new(),
@@ -32,18 +32,32 @@ impl CostTrackingService {
         };
 
         // Get all live pricing data from AWS API (fails if API unavailable)
-        let all_live_pricing = self.pricing_client.fetch_all_models_from_aws().await
-            .map_err(|e| AppError::Internal(format!("Failed to fetch live pricing from AWS API: {}", e)))?;
+        let all_live_pricing = self
+            .pricing_client
+            .fetch_all_models_from_aws()
+            .await
+            .map_err(|e| {
+                AppError::Internal(format!("Failed to fetch live pricing from AWS API: {}", e))
+            })?;
 
         result.total_processed = all_live_pricing.len();
-        info!("Processing {} models for cost updates from AWS API", all_live_pricing.len());
+        info!(
+            "Processing {} models for cost updates from AWS API",
+            all_live_pricing.len()
+        );
 
         for pricing in all_live_pricing {
             let stored_cost = crate::storage::StoredModelCost {
                 id: None,
                 model_id: pricing.model_id.clone(),
-                input_cost_per_1k_tokens: Decimal::from_f64_retain(pricing.input_cost_per_1k_tokens).unwrap_or_default(),
-                output_cost_per_1k_tokens: Decimal::from_f64_retain(pricing.output_cost_per_1k_tokens).unwrap_or_default(),
+                input_cost_per_1k_tokens: Decimal::from_f64_retain(
+                    pricing.input_cost_per_1k_tokens,
+                )
+                .unwrap_or_default(),
+                output_cost_per_1k_tokens: Decimal::from_f64_retain(
+                    pricing.output_cost_per_1k_tokens,
+                )
+                .unwrap_or_default(),
                 updated_at: pricing.updated_at,
             };
 
@@ -83,9 +97,11 @@ impl CostTrackingService {
     }
 
     /// Initialize model costs from embedded data (only if database is empty)
-    pub async fn initialize_model_costs_from_embedded(&self) -> Result<UpdateCostsResult, AppError> {
+    pub async fn initialize_model_costs_from_embedded(
+        &self,
+    ) -> Result<UpdateCostsResult, AppError> {
         info!("Initializing model costs from embedded pricing data");
-        
+
         let mut result = UpdateCostsResult {
             updated_models: Vec::new(),
             failed_models: Vec::new(),
@@ -93,17 +109,28 @@ impl CostTrackingService {
         };
 
         // Get all pricing data from embedded AWS pricing file
-        let all_pricing = self.pricing_client.load_all_models_from_embedded().await
-            .map_err(|e| AppError::Internal(format!("Failed to get embedded pricing data: {}", e)))?;
-        
+        let all_pricing = self
+            .pricing_client
+            .load_all_models_from_embedded()
+            .await
+            .map_err(|e| {
+                AppError::Internal(format!("Failed to get embedded pricing data: {}", e))
+            })?;
+
         result.total_processed = all_pricing.len();
 
         for pricing in all_pricing {
             let stored_cost = crate::storage::StoredModelCost {
                 id: None,
                 model_id: pricing.model_id.clone(),
-                input_cost_per_1k_tokens: Decimal::from_f64_retain(pricing.input_cost_per_1k_tokens).unwrap_or_default(),
-                output_cost_per_1k_tokens: Decimal::from_f64_retain(pricing.output_cost_per_1k_tokens).unwrap_or_default(),
+                input_cost_per_1k_tokens: Decimal::from_f64_retain(
+                    pricing.input_cost_per_1k_tokens,
+                )
+                .unwrap_or_default(),
+                output_cost_per_1k_tokens: Decimal::from_f64_retain(
+                    pricing.output_cost_per_1k_tokens,
+                )
+                .unwrap_or_default(),
                 updated_at: chrono::Utc::now(),
             };
 
@@ -143,10 +170,13 @@ impl CostTrackingService {
         Ok(result)
     }
 
-
     /// Get cost summary for all models
     pub async fn get_cost_summary(&self) -> Result<CostSummary, AppError> {
-        let all_costs = self.storage.database.get_all_model_costs().await
+        let all_costs = self
+            .storage
+            .database
+            .get_all_model_costs()
+            .await
             .map_err(|e| AppError::Internal(format!("Failed to get model costs: {}", e)))?;
 
         let mut summary = CostSummary {

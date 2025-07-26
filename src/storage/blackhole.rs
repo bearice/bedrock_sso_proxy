@@ -37,6 +37,11 @@ impl DatabaseStorage for BlackholeStorage {
         Ok(None)
     }
 
+    async fn get_user_by_id(&self, _user_id: i32) -> StorageResult<Option<UserRecord>> {
+        // Always return None - no users stored
+        Ok(None)
+    }
+
     async fn get_user_by_email(&self, _email: &str) -> StorageResult<Option<UserRecord>> {
         // Always return None - no users stored
         Ok(None)

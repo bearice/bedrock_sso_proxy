@@ -1,12 +1,12 @@
 use crate::error::AppError;
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
+use once_cell::sync::Lazy;
 use reqwest::Client;
 use rust_embed::RustEmbed;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
-use once_cell::sync::Lazy;
 use tracing::{debug, info};
 
 #[derive(RustEmbed)]
@@ -17,13 +17,13 @@ struct PricingAssets;
 /// Cached embedded pricing data parsed from JSON
 static EMBEDDED_PRICING: Lazy<HashMap<String, (f64, f64)>> = Lazy::new(|| {
     let mut pricing = HashMap::new();
-    
+
     if let Some(pricing_file) = PricingAssets::get("aws_pricing.json") {
         if let Ok(pricing_data) = serde_json::from_slice::<Value>(&pricing_file.data) {
             parse_pricing_data(&pricing_data, &mut pricing);
         }
     }
-    
+
     pricing
 });
 
@@ -35,7 +35,9 @@ fn parse_pricing_data(pricing_data: &Value, pricing: &mut HashMap<String, (f64, 
             for (model_id, model_data) in models_obj {
                 if let (Some(input_cost), Some(output_cost)) = (
                     model_data.get("input_cost_per_1k").and_then(|v| v.as_f64()),
-                    model_data.get("output_cost_per_1k").and_then(|v| v.as_f64())
+                    model_data
+                        .get("output_cost_per_1k")
+                        .and_then(|v| v.as_f64()),
                 ) {
                     pricing.insert(model_id.clone(), (input_cost, output_cost));
                 }
@@ -47,7 +49,7 @@ fn parse_pricing_data(pricing_data: &Value, pricing: &mut HashMap<String, (f64, 
             for item in price_array {
                 if let (Some(product), Some(terms)) = (
                     item.get("product"),
-                    item.get("terms").and_then(|t| t.get("OnDemand"))
+                    item.get("terms").and_then(|t| t.get("OnDemand")),
                 ) {
                     if let Some(model_id) = product
                         .get("attributes")
@@ -68,22 +70,30 @@ fn parse_pricing_data(pricing_data: &Value, pricing: &mut HashMap<String, (f64, 
 fn extract_pricing_from_terms(terms: &Value) -> Option<(f64, f64)> {
     let mut input_cost = None;
     let mut output_cost = None;
-    
+
     if let Some(terms_obj) = terms.as_object() {
         for term_value in terms_obj.values() {
-            if let Some(price_dimensions) = term_value.get("priceDimensions").and_then(|p| p.as_object()) {
+            if let Some(price_dimensions) = term_value
+                .get("priceDimensions")
+                .and_then(|p| p.as_object())
+            {
                 for dimension in price_dimensions.values() {
                     if let (Some(description), Some(price_per_unit)) = (
                         dimension.get("description").and_then(|d| d.as_str()),
-                        dimension.get("pricePerUnit").and_then(|p| p.get("USD")).and_then(|u| u.as_str())
+                        dimension
+                            .get("pricePerUnit")
+                            .and_then(|p| p.get("USD"))
+                            .and_then(|u| u.as_str()),
                     ) {
                         if let Ok(price) = price_per_unit.parse::<f64>() {
                             let price_per_1k = price * 1000.0; // Convert to per-1K tokens
-                            
+
                             let desc_lower = description.to_lowercase();
                             if desc_lower.contains("input") || desc_lower.contains("prompt") {
                                 input_cost = Some(price_per_1k);
-                            } else if desc_lower.contains("output") || desc_lower.contains("completion") {
+                            } else if desc_lower.contains("output")
+                                || desc_lower.contains("completion")
+                            {
                                 output_cost = Some(price_per_1k);
                             }
                         }
@@ -92,7 +102,7 @@ fn extract_pricing_from_terms(terms: &Value) -> Option<(f64, f64)> {
             }
         }
     }
-    
+
     match (input_cost, output_cost) {
         (Some(input), Some(output)) => Some((input, output)),
         _ => None,
@@ -187,10 +197,11 @@ impl AwsApiPricingSource {
     /// Fetch raw pricing data from AWS API
     async fn fetch_aws_pricing_data(&self) -> Result<PricingResponse, AppError> {
         let url = "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonBedrock/current/index.json";
-        
+
         debug!("Requesting pricing data from AWS API: {}", url);
 
-        let response = self.client
+        let response = self
+            .client
             .get(url)
             .header("Accept", "application/json")
             .send()
@@ -204,7 +215,9 @@ impl AwsApiPricingSource {
             )));
         }
 
-        let pricing_data: PricingResponse = response.json().await
+        let pricing_data: PricingResponse = response
+            .json()
+            .await
             .map_err(|e| AppError::Internal(format!("Failed to parse AWS API response: {}", e)))?;
 
         info!("Successfully fetched pricing data from AWS API");
@@ -212,7 +225,10 @@ impl AwsApiPricingSource {
     }
 
     /// Parse AWS pricing data into unified format
-    fn parse_aws_pricing_data(&self, pricing_data: &PricingResponse) -> Result<Vec<ModelPricing>, AppError> {
+    fn parse_aws_pricing_data(
+        &self,
+        pricing_data: &PricingResponse,
+    ) -> Result<Vec<ModelPricing>, AppError> {
         let mut all_pricing = Vec::new();
         let now = Utc::now();
 
@@ -220,7 +236,9 @@ impl AwsApiPricingSource {
             // Check if this item has model information
             if let Some(model_id) = &item.product.attributes.model_id {
                 // Extract pricing from terms
-                if let Some((input_cost, output_cost)) = self.extract_pricing_from_aws_terms(&item.terms) {
+                if let Some((input_cost, output_cost)) =
+                    self.extract_pricing_from_aws_terms(&item.terms)
+                {
                     all_pricing.push(ModelPricing {
                         model_id: model_id.clone(),
                         provider: "AWS".to_string(),
@@ -228,17 +246,24 @@ impl AwsApiPricingSource {
                         output_cost_per_1k_tokens: output_cost,
                         updated_at: now,
                     });
-                    debug!("Parsed pricing for {}: input=${:.4}/1k, output=${:.4}/1k", 
-                          model_id, input_cost, output_cost);
+                    debug!(
+                        "Parsed pricing for {}: input=${:.4}/1k, output=${:.4}/1k",
+                        model_id, input_cost, output_cost
+                    );
                 }
             }
         }
 
         if all_pricing.is_empty() {
-            return Err(AppError::Internal("No valid pricing data found in AWS API response".to_string()));
+            return Err(AppError::Internal(
+                "No valid pricing data found in AWS API response".to_string(),
+            ));
         }
 
-        info!("Successfully parsed pricing for {} models from AWS API", all_pricing.len());
+        info!(
+            "Successfully parsed pricing for {} models from AWS API",
+            all_pricing.len()
+        );
         Ok(all_pricing)
     }
 
@@ -246,24 +271,26 @@ impl AwsApiPricingSource {
     fn extract_pricing_from_aws_terms(&self, terms: &Terms) -> Option<(f64, f64)> {
         let mut input_cost = None;
         let mut output_cost = None;
-        
+
         for term in terms.on_demand.values() {
             for dimension in term.price_dimensions.values() {
                 if let Some(usd_price) = dimension.price_per_unit.get("USD") {
                     if let Ok(price) = usd_price.parse::<f64>() {
                         let price_per_1k = price * 1000.0; // Convert to per-1K tokens
-                        
+
                         let description = dimension.description.to_lowercase();
                         if description.contains("input") || description.contains("prompt") {
                             input_cost = Some(price_per_1k);
-                        } else if description.contains("output") || description.contains("completion") {
+                        } else if description.contains("output")
+                            || description.contains("completion")
+                        {
                             output_cost = Some(price_per_1k);
                         }
                     }
                 }
             }
         }
-        
+
         match (input_cost, output_cost) {
             (Some(input), Some(output)) => Some((input, output)),
             _ => None,
@@ -275,24 +302,33 @@ impl AwsApiPricingSource {
 impl PricingDataSource for AwsApiPricingSource {
     async fn get_all_models(&self) -> Result<Vec<ModelPricing>, AppError> {
         info!("Fetching all Bedrock pricing from AWS API");
-        
+
         // 1. Fetch raw data from AWS API
         let raw_pricing_data = self.fetch_aws_pricing_data().await?;
-        
+
         // 2. Parse the raw data into unified format
         self.parse_aws_pricing_data(&raw_pricing_data)
     }
 
     async fn get_model(&self, model_id: &str) -> Result<ModelPricing, AppError> {
-        info!("Fetching pricing for Bedrock model: {} from AWS API", model_id);
-        
+        info!(
+            "Fetching pricing for Bedrock model: {} from AWS API",
+            model_id
+        );
+
         // Get all pricing data (more efficient than single model calls)
         let all_pricing = self.get_all_models().await?;
-        
+
         // Find the specific model in the dataset
-        all_pricing.into_iter()
+        all_pricing
+            .into_iter()
             .find(|p| p.model_id == model_id)
-            .ok_or_else(|| AppError::NotFound(format!("Model {} not found in AWS API pricing data", model_id)))
+            .ok_or_else(|| {
+                AppError::NotFound(format!(
+                    "Model {} not found in AWS API pricing data",
+                    model_id
+                ))
+            })
     }
 }
 
@@ -318,14 +354,19 @@ impl PricingDataSource for EmbeddedPricingSource {
             });
         }
 
-        debug!("Loaded {} models from embedded pricing data", all_pricing.len());
+        debug!(
+            "Loaded {} models from embedded pricing data",
+            all_pricing.len()
+        );
         Ok(all_pricing)
     }
 
     async fn get_model(&self, model_id: &str) -> Result<ModelPricing, AppError> {
         if let Some((input_cost, output_cost)) = EMBEDDED_PRICING.get(model_id) {
-            debug!("Using embedded pricing for {}: input=${:.4}/1k, output=${:.4}/1k", 
-                   model_id, input_cost, output_cost);
+            debug!(
+                "Using embedded pricing for {}: input=${:.4}/1k, output=${:.4}/1k",
+                model_id, input_cost, output_cost
+            );
             Ok(ModelPricing {
                 model_id: model_id.to_string(),
                 provider: "AWS (embedded)".to_string(),
@@ -402,7 +443,7 @@ mod tests {
             provider: "AWS".to_string(),
             updated_at: Utc::now(),
         };
-        
+
         assert_eq!(pricing.input_cost_per_1k_tokens, 0.003);
         assert_eq!(pricing.output_cost_per_1k_tokens, 0.015);
         assert_eq!(pricing.model_id, "test-model");
@@ -412,7 +453,7 @@ mod tests {
     async fn test_embedded_pricing_source() {
         let source = EmbeddedPricingSource::new();
         let models = source.get_all_models().await.unwrap();
-        
+
         // Should return models from embedded data
         println!("Loaded {} models from embedded data", models.len());
     }

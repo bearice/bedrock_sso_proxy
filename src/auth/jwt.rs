@@ -61,45 +61,21 @@ fn create_encoding_key(key_data: &str, algorithm: Algorithm) -> Result<EncodingK
     }
 }
 
-// Legacy Claims structure for backward compatibility
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Claims {
-    pub sub: String,
-    pub exp: usize,
-    pub user_id: i32,
-}
-
-// Enhanced Claims structure for OAuth-issued tokens
+// OAuth-issued JWT claims structure
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct OAuthClaims {
-    pub sub: String,
+    pub sub: i32, // Database user ID
     pub iat: usize,
     pub exp: usize,
-    pub provider: String,
-    pub email: String,
-    pub user_id: i32,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub refresh_token_id: Option<String>,
 }
 
 impl OAuthClaims {
-    pub fn new(
-        subject: String,
-        provider: String,
-        email: String,
-        user_id: i32,
-        expires_in_seconds: u64,
-        refresh_token_id: Option<String>,
-    ) -> Self {
+    pub fn new(user_id: i32, expires_in_seconds: u64) -> Self {
         let now = Utc::now().timestamp() as usize;
         Self {
-            sub: subject,
+            sub: user_id,
             iat: now,
             exp: now + expires_in_seconds as usize,
-            provider,
-            email,
-            user_id,
-            refresh_token_id,
         }
     }
 
@@ -151,31 +127,8 @@ impl JwtService {
         Ok(token_data.claims)
     }
 
-    pub fn validate_legacy_token(&self, token: &str) -> Result<Claims, AppError> {
-        let mut validation = Validation::new(self.algorithm);
-        validation.validate_exp = true;
-        validation.leeway = 0;
-
-        let token_data = decode::<Claims>(token, &self.decoding_key, &validation)
-            .map_err(|_| AppError::Unauthorized("Invalid or expired token".to_string()))?;
-
-        Ok(token_data.claims)
-    }
-
-    // Try to decode as OAuth token first, then fall back to legacy
-    pub fn validate_token(&self, token: &str) -> Result<ValidatedClaims, AppError> {
-        // First try OAuth token format
-        if let Ok(oauth_claims) = self.validate_oauth_token(token) {
-            return Ok(ValidatedClaims::OAuth(oauth_claims));
-        }
-
-        // Fall back to legacy token format
-        match self.validate_legacy_token(token) {
-            Ok(legacy_claims) => Ok(ValidatedClaims::Legacy(legacy_claims)),
-            Err(_) => Err(AppError::Unauthorized(
-                "Invalid or expired token".to_string(),
-            )),
-        }
+    pub fn validate_token(&self, token: &str) -> Result<OAuthClaims, AppError> {
+        self.validate_oauth_token(token)
     }
 
     /// Create a health checker for this JWT service
@@ -200,12 +153,8 @@ impl HealthChecker for JwtHealthChecker {
     async fn check(&self) -> HealthCheckResult {
         // Test the JWT service by creating and validating a test token
         let test_claims = OAuthClaims::new(
-            "health_check_user".to_string(),
-            "health_check".to_string(),
-            "health@example.com".to_string(),
-            1, // user_id
+            1,  // user_id
             60, // 1 minute expiry
-            None,
         );
 
         match self.service.create_oauth_token(&test_claims) {
@@ -257,72 +206,13 @@ impl HealthChecker for JwtHealthChecker {
         Some(serde_json::json!({
             "service": "JWT Token Service",
             "algorithm": format!("{:?}", self.service.algorithm),
-            "supported_claims": ["OAuth", "Legacy"]
         }))
-    }
-}
-
-#[derive(Debug, Clone)]
-pub enum ValidatedClaims {
-    OAuth(OAuthClaims),
-    Legacy(Claims),
-}
-
-impl ValidatedClaims {
-    pub fn subject(&self) -> &str {
-        match self {
-            ValidatedClaims::OAuth(claims) => &claims.sub,
-            ValidatedClaims::Legacy(claims) => &claims.sub,
-        }
-    }
-
-    pub fn user_id(&self) -> i32 {
-        match self {
-            ValidatedClaims::OAuth(claims) => claims.user_id,
-            ValidatedClaims::Legacy(claims) => claims.user_id,
-        }
-    }
-
-    pub fn provider(&self) -> Option<&str> {
-        match self {
-            ValidatedClaims::OAuth(claims) => Some(&claims.provider),
-            ValidatedClaims::Legacy(_) => None,
-        }
-    }
-
-    pub fn email(&self) -> Option<&str> {
-        match self {
-            ValidatedClaims::OAuth(claims) => Some(&claims.email),
-            ValidatedClaims::Legacy(_) => None,
-        }
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::time::{SystemTime, UNIX_EPOCH};
-
-    fn create_test_token(secret: &str, sub: &str, exp_offset: i64) -> String {
-        let now = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_secs() as i64;
-        let exp = (now + exp_offset) as usize;
-
-        let claims = Claims {
-            sub: sub.to_string(),
-            exp,
-            user_id: 1, // Default test user ID
-        };
-
-        encode(
-            &Header::default(),
-            &claims,
-            &EncodingKey::from_secret(secret.as_ref()),
-        )
-        .unwrap()
-    }
 
     #[test]
     fn test_parse_algorithm_valid() {
@@ -381,19 +271,9 @@ mod tests {
 
     #[test]
     fn test_oauth_claims_creation() {
-        let claims = OAuthClaims::new(
-            "google:123".to_string(),
-            "google".to_string(),
-            "test@example.com".to_string(),
-            1, // user_id
-            3600,
-            Some("refresh_123".to_string()),
-        );
+        let claims = OAuthClaims::new(1, 3600);
 
-        assert_eq!(claims.sub, "google:123");
-        assert_eq!(claims.provider, "google");
-        assert_eq!(claims.email, "test@example.com");
-        assert_eq!(claims.refresh_token_id, Some("refresh_123".to_string()));
+        assert_eq!(claims.sub, 1);
         assert!(!claims.is_expired());
     }
 
@@ -401,105 +281,18 @@ mod tests {
     fn test_jwt_service_oauth_token() {
         let service = JwtService::new("test-secret".to_string(), Algorithm::HS256).unwrap();
 
-        let claims = OAuthClaims::new(
-            "google:123".to_string(),
-            "google".to_string(),
-            "test@example.com".to_string(),
-            1, // user_id
-            3600,
-            None,
-        );
+        let claims = OAuthClaims::new(1, 3600);
 
         let token = service.create_oauth_token(&claims).unwrap();
         assert!(!token.is_empty());
 
         let validated = service.validate_oauth_token(&token).unwrap();
-        assert_eq!(validated.sub, "google:123");
-        assert_eq!(validated.provider, "google");
-        assert_eq!(validated.email, "test@example.com");
-    }
-
-    #[test]
-    fn test_jwt_service_legacy_token() {
-        let service = JwtService::new("test-secret".to_string(), Algorithm::HS256).unwrap();
-        let token = create_test_token("test-secret", "user123", 3600);
-
-        let validated = service.validate_legacy_token(&token).unwrap();
-        assert_eq!(validated.sub, "user123");
-    }
-
-    #[test]
-    fn test_jwt_service_mixed_validation() {
-        let service = JwtService::new("test-secret".to_string(), Algorithm::HS256).unwrap();
-
-        // Test OAuth token
-        let oauth_claims = OAuthClaims::new(
-            "google:123".to_string(),
-            "google".to_string(),
-            "test@example.com".to_string(),
-            1, // user_id
-            3600,
-            None,
-        );
-        let oauth_token = service.create_oauth_token(&oauth_claims).unwrap();
-
-        match service.validate_token(&oauth_token).unwrap() {
-            ValidatedClaims::OAuth(claims) => {
-                assert_eq!(claims.sub, "google:123");
-                assert_eq!(claims.provider, "google");
-            }
-            ValidatedClaims::Legacy(_) => panic!("Expected OAuth claims"),
-        }
-
-        // Test legacy token
-        let legacy_token = create_test_token("test-secret", "user123", 3600);
-
-        match service.validate_token(&legacy_token).unwrap() {
-            ValidatedClaims::Legacy(claims) => {
-                assert_eq!(claims.sub, "user123");
-            }
-            ValidatedClaims::OAuth(_) => panic!("Expected legacy claims"),
-        }
-    }
-
-    #[test]
-    fn test_validated_claims_accessors() {
-        let oauth_claims = OAuthClaims::new(
-            "google:123".to_string(),
-            "google".to_string(),
-            "test@example.com".to_string(),
-            1, // user_id
-            3600,
-            None,
-        );
-
-        let oauth_validated = ValidatedClaims::OAuth(oauth_claims);
-        assert_eq!(oauth_validated.subject(), "google:123");
-        assert_eq!(oauth_validated.provider(), Some("google"));
-        assert_eq!(oauth_validated.email(), Some("test@example.com"));
-
-        let legacy_claims = Claims {
-            sub: "user123".to_string(),
-            exp: 1234567890,
-            user_id: 1,
-        };
-
-        let legacy_validated = ValidatedClaims::Legacy(legacy_claims);
-        assert_eq!(legacy_validated.subject(), "user123");
-        assert_eq!(legacy_validated.provider(), None);
-        assert_eq!(legacy_validated.email(), None);
+        assert_eq!(validated.sub, 1);
     }
 
     #[test]
     fn test_oauth_claims_expiration() {
-        let mut claims = OAuthClaims::new(
-            "google:123".to_string(),
-            "google".to_string(),
-            "test@example.com".to_string(),
-            1, // user_id
-            3600,
-            None,
-        );
+        let mut claims = OAuthClaims::new(1, 3600);
 
         assert!(!claims.is_expired());
 

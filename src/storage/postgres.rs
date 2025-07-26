@@ -181,6 +181,30 @@ impl DatabaseStorage for PostgresStorage {
         }
     }
 
+    async fn get_user_by_id(&self, user_id: i32) -> StorageResult<Option<UserRecord>> {
+        let row = sqlx::query(
+            "SELECT id, provider_user_id, provider, email, display_name, created_at, updated_at, last_login FROM users WHERE id = $1",
+        )
+        .bind(user_id)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(|e| StorageError::Database(format!("Failed to get user by ID: {}", e)))?;
+
+        match row {
+            Some(row) => Ok(Some(UserRecord {
+                id: Some(row.get("id")),
+                provider_user_id: row.get("provider_user_id"),
+                provider: row.get("provider"),
+                email: row.get("email"),
+                display_name: row.get("display_name"),
+                created_at: row.get("created_at"),
+                updated_at: row.get("updated_at"),
+                last_login: row.get("last_login"),
+            })),
+            None => Ok(None),
+        }
+    }
+
     async fn get_user_by_email(&self, email: &str) -> StorageResult<Option<UserRecord>> {
         let row = sqlx::query(
             "SELECT id, provider_user_id, provider, email, display_name, created_at, updated_at, last_login FROM users WHERE email = $1",

@@ -6,10 +6,10 @@ use crate::{
     error::AppError,
     storage::{Storage, UsageRecord},
 };
-use rust_decimal::Decimal;
+use async_trait::async_trait;
 use aws_http::{AwsHttpClient, AwsResponse};
 use axum::http::HeaderMap;
-use async_trait::async_trait;
+use rust_decimal::Decimal;
 
 // Trait for AWS client operations to enable mocking
 #[async_trait]
@@ -44,7 +44,8 @@ impl AwsClientTrait for AwsHttpClient {
         accept: Option<&str>,
         body: Vec<u8>,
     ) -> Result<AwsResponse, AppError> {
-        self.invoke_model(model_id, content_type, accept, body).await
+        self.invoke_model(model_id, content_type, accept, body)
+            .await
     }
 
     async fn invoke_model_with_response_stream(
@@ -55,7 +56,8 @@ impl AwsClientTrait for AwsHttpClient {
         accept: Option<&str>,
         body: Vec<u8>,
     ) -> Result<aws_http::AwsStreamResponse, AppError> {
-        self.invoke_model_with_response_stream(model_id, headers, content_type, accept, body).await
+        self.invoke_model_with_response_stream(model_id, headers, content_type, accept, body)
+            .await
     }
 
     fn health_checker(&self) -> Arc<dyn crate::health::HealthChecker> {
@@ -164,7 +166,6 @@ impl ModelService {
 
         Ok(())
     }
-
 
     /// Non-streaming model invocation with automatic usage tracking
     pub async fn invoke_model(&self, request: ModelRequest) -> Result<ModelResponse, AppError> {
@@ -347,8 +348,7 @@ impl ModelService {
     ) -> Option<Decimal> {
         match self.storage.database.get_model_cost(model_id).await {
             Ok(Some(cost_data)) => {
-                let input_cost = Decimal::from(input_tokens)
-                    * cost_data.input_cost_per_1k_tokens
+                let input_cost = Decimal::from(input_tokens) * cost_data.input_cost_per_1k_tokens
                     / Decimal::from(1000);
                 let output_cost = Decimal::from(output_tokens)
                     * cost_data.output_cost_per_1k_tokens
@@ -371,7 +371,6 @@ impl ModelService {
         self.aws_client.as_ref()
     }
 
-
     /// Get the storage layer for direct access if needed
     pub fn storage(&self) -> &Arc<Storage> {
         &self.storage
@@ -385,7 +384,6 @@ mod tests {
         config::{AwsConfig, Config},
         storage::{Storage, database::SqliteStorage},
     };
-
 
     fn create_test_config() -> Config {
         Config {
@@ -467,8 +465,13 @@ mod tests {
         let actual_cost = cost.unwrap();
         // Use approximate comparison due to potential precision issues in calculations
         let diff = (actual_cost - expected_cost).abs();
-        assert!(diff < Decimal::new(1, 7), // 0.0000001 tolerance
-            "Expected cost {}, got {}, diff {}", expected_cost, actual_cost, diff);
+        assert!(
+            diff < Decimal::new(1, 7), // 0.0000001 tolerance
+            "Expected cost {}, got {}, diff {}",
+            expected_cost,
+            actual_cost,
+            diff
+        );
     }
 
     #[tokio::test]

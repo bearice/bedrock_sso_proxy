@@ -1,10 +1,9 @@
 use crate::{
-    auth::{jwt::ValidatedClaims, middleware::ClaimsExtractor},
-    cost_tracking::{CostTrackingService, UpdateCostsResult, CostSummary},
+    auth::middleware::ClaimsExtractor,
+    cost_tracking::{CostSummary, CostTrackingService, UpdateCostsResult},
     error::AppError,
     storage::{Storage, StoredModelCost, UsageQuery, UsageRecord, UsageStats},
 };
-use rust_decimal::Decimal;
 use axum::{
     Router,
     extract::{Path, Query, State},
@@ -13,15 +12,20 @@ use axum::{
     routing::{delete, get, post, put},
 };
 use chrono::{DateTime, Utc};
+use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
-/// Create usage tracking API routes
-pub fn create_usage_routes() -> Router<Arc<Storage>> {
+/// Create usage tracking API routes for regular users
+pub fn create_user_usage_routes() -> Router<Arc<Storage>> {
     Router::new()
-        // User usage endpoints
         .route("/usage/records", get(get_user_usage_records))
         .route("/usage/stats", get(get_user_usage_stats))
+}
+
+/// Create admin usage tracking API routes
+pub fn create_admin_usage_routes() -> Router<Arc<Storage>> {
+    Router::new()
         // Admin endpoints (system-wide usage)
         .route("/admin/usage/records", get(get_system_usage_records))
         .route("/admin/usage/stats", get(get_system_usage_stats))
@@ -90,8 +94,8 @@ async fn get_user_usage_records(
     State(storage): State<Arc<Storage>>,
     Query(params): Query<UsageRecordsQuery>,
 ) -> Result<Json<UsageRecordsResponse>, AppError> {
-    // Get user ID directly from JWT claims
-    let user_id = claims.user_id();
+    // Get user ID from JWT claims (sub field contains database user ID)
+    let user_id = claims.sub;
 
     let limit = params.limit.unwrap_or(50).min(500); // Max 500 records
     let offset = params.offset.unwrap_or(0);
@@ -125,8 +129,8 @@ async fn get_user_usage_stats(
     State(storage): State<Arc<Storage>>,
     Query(params): Query<UsageStatsQuery>,
 ) -> Result<Json<UsageStats>, AppError> {
-    // Get user ID directly from JWT claims
-    let user_id = claims.user_id();
+    // Get user ID from JWT claims (sub field contains database user ID)
+    let user_id = claims.sub;
 
     let stats = storage
         .database
@@ -138,12 +142,10 @@ async fn get_user_usage_stats(
 
 /// Get system-wide usage records (admin only)
 async fn get_system_usage_records(
-    ClaimsExtractor(claims): ClaimsExtractor,
     State(storage): State<Arc<Storage>>,
     Query(params): Query<UsageRecordsQuery>,
 ) -> Result<Json<UsageRecordsResponse>, AppError> {
-    // Check admin permissions
-    check_admin_permissions(&storage, &claims).await?;
+    // Admin permissions already checked by middleware
 
     let limit = params.limit.unwrap_or(50).min(500);
     let offset = params.offset.unwrap_or(0);
@@ -171,11 +173,10 @@ async fn get_system_usage_records(
 
 /// Get system-wide usage statistics (admin only)
 async fn get_system_usage_stats(
-    ClaimsExtractor(claims): ClaimsExtractor,
     State(storage): State<Arc<Storage>>,
     Query(params): Query<UsageStatsQuery>,
 ) -> Result<Json<UsageStats>, AppError> {
-    check_admin_permissions(&storage, &claims).await?;
+    // Admin permissions already checked by middleware
 
     let stats = storage
         .database
@@ -187,11 +188,10 @@ async fn get_system_usage_stats(
 
 /// Get top models by usage (admin only)
 async fn get_top_models(
-    ClaimsExtractor(claims): ClaimsExtractor,
     State(storage): State<Arc<Storage>>,
     Query(params): Query<UsageStatsQuery>,
 ) -> Result<Json<TopModelsResponse>, AppError> {
-    check_admin_permissions(&storage, &claims).await?;
+    // Admin permissions already checked by middleware
 
     let models = storage
         .database
@@ -213,21 +213,19 @@ async fn get_top_models(
 
 /// Get all model costs (admin only)
 async fn get_all_model_costs(
-    ClaimsExtractor(claims): ClaimsExtractor,
     State(storage): State<Arc<Storage>>,
 ) -> Result<Json<Vec<StoredModelCost>>, AppError> {
-    check_admin_permissions(&storage, &claims).await?;
+    // Admin permissions already checked by middleware
     let costs = storage.database.get_all_model_costs().await?;
     Ok(Json(costs))
 }
 
 /// Get specific model cost (admin only)
 async fn get_model_cost(
-    ClaimsExtractor(claims): ClaimsExtractor,
     State(storage): State<Arc<Storage>>,
     Path(model_id): Path<String>,
 ) -> Result<Json<StoredModelCost>, AppError> {
-    check_admin_permissions(&storage, &claims).await?;
+    // Admin permissions already checked by middleware
 
     let cost = storage
         .database
@@ -240,17 +238,18 @@ async fn get_model_cost(
 
 /// Create or update model cost (admin only)
 async fn create_model_cost(
-    ClaimsExtractor(claims): ClaimsExtractor,
     State(storage): State<Arc<Storage>>,
     Json(request): Json<ModelCostRequest>,
 ) -> Result<StatusCode, AppError> {
-    check_admin_permissions(&storage, &claims).await?;
+    // Admin permissions already checked by middleware
 
     let cost = StoredModelCost {
         id: None,
         model_id: request.model_id,
-        input_cost_per_1k_tokens: Decimal::from_f64_retain(request.input_cost_per_1k_tokens).unwrap_or_default(),
-        output_cost_per_1k_tokens: Decimal::from_f64_retain(request.output_cost_per_1k_tokens).unwrap_or_default(),
+        input_cost_per_1k_tokens: Decimal::from_f64_retain(request.input_cost_per_1k_tokens)
+            .unwrap_or_default(),
+        output_cost_per_1k_tokens: Decimal::from_f64_retain(request.output_cost_per_1k_tokens)
+            .unwrap_or_default(),
         updated_at: Utc::now(),
     };
 
@@ -260,12 +259,11 @@ async fn create_model_cost(
 
 /// Update model cost (admin only)
 async fn update_model_cost(
-    ClaimsExtractor(claims): ClaimsExtractor,
     State(storage): State<Arc<Storage>>,
     Path(model_id): Path<String>,
     Json(request): Json<ModelCostRequest>,
 ) -> Result<StatusCode, AppError> {
-    check_admin_permissions(&storage, &claims).await?;
+    // Admin permissions already checked by middleware
 
     // Verify model exists
     storage
@@ -277,8 +275,10 @@ async fn update_model_cost(
     let cost = StoredModelCost {
         id: None,
         model_id: model_id.clone(),
-        input_cost_per_1k_tokens: Decimal::from_f64_retain(request.input_cost_per_1k_tokens).unwrap_or_default(),
-        output_cost_per_1k_tokens: Decimal::from_f64_retain(request.output_cost_per_1k_tokens).unwrap_or_default(),
+        input_cost_per_1k_tokens: Decimal::from_f64_retain(request.input_cost_per_1k_tokens)
+            .unwrap_or_default(),
+        output_cost_per_1k_tokens: Decimal::from_f64_retain(request.output_cost_per_1k_tokens)
+            .unwrap_or_default(),
         updated_at: Utc::now(),
     };
 
@@ -288,11 +288,10 @@ async fn update_model_cost(
 
 /// Delete model cost (admin only)
 async fn delete_model_cost(
-    ClaimsExtractor(claims): ClaimsExtractor,
     State(storage): State<Arc<Storage>>,
     Path(model_id): Path<String>,
 ) -> Result<StatusCode, AppError> {
-    check_admin_permissions(&storage, &claims).await?;
+    // Admin permissions already checked by middleware
 
     storage.database.delete_model_cost(&model_id).await?;
     Ok(StatusCode::NO_CONTENT)
@@ -301,86 +300,55 @@ async fn delete_model_cost(
 /// Update all model costs from AWS Price List API (admin only)
 /// Fails if AWS API is unavailable - leaves current pricing unchanged
 async fn update_all_model_costs(
-    ClaimsExtractor(claims): ClaimsExtractor,
     State(storage): State<Arc<Storage>>,
 ) -> Result<Json<UpdateCostsResult>, AppError> {
-    check_admin_permissions(&storage, &claims).await?;
+    // Admin permissions already checked by middleware
 
     // Create cost tracking service with us-east-1 region for pricing data
     let cost_service = CostTrackingService::new(storage, "us-east-1".to_string());
-    
+
     // Update model costs from AWS API only (no fallback - preserves existing data on failure)
     let result = cost_service.update_all_model_costs().await?;
-    
+
     Ok(Json(result))
 }
 
 /// Get cost summary for all models (admin only)
 async fn get_cost_summary(
-    ClaimsExtractor(claims): ClaimsExtractor,
     State(storage): State<Arc<Storage>>,
 ) -> Result<Json<CostSummary>, AppError> {
-    check_admin_permissions(&storage, &claims).await?;
+    // Admin permissions already checked by middleware
 
     let cost_service = CostTrackingService::new(storage, "us-east-1".to_string());
     let summary = cost_service.get_cost_summary().await?;
-    
+
     Ok(Json(summary))
 }
 
-// Note: user_id is now directly extracted from JWT claims via claims.user_id()
+// Note: user_id is now extracted from JWT sub field (database user ID)
 // This eliminates the need for database lookups for regular user operations
-
-/// Helper function to check admin permissions
-async fn check_admin_permissions(
-    _storage: &Storage,
-    claims: &ValidatedClaims,
-) -> Result<(), AppError> {
-    // Get user email from claims
-    let email = claims
-        .email()
-        .ok_or_else(|| AppError::Unauthorized("Email required for admin access".to_string()))?;
-
-    // Check if user is in admin list (this would come from config)
-    // For now, we'll implement a simple check
-    // In a real implementation, you'd check against a config list or database role
-    if email.ends_with("@admin.example.com") {
-        Ok(())
-    } else {
-        Err(AppError::Forbidden("Admin access required".to_string()))
-    }
-}
+// Admin permissions are checked by the admin_middleware in auth module
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::auth::jwt::{OAuthClaims, ValidatedClaims};
     use crate::storage::memory::MemoryCacheStorage;
     use axum::{body::Body, http::Request};
-    use chrono::Utc;
     use tower::ServiceExt;
 
-    fn create_test_claims() -> ValidatedClaims {
-        ValidatedClaims::OAuth(OAuthClaims {
-            sub: "test-user".to_string(),
-            provider: "google".to_string(),
-            email: "admin@admin.example.com".to_string(),
-            user_id: 1,
-            exp: (Utc::now().timestamp() + 3600) as usize,
-            iat: Utc::now().timestamp() as usize,
-            refresh_token_id: None,
-        })
-    }
-
     #[tokio::test]
-    async fn test_create_usage_routes() {
+    async fn test_create_user_usage_routes() {
         let storage = Arc::new(crate::storage::Storage::new(
             Box::new(MemoryCacheStorage::new(3600)),
-            Box::new(crate::storage::database::SqliteStorage::new("sqlite::memory:").await.unwrap()),
+            Box::new(
+                crate::storage::database::SqliteStorage::new("sqlite::memory:")
+                    .await
+                    .unwrap(),
+            ),
         ));
         storage.migrate().await.unwrap();
 
-        let app = create_usage_routes().with_state(storage);
+        let app = create_user_usage_routes().with_state(storage);
 
         // Test that routes are properly configured
         let request = Request::builder()
@@ -392,36 +360,5 @@ mod tests {
         let response = app.oneshot(request).await.unwrap();
         // Should return 500 since we don't have proper middleware setup in test
         assert!(response.status().is_server_error() || response.status().is_client_error());
-    }
-
-    #[tokio::test]
-    async fn test_admin_permissions() {
-        let storage = crate::storage::Storage::new(
-            Box::new(MemoryCacheStorage::new(3600)),
-            Box::new(crate::storage::database::SqliteStorage::new("sqlite::memory:").await.unwrap()),
-        );
-        storage.migrate().await.unwrap();
-
-        let admin_claims = create_test_claims();
-        assert!(
-            check_admin_permissions(&storage, &admin_claims)
-                .await
-                .is_ok()
-        );
-
-        let non_admin_claims = ValidatedClaims::OAuth(OAuthClaims {
-            sub: "test-user".to_string(),
-            provider: "google".to_string(),
-            email: "user@example.com".to_string(),
-            user_id: 2,
-            exp: (Utc::now().timestamp() + 3600) as usize,
-            iat: Utc::now().timestamp() as usize,
-            refresh_token_id: None,
-        });
-        assert!(
-            check_admin_permissions(&storage, &non_admin_claims)
-                .await
-                .is_err()
-        );
     }
 }

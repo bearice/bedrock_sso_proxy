@@ -1,12 +1,12 @@
 use crate::{
-    auth::jwt::ValidatedClaims,
+    auth::jwt::OAuthClaims,
     error::AppError,
-    model_service::{ModelService, ModelRequest},
+    model_service::{ModelRequest, ModelService},
 };
 use axum::{
     Router,
     body::{Body, Bytes},
-    extract::{Path, State, Extension},
+    extract::{Extension, Path, State},
     http::{HeaderMap, StatusCode},
     response::Response,
     routing::post,
@@ -25,7 +25,7 @@ pub fn create_bedrock_routes() -> Router<Arc<ModelService>> {
 async fn invoke_model(
     Path(model_id): Path<String>,
     State(model_service): State<Arc<ModelService>>,
-    Extension(claims): Extension<ValidatedClaims>,
+    Extension(claims): Extension<OAuthClaims>,
     headers: HeaderMap,
     body: Bytes,
 ) -> Result<(StatusCode, HeaderMap, Bytes), AppError> {
@@ -35,7 +35,7 @@ async fn invoke_model(
     }
 
     // Extract user_id directly from JWT claims
-    let user_id = claims.user_id();
+    let user_id = claims.sub;
 
     // Create ModelRequest
     let model_request = ModelRequest {
@@ -72,7 +72,7 @@ async fn invoke_model(
 async fn invoke_model_with_response_stream(
     Path(model_id): Path<String>,
     State(model_service): State<Arc<ModelService>>,
-    Extension(claims): Extension<ValidatedClaims>,
+    Extension(claims): Extension<OAuthClaims>,
     headers: HeaderMap,
     body: Bytes,
 ) -> Result<Response, AppError> {
@@ -84,7 +84,7 @@ async fn invoke_model_with_response_stream(
     }
 
     // Extract user_id directly from JWT claims
-    let user_id = claims.user_id();
+    let user_id = claims.sub;
 
     // Create ModelRequest
     let model_request = ModelRequest {
@@ -151,9 +151,9 @@ async fn invoke_model_with_response_stream(
 mod tests {
     use super::*;
     use crate::{
-        auth::middleware::{AuthConfig, jwt_auth_middleware},
+        auth::middleware::jwt_auth_middleware,
         config::Config,
-        storage::{database::SqliteStorage, Storage},
+        storage::{Storage, database::SqliteStorage},
     };
     use axum::{
         body::Body,
@@ -172,24 +172,22 @@ mod tests {
         Arc::new(ModelService::new(storage, config))
     }
 
-    fn create_test_auth_config() -> Arc<AuthConfig> {
+    fn create_test_jwt_service() -> Arc<crate::auth::jwt::JwtService> {
         let jwt_service = crate::auth::jwt::JwtService::new(
             "test_secret".to_string(),
             jsonwebtoken::Algorithm::HS256,
-        ).unwrap();
-        Arc::new(AuthConfig::new(jwt_service))
+        )
+        .unwrap();
+        Arc::new(jwt_service)
     }
 
     #[tokio::test]
     async fn test_invoke_model_empty_model_id() {
         let model_service = create_test_model_service().await;
-        let auth_config = create_test_auth_config();
-        let app = create_bedrock_routes()
-            .with_state(model_service)
-            .layer(middleware::from_fn_with_state(
-                auth_config,
-                jwt_auth_middleware,
-            ));
+        let jwt_service = create_test_jwt_service();
+        let app = create_bedrock_routes().with_state(model_service).layer(
+            middleware::from_fn_with_state(jwt_service, jwt_auth_middleware),
+        );
 
         let request = Request::builder()
             .uri("/model/%20/invoke") // URL-encoded space
@@ -205,13 +203,10 @@ mod tests {
     #[tokio::test]
     async fn test_invoke_model_with_custom_headers() {
         let model_service = create_test_model_service().await;
-        let auth_config = create_test_auth_config();
-        let app = create_bedrock_routes()
-            .with_state(model_service)
-            .layer(middleware::from_fn_with_state(
-                auth_config,
-                jwt_auth_middleware,
-            ));
+        let jwt_service = create_test_jwt_service();
+        let app = create_bedrock_routes().with_state(model_service).layer(
+            middleware::from_fn_with_state(jwt_service, jwt_auth_middleware),
+        );
 
         let request = Request::builder()
             .uri("/model/anthropic.claude-v2/invoke")
@@ -230,36 +225,22 @@ mod tests {
     #[tokio::test]
     async fn test_invoke_model_streaming_with_empty_model_id() {
         let model_service = create_test_model_service().await;
-        let auth_config = create_test_auth_config();
-        let app = create_bedrock_routes()
-            .with_state(model_service)
-            .layer(middleware::from_fn_with_state(
-                auth_config.clone(),
-                jwt_auth_middleware,
-            ));
+        let jwt_service = create_test_jwt_service();
+        let app = create_bedrock_routes().with_state(model_service).layer(
+            middleware::from_fn_with_state(jwt_service.clone(), jwt_auth_middleware),
+        );
 
         // Create a valid JWT token for the test
-        fn create_legacy_token(secret: &str, sub: &str, exp_offset: i64) -> String {
-            use std::time::{SystemTime, UNIX_EPOCH};
-            use jsonwebtoken::{encode, Header, EncodingKey};
-            let now = SystemTime::now()
-                .duration_since(UNIX_EPOCH)
-                .unwrap()
-                .as_secs() as i64;
-            let exp = (now + exp_offset) as usize;
-            let claims = crate::auth::jwt::Claims {
-                sub: sub.to_string(),
-                exp,
-                user_id: 1,
-            };
-            encode(
-                &Header::default(),
-                &claims,
-                &EncodingKey::from_secret(secret.as_ref()),
-            )
-            .unwrap()
+        fn create_oauth_token(jwt_service: &crate::auth::jwt::JwtService, user_id: i32) -> String {
+            let claims = crate::auth::jwt::OAuthClaims::new(user_id, 3600);
+            jwt_service.create_oauth_token(&claims).unwrap()
         }
-        let token = create_legacy_token("test_secret", "test_user", 3600);
+        let jwt_service = crate::auth::jwt::JwtService::new(
+            "test_secret".to_string(),
+            jsonwebtoken::Algorithm::HS256,
+        )
+        .unwrap();
+        let token = create_oauth_token(&jwt_service, 1);
 
         let request = Request::builder()
             .uri("/model//invoke-with-response-stream") // Empty model ID
@@ -277,13 +258,10 @@ mod tests {
     #[tokio::test]
     async fn test_invoke_model_with_response_stream_success() {
         let model_service = create_test_model_service().await;
-        let auth_config = create_test_auth_config();
-        let app = create_bedrock_routes()
-            .with_state(model_service)
-            .layer(middleware::from_fn_with_state(
-                auth_config,
-                jwt_auth_middleware,
-            ));
+        let jwt_service = create_test_jwt_service();
+        let app = create_bedrock_routes().with_state(model_service).layer(
+            middleware::from_fn_with_state(jwt_service, jwt_auth_middleware),
+        );
 
         let request = Request::builder()
             .uri("/model/anthropic.claude-v2/invoke-with-response-stream")
@@ -302,13 +280,10 @@ mod tests {
     #[tokio::test]
     async fn test_invoke_model_with_large_body() {
         let model_service = create_test_model_service().await;
-        let auth_config = create_test_auth_config();
-        let app = create_bedrock_routes()
-            .with_state(model_service)
-            .layer(middleware::from_fn_with_state(
-                auth_config,
-                jwt_auth_middleware,
-            ));
+        let jwt_service = create_test_jwt_service();
+        let app = create_bedrock_routes().with_state(model_service).layer(
+            middleware::from_fn_with_state(jwt_service, jwt_auth_middleware),
+        );
 
         // Create a large JSON body (simulating large input)
         let large_content = "A".repeat(1000);

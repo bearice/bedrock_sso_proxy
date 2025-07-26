@@ -1,10 +1,14 @@
 use crate::{
-    auth::oauth::{OAuthService, RefreshRequest, TokenRequest},
+    auth::{
+        jwt::OAuthClaims,
+        oauth::{OAuthService, RefreshRequest, TokenRequest},
+    },
     error::AppError,
+    storage::UserRecord,
 };
 use axum::{
-    Router,
-    extract::{Path, Query, Request, State},
+    Extension, Router,
+    extract::{Path, Query, State},
     http::HeaderMap,
     response::{Json, Redirect},
     routing::{get, post},
@@ -26,7 +30,10 @@ pub fn create_auth_routes() -> Router<Arc<OAuthService>> {
         .route("/refresh", post(refresh_handler))
         .route("/providers", get(providers_handler))
         .route("/callback/{provider}", get(callback_handler))
-        .route("/validate", get(validate_handler))
+}
+
+pub fn create_protected_auth_routes() -> Router<Arc<OAuthService>> {
+    Router::new().route("/me", get(me_handler))
 }
 
 pub async fn authorize_handler(
@@ -129,26 +136,22 @@ pub async fn callback_handler(
     }
 }
 
-pub async fn validate_handler(
+/// Get current user information (requires authentication)
+pub async fn me_handler(
+    Extension(claims): Extension<OAuthClaims>,
     State(oauth_service): State<Arc<OAuthService>>,
-    request: Request,
-) -> Result<Json<crate::auth::oauth::ValidationResponse>, AppError> {
-    // Extract token from Authorization header
-    let auth_header = request
-        .headers()
-        .get("authorization")
-        .and_then(|header| header.to_str().ok())
-        .ok_or_else(|| AppError::Unauthorized("Missing Authorization header".to_string()))?;
+) -> Result<Json<UserRecord>, AppError> {
+    // Get user ID from subject
+    let user_id = claims.sub;
 
-    if !auth_header.starts_with("Bearer ") {
-        return Err(AppError::Unauthorized(
-            "Invalid Authorization format".to_string(),
-        ));
-    }
+    // Get user from database by ID through OAuth service
+    let user_record = oauth_service
+        .get_user_by_id(user_id)
+        .await
+        .map_err(|e| AppError::Internal(format!("Failed to get user: {}", e)))?
+        .ok_or_else(|| AppError::NotFound("User not found".to_string()))?;
 
-    let token = &auth_header[7..];
-    let response = oauth_service.validate_token(token).await?;
-    Ok(Json(response))
+    Ok(Json(user_record))
 }
 
 #[derive(Deserialize)]
@@ -360,7 +363,11 @@ mod tests {
 
         let storage = Arc::new(crate::storage::Storage::new(
             Box::new(crate::storage::memory::MemoryCacheStorage::new(3600)),
-            Box::new(crate::storage::database::SqliteStorage::new("sqlite::memory:").await.unwrap()),
+            Box::new(
+                crate::storage::database::SqliteStorage::new("sqlite::memory:")
+                    .await
+                    .unwrap(),
+            ),
         ));
         storage.migrate().await.unwrap();
         let jwt_service = JwtService::new("test-secret".to_string(), Algorithm::HS256).unwrap();
@@ -407,35 +414,6 @@ mod tests {
 
         let response = app.oneshot(request).await.unwrap();
         assert_eq!(response.status(), StatusCode::OK);
-    }
-
-    #[tokio::test]
-    async fn test_validate_handler_missing_header() {
-        let oauth_service = create_test_oauth_service().await;
-        let app = create_auth_routes().with_state(oauth_service);
-
-        let request = Request::builder()
-            .uri("/validate")
-            .body(Body::empty())
-            .unwrap();
-
-        let response = app.oneshot(request).await.unwrap();
-        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
-    }
-
-    #[tokio::test]
-    async fn test_validate_handler_invalid_format() {
-        let oauth_service = create_test_oauth_service().await;
-        let app = create_auth_routes().with_state(oauth_service);
-
-        let request = Request::builder()
-            .uri("/validate")
-            .header("authorization", "Invalid token")
-            .body(Body::empty())
-            .unwrap();
-
-        let response = app.oneshot(request).await.unwrap();
-        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
     }
 
     #[test]

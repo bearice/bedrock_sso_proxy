@@ -1,8 +1,8 @@
+use super::{StorageError, StorageResult};
 use rust_embed::RustEmbed;
 use sha2::{Digest, Sha256};
-use std::collections::HashSet;
 use sqlx::Row;
-use super::{StorageError, StorageResult};
+use std::collections::HashSet;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DatabaseType {
@@ -168,22 +168,16 @@ pub struct MigrationResult {
 
 /// Run PostgreSQL migrations
 pub async fn run_postgres_migrations(pool: &sqlx::Pool<sqlx::Postgres>) -> StorageResult<()> {
-    use std::time::Instant;
     use std::collections::HashSet;
+    use std::time::Instant;
 
     // First, ensure migration tracking table exists
     let tracking_sql = get_migration_sql(DatabaseType::Postgres, "000_migration_tracking.sql")?;
     let tracking_statements = parse_sql_statements(&tracking_sql);
     for statement in tracking_statements {
-        sqlx::query(&statement)
-            .execute(pool)
-            .await
-            .map_err(|e| {
-                StorageError::Database(format!(
-                    "Failed to create migration tracking table: {}",
-                    e
-                ))
-            })?;
+        sqlx::query(&statement).execute(pool).await.map_err(|e| {
+            StorageError::Database(format!("Failed to create migration tracking table: {}", e))
+        })?;
     }
 
     // Get list of already executed migrations
@@ -201,8 +195,7 @@ pub async fn run_postgres_migrations(pool: &sqlx::Pool<sqlx::Postgres>) -> Stora
         .collect();
 
     // Get pending migrations
-    let pending_migrations =
-        get_pending_migrations(DatabaseType::Postgres, &executed_migrations);
+    let pending_migrations = get_pending_migrations(DatabaseType::Postgres, &executed_migrations);
 
     // Execute pending migrations
     for migration_name in pending_migrations {
@@ -213,15 +206,12 @@ pub async fn run_postgres_migrations(pool: &sqlx::Pool<sqlx::Postgres>) -> Stora
         // Parse and execute migration statements
         let statements = parse_sql_statements(&sql);
         for statement in &statements {
-            sqlx::query(statement)
-                .execute(pool)
-                .await
-                .map_err(|e| {
-                    StorageError::Database(format!(
-                        "Failed to execute migration '{}' statement '{}': {}",
-                        migration_name, statement, e
-                    ))
-                })?;
+            sqlx::query(statement).execute(pool).await.map_err(|e| {
+                StorageError::Database(format!(
+                    "Failed to execute migration '{}' statement '{}': {}",
+                    migration_name, statement, e
+                ))
+            })?;
         }
 
         let execution_time = start_time.elapsed().as_millis() as i32;
@@ -250,22 +240,16 @@ pub async fn run_postgres_migrations(pool: &sqlx::Pool<sqlx::Postgres>) -> Stora
 
 /// Run SQLite migrations
 pub async fn run_sqlite_migrations(pool: &sqlx::Pool<sqlx::Sqlite>) -> StorageResult<()> {
-    use std::time::Instant;
     use std::collections::HashSet;
+    use std::time::Instant;
 
     // First, ensure migration tracking table exists
     let tracking_sql = get_migration_sql(DatabaseType::Sqlite, "000_migration_tracking.sql")?;
     let tracking_statements = parse_sql_statements(&tracking_sql);
     for statement in tracking_statements {
-        sqlx::query(&statement)
-            .execute(pool)
-            .await
-            .map_err(|e| {
-                StorageError::Database(format!(
-                    "Failed to create migration tracking table: {}",
-                    e
-                ))
-            })?;
+        sqlx::query(&statement).execute(pool).await.map_err(|e| {
+            StorageError::Database(format!("Failed to create migration tracking table: {}", e))
+        })?;
     }
 
     // Get list of already executed migrations
@@ -294,15 +278,12 @@ pub async fn run_sqlite_migrations(pool: &sqlx::Pool<sqlx::Sqlite>) -> StorageRe
         // Parse and execute migration statements
         let statements = parse_sql_statements(&sql);
         for statement in &statements {
-            sqlx::query(statement)
-                .execute(pool)
-                .await
-                .map_err(|e| {
-                    StorageError::Database(format!(
-                        "Failed to execute migration '{}' statement '{}': {}",
-                        migration_name, statement, e
-                    ))
-                })?;
+            sqlx::query(statement).execute(pool).await.map_err(|e| {
+                StorageError::Database(format!(
+                    "Failed to execute migration '{}' statement '{}': {}",
+                    migration_name, statement, e
+                ))
+            })?;
         }
 
         let execution_time = start_time.elapsed().as_millis() as i32;

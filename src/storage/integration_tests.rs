@@ -1,7 +1,5 @@
 use crate::storage::factory::{CacheBackend, DatabaseBackend, StorageFactory};
-use crate::storage::{
-    AuditLogEntry, CachedValidation, RefreshTokenData, StateData, UserRecord,
-};
+use crate::storage::{AuditLogEntry, CachedValidation, RefreshTokenData, StateData, UserRecord};
 use chrono::Utc;
 use std::collections::HashMap;
 

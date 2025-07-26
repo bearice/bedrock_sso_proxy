@@ -1,3 +1,4 @@
+use crate::storage::StorageError;
 use axum::{
     Json,
     http::StatusCode,
@@ -5,7 +6,6 @@ use axum::{
 };
 use serde_json::json;
 use thiserror::Error;
-use crate::storage::StorageError;
 
 #[derive(Debug, Error)]
 pub enum AppError {
