@@ -74,10 +74,15 @@ axum-test = "^17.3"
 serial_test = "^3.0"
 tempfile = "^3.0"
 urlencoding = "^2.1"
+env_logger = "^0.11"
 
 [[test]]
 name = "integration_tests"
 
 [[test]]
 name = "security_tests"
+
+[[example]]
+name = "pricing_demo"
+path = "examples/pricing_demo.rs"
 
