@@ -35,14 +35,14 @@
 - Extracts user identity/claims for logging/auditing
 - Returns 401 for invalid/missing tokens
 
-### 2.1. OAuth Integration Module (NEW)
+### 2.1. OAuth Integration Module (ENHANCED)
 
-- OAuth 2.0 provider integration (Google, GitHub)
+- OAuth 2.0 provider integration (Google, GitHub, Microsoft, GitLab, Auth0, Okta, custom)
 - Authorization code validation with providers
-- Long-lived JWT token generation (30 days)
-- Refresh token management with rotation
-- 24-hour validation result caching
-- Backward compatibility with existing JWT tokens
+- **Short-lived JWT tokens (1 hour)** for frontend authentication
+- **API key system** for programmatic access to Bedrock/Anthropic endpoints
+- Refresh token management with rotation (90 days)
+- Dual authentication architecture for different use cases
 
 ### 3. AWS Bedrock Client
 
@@ -60,39 +60,40 @@
 
 ## Authentication Flows
 
-### Legacy JWT Authentication Flow (Existing)
+### Hybrid Authentication Architecture
 
-1. Extract Bearer token from `Authorization: Bearer <jwt>` header
-2. Validate JWT signature and expiration
-3. Extract user claims (user_id, permissions, etc.)
-4. Proceed to AWS forwarding or return 401
+The system now uses a **dual authentication model** to optimize for different use cases:
 
-### OAuth Authentication Flow (NEW)
+#### Frontend Authentication (JWT + Refresh Tokens)
 
-#### Initial Token Creation
+**For web applications and dashboards**
 
-1. **Client redirects to OAuth provider** (Google/GitHub)
-2. **User authorizes application** and gets authorization code
-3. **Client calls** `POST /auth/token` with authorization code
-4. **Proxy validates code** with OAuth provider
-5. **Proxy checks admin status** based on user's email address
-6. **Proxy generates long-lived JWT** (30 days) with appropriate scopes
-7. **Client stores tokens** and uses JWT for subsequent requests
+1. **OAuth Authorization**: Client redirects to OAuth provider (Google/GitHub/etc.)
+2. **Token Exchange**: `POST /auth/token` with authorization code
+3. **Short-lived JWT**: Generate 1-hour JWT tokens for session management
+4. **Refresh Capability**: 90-day refresh tokens for seamless renewal
+5. **Frontend Routes**: `/auth/*` endpoints use JWT authentication
 
-#### Token Validation with Caching
+**JWT Lifecycle:**
+- **Initial Token**: 1-hour lifetime for active sessions
+- **Refresh Flow**: `POST /auth/refresh` with rotation (90-day window)
+- **Validation**: Standard JWT validation with proper expiration
 
-1. **Extract JWT token** from Authorization header
-2. **Check validation cache** using token hash (24h TTL)
-3. **If cache hit**: Use cached validation result
-4. **If cache miss**: Validate with OAuth provider and cache result
-5. **Proceed to AWS forwarding** or return 401
+#### API Key Authentication
 
-#### Token Refresh Flow
+**For programmatic access to AI models**
 
-1. **Client calls** `POST /auth/refresh` with refresh token
-2. **Proxy validates refresh token** and rotates it
-3. **Proxy issues new JWT** with extended expiration
-4. **Client updates stored tokens**
+1. **Key Generation**: Users generate API keys through frontend dashboard
+2. **Long-lived Access**: API keys for sustained programmatic access
+3. **Model Endpoints**: `/bedrock/*` and `/anthropic/*` use API key auth
+4. **Key Format**: `SSOK_` prefix for easy identification
+
+**API Key Features:**
+- **Format**: `SSOK_<32-char-random-string>` (e.g., `SSOK_a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6`)
+- **Header Authentication**: `X-API-Key: SSOK_...` or `Authorization: Bearer SSOK_...`
+- **User Association**: Keys linked to OAuth-authenticated users
+- **Simple Access**: Full access to all Bedrock/Anthropic endpoints for the user
+- **Rotation Support**: Easy key rotation without affecting JWTs
 
 ### Admin Authorization System (NEW)
 
@@ -591,7 +592,7 @@ server:
 jwt:
   secret: "your-jwt-secret"
   algorithm: "HS256"
-  access_token_ttl: 2592000 # 30 days
+  access_token_ttl: 3600 # 1 hour (shortened for security)
   refresh_token_ttl: 7776000 # 90 days
 
 oauth:
@@ -659,7 +660,7 @@ BEDROCK_SERVER__PORT=3000
 
 # JWT Configuration
 BEDROCK_JWT__SECRET=your-jwt-secret
-BEDROCK_JWT__ACCESS_TOKEN_TTL=2592000
+BEDROCK_JWT__ACCESS_TOKEN_TTL=3600
 BEDROCK_JWT__REFRESH_TOKEN_TTL=7776000
 
 # OAuth Configuration (Example: Google)
@@ -699,37 +700,51 @@ BEDROCK_LOGGING__LEVEL=info
 - Audit logging of all requests
 - AWS credentials via IAM roles preferred over static keys
 
-#### OAuth Security (NEW)
+#### Hybrid Authentication Security (ENHANCED)
 
+**Frontend JWT Security:**
+- **Short-lived JWTs** (1 hour) with refresh capability
 - **Authorization code validation** with OAuth providers
-- **Short-lived authorization codes** (10 minutes max)
-- **Long-lived JWT tokens** (30 days) with refresh capability
-- **Refresh token rotation** for enhanced security
-- **Cache invalidation** on security events
-- **Rate limiting** on token creation endpoints
+- **Refresh token rotation** (90 days) for enhanced security
 - **HTTPS enforcement** in production
-- **Secure token storage** recommendations for clients
 
-#### JWT Claims Structure (Enhanced with Email-Based Auth)
+**API Key Security:**
+- **Key Format**: `SSOK_` prefix with 32-character random suffix
+- **Secure Storage**: SHA-256 hashed storage in database
+- **User Binding**: Keys permanently linked to OAuth-authenticated users
+- **Optional Expiration**: Configurable key expiration dates
+- **Usage Tracking**: Last-used timestamps for security monitoring
+
+#### JWT Claims Structure (Simplified)
 
 ```json
 {
-  "sub": "user@example.com",
-  "iat": 1234567890,
-  "exp": 1234567890,
-  "provider": "google",
-  "email": "user@example.com",
-  "refresh_token_id": "uuid-v4-here"
+  "sub": 123456,  // Database user ID
+  "iat": 1640995200,
+  "exp": 1641001800  // 1-hour expiration (shortened from 30 days)
 }
 ```
 
 **Key Changes:**
+- **Short-lived**: 1-hour lifetime instead of 30 days
+- **User ID**: Database user ID as subject (not email)
+- **No Scopes**: Admin status checked at request time via user record
+- **Refresh Required**: Must use refresh tokens for sustained access
 
-- **Primary Key**: `sub` now contains the user's email address (was composite
-  user ID)
-- **No Scopes**: Admin status is checked at request time, not stored in JWT
-- **Real-Time Authorization**: Admin changes take effect immediately
-- **Simplified Token**: Removed scopes field to prevent stale permissions
+#### API Key Database Schema
+
+```sql
+CREATE TABLE api_keys (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    key_hash TEXT UNIQUE NOT NULL,        -- SHA-256 hash of SSOK_... key
+    user_id INTEGER NOT NULL REFERENCES users(id),
+    name TEXT NOT NULL,                   -- User-defined name
+    created_at TIMESTAMP NOT NULL,
+    last_used TIMESTAMP,
+    expires_at TIMESTAMP,                 -- Optional expiration
+    revoked_at TIMESTAMP                  -- Soft delete
+);
+```
 
 #### Validation Cache Security
 
@@ -2210,54 +2225,60 @@ pub async fn multi_region_health_check(
 
 ## Client Integration Guide
 
-### Claude Code Integration
+### Claude Code Integration (API Key Recommended)
 
-#### Method 1: Environment Variables
-
-```bash
-export BEDROCK_TOKEN="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
-export BEDROCK_ENDPOINT="https://your-proxy-domain.com"
-```
-
-#### Method 2: Claude Code Configuration
+#### Method 1: Environment Variables (API Key)
 
 ```bash
-# Set the Bedrock proxy endpoint
-claude-code config set bedrock.endpoint "https://your-proxy-domain.com"
-
-# Set the authentication token
-claude-code config set bedrock.token "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+export ANTHROPIC_AUTH_TOKEN="SSOK_a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6"
+export ANTHROPIC_BASE_URL="https://your-proxy-domain.com/anthropic"
+# OR for Bedrock format compatibility
+export ANTHROPIC_BEDROCK_BASE_URL="https://your-proxy-domain.com"
+export CLAUDE_CODE_SKIP_BEDROCK_AUTH=1
+export CLAUDE_CODE_USE_BEDROCK=1
 ```
 
-#### Method 3: Config File (~/.claude/config.json)
+#### Method 2: Bedrock Gateway Mode
 
-```json
-{
-  "bedrock": {
-    "endpoint": "https://your-proxy-domain.com",
-    "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
-    "refresh_token": "refresh_token_here"
-  }
-}
+```bash
+# For AWS Bedrock format compatibility
+export ANTHROPIC_BEDROCK_BASE_URL="https://your-proxy-domain.com"
+export ANTHROPIC_AUTH_TOKEN="SSOK_a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6"
+export CLAUDE_CODE_SKIP_BEDROCK_AUTH=1
+export CLAUDE_CODE_USE_BEDROCK=1
 ```
+
+**Note**: API keys are recommended for Claude Code as they don't require refresh token management.
 
 ### API Client Integration (Generic)
 
-#### HTTP Headers
+#### HTTP Headers (API Key)
 
 ```http
-Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+Authorization: Bearer SSOK_a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6
+# OR
+X-API-Key: SSOK_a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6
 Content-Type: application/json
 ```
 
-#### Example API Call
+#### Example API Call (API Key)
 
 ```bash
-curl -X POST "https://your-proxy-domain.com/model/anthropic.claude-sonnet-4-20250514-v1:0/invoke" \
-  -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..." \
+curl -X POST "https://your-proxy-domain.com/bedrock/model/anthropic.claude-sonnet-4-20250514-v1:0/invoke" \
+  -H "Authorization: Bearer SSOK_a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6" \
   -H "Content-Type: application/json" \
   -d '{
     "anthropic_version": "bedrock-2023-05-31",
+    "max_tokens": 1000,
+    "messages": [{"role": "user", "content": "Hello"}]
+  }'
+
+# Or using Anthropic format
+curl -X POST "https://your-proxy-domain.com/anthropic/v1/messages" \
+  -H "X-API-Key: SSOK_a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "claude-sonnet-4-20250514",
     "max_tokens": 1000,
     "messages": [{"role": "user", "content": "Hello"}]
   }'

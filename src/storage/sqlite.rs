@@ -616,4 +616,128 @@ impl DatabaseStorage for SqliteStorage {
 
         Ok(model_ids)
     }
+
+    // API Key management methods
+
+    async fn store_api_key(&self, api_key: &crate::auth::ApiKey) -> StorageResult<i32> {
+        let sql = r"
+            INSERT INTO api_keys (key_hash, user_id, name, created_at, last_used, expires_at, revoked_at)
+            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
+        ";
+
+        let result = sqlx::query(sql)
+            .bind(&api_key.key_hash)
+            .bind(api_key.user_id)
+            .bind(&api_key.name)
+            .bind(api_key.created_at)
+            .bind(api_key.last_used)
+            .bind(api_key.expires_at)
+            .bind(api_key.revoked_at)
+            .execute(&self.pool)
+            .await
+            .map_err(|e| StorageError::Database(format!("Failed to store API key: {}", e)))?;
+
+        Ok(result.last_insert_rowid() as i32)
+    }
+
+    async fn get_api_key_by_hash(&self, key_hash: &str) -> StorageResult<Option<crate::auth::ApiKey>> {
+        let sql = r"
+            SELECT id, key_hash, user_id, name, created_at, last_used, expires_at, revoked_at
+            FROM api_keys
+            WHERE key_hash = ?1
+        ";
+
+        match sqlx::query(sql)
+            .bind(key_hash)
+            .fetch_optional(&self.pool)
+            .await
+        {
+            Ok(Some(row)) => {
+                let api_key = crate::auth::ApiKey {
+                    id: Some(row.get("id")),
+                    key_hash: row.get("key_hash"),
+                    user_id: row.get("user_id"),
+                    name: row.get("name"),
+                    created_at: row.get("created_at"),
+                    last_used: row.get("last_used"),
+                    expires_at: row.get("expires_at"),
+                    revoked_at: row.get("revoked_at"),
+                };
+                Ok(Some(api_key))
+            }
+            Ok(None) => Ok(None),
+            Err(e) => Err(StorageError::Database(format!("Failed to get API key: {}", e))),
+        }
+    }
+
+    async fn get_api_keys_for_user(&self, user_id: i32) -> StorageResult<Vec<crate::auth::ApiKey>> {
+        let sql = r"
+            SELECT id, key_hash, user_id, name, created_at, last_used, expires_at, revoked_at
+            FROM api_keys
+            WHERE user_id = ?1 AND revoked_at IS NULL
+            ORDER BY created_at DESC
+        ";
+
+        let rows = sqlx::query(sql)
+            .bind(user_id)
+            .fetch_all(&self.pool)
+            .await
+            .map_err(|e| StorageError::Database(format!("Failed to get user API keys: {}", e)))?;
+
+        let mut api_keys = Vec::new();
+        for row in rows {
+            api_keys.push(crate::auth::ApiKey {
+                id: Some(row.get("id")),
+                key_hash: row.get("key_hash"),
+                user_id: row.get("user_id"),
+                name: row.get("name"),
+                created_at: row.get("created_at"),
+                last_used: row.get("last_used"),
+                expires_at: row.get("expires_at"),
+                revoked_at: row.get("revoked_at"),
+            });
+        }
+
+        Ok(api_keys)
+    }
+
+    async fn update_api_key_last_used(&self, key_hash: &str) -> StorageResult<()> {
+        let sql = "UPDATE api_keys SET last_used = ?1 WHERE key_hash = ?2";
+
+        sqlx::query(sql)
+            .bind(chrono::Utc::now())
+            .bind(key_hash)
+            .execute(&self.pool)
+            .await
+            .map_err(|e| StorageError::Database(format!("Failed to update API key last used: {}", e)))?;
+
+        Ok(())
+    }
+
+    async fn revoke_api_key(&self, key_id: i32) -> StorageResult<()> {
+        let sql = "UPDATE api_keys SET revoked_at = ?1 WHERE id = ?2";
+
+        sqlx::query(sql)
+            .bind(chrono::Utc::now())
+            .bind(key_id)
+            .execute(&self.pool)
+            .await
+            .map_err(|e| StorageError::Database(format!("Failed to revoke API key: {}", e)))?;
+
+        Ok(())
+    }
+
+    async fn cleanup_expired_api_keys(&self) -> StorageResult<u64> {
+        let now = chrono::Utc::now();
+        let sql = "UPDATE api_keys SET revoked_at = ?1 WHERE expires_at IS NOT NULL AND expires_at <= ?2 AND revoked_at IS NULL";
+
+        let result = sqlx::query(sql)
+            .bind(now)
+            .bind(now)
+            .execute(&self.pool)
+            .await
+            .map_err(|e| StorageError::Database(format!("Failed to cleanup expired API keys: {}", e)))?;
+
+        Ok(result.rows_affected())
+    }
 }

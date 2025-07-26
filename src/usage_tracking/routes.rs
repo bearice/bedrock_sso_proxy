@@ -1,5 +1,5 @@
 use crate::{
-    auth::middleware::ClaimsExtractor,
+    auth::middleware::UserExtractor,
     cost_tracking::{CostSummary, CostTrackingService, UpdateCostsResult},
     error::AppError,
     storage::{Storage, StoredModelCost, UsageQuery, UsageRecord, UsageStats},
@@ -90,12 +90,12 @@ pub struct ModelCostRequest {
 
 /// Get user's usage records
 async fn get_user_usage_records(
-    ClaimsExtractor(claims): ClaimsExtractor,
+    UserExtractor(user): UserExtractor,
     State(storage): State<Arc<Storage>>,
     Query(params): Query<UsageRecordsQuery>,
 ) -> Result<Json<UsageRecordsResponse>, AppError> {
     // Get user ID from JWT claims (sub field contains database user ID)
-    let user_id = claims.sub;
+    let user_id = user.id.unwrap();
 
     let limit = params.limit.unwrap_or(50).min(500); // Max 500 records
     let offset = params.offset.unwrap_or(0);
@@ -125,12 +125,12 @@ async fn get_user_usage_records(
 
 /// Get user's usage statistics
 async fn get_user_usage_stats(
-    ClaimsExtractor(claims): ClaimsExtractor,
+    UserExtractor(user): UserExtractor,
     State(storage): State<Arc<Storage>>,
     Query(params): Query<UsageStatsQuery>,
 ) -> Result<Json<UsageStats>, AppError> {
     // Get user ID from JWT claims (sub field contains database user ID)
-    let user_id = claims.sub;
+    let user_id = user.id.unwrap();
 
     let stats = storage
         .database

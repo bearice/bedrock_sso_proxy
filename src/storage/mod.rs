@@ -334,6 +334,13 @@ pub trait DatabaseStorage: Send + Sync {
 
     /// Get unique model IDs from usage records
     async fn get_unique_model_ids(&self) -> StorageResult<Vec<String>>;
+
+    async fn store_api_key(&self, api_key: &crate::auth::ApiKey) -> StorageResult<i32> ;
+    async fn get_api_key_by_hash(&self, key_hash: &str) -> StorageResult<Option<crate::auth::ApiKey>> ;
+    async fn get_api_keys_for_user(&self, _user_id: i32) -> StorageResult<Vec<crate::auth::ApiKey>> ;
+    async fn update_api_key_last_used(&self, _key_hash: &str) -> StorageResult<()>;
+    async fn revoke_api_key(&self, _key_id: i32) -> StorageResult<()> ;
+    async fn cleanup_expired_api_keys(&self) -> StorageResult<u64>;
 }
 
 /// Unified storage interface combining cache and database

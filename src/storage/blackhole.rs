@@ -230,6 +230,38 @@ impl DatabaseStorage for BlackholeStorage {
         // Return empty vec - no models used
         Ok(Vec::new())
     }
+
+    // API Key management methods
+
+    async fn store_api_key(&self, _api_key: &crate::auth::ApiKey) -> StorageResult<i32> {
+        // Return a fake API key ID
+        Ok(1)
+    }
+
+    async fn get_api_key_by_hash(&self, _key_hash: &str) -> StorageResult<Option<crate::auth::ApiKey>> {
+        // Always return None - no API keys stored
+        Ok(None)
+    }
+
+    async fn get_api_keys_for_user(&self, _user_id: i32) -> StorageResult<Vec<crate::auth::ApiKey>> {
+        // Return empty vec - no API keys stored
+        Ok(Vec::new())
+    }
+
+    async fn update_api_key_last_used(&self, _key_hash: &str) -> StorageResult<()> {
+        // No-op - nothing to update
+        Ok(())
+    }
+
+    async fn revoke_api_key(&self, _key_id: i32) -> StorageResult<()> {
+        // No-op - nothing to revoke
+        Ok(())
+    }
+
+    async fn cleanup_expired_api_keys(&self) -> StorageResult<u64> {
+        // Return 0 - no API keys to clean up
+        Ok(0)
+    }
 }
 
 #[cfg(test)]

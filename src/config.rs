@@ -25,6 +25,8 @@ pub struct Config {
     pub model_mapping: ModelMappingConfig,
     #[serde(default)]
     pub usage_tracking: UsageTrackingConfig,
+    #[serde(default)]
+    pub api_keys: ApiKeyConfig,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -49,7 +51,7 @@ fn default_jwt_algorithm() -> String {
 }
 
 fn default_access_token_ttl() -> u64 {
-    2592000 // 30 days
+    3600 // 1 hour
 }
 
 fn default_refresh_token_ttl() -> u64 {
@@ -360,6 +362,52 @@ impl Default for CostTrackingConfig {
     }
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ApiKeyConfig {
+    #[serde(default = "default_api_key_enabled")]
+    pub enabled: bool,
+    #[serde(default = "default_api_key_prefix")]
+    pub prefix: String,
+    #[serde(default = "default_api_key_length")]
+    pub key_length: usize,
+    #[serde(default = "default_api_key_default_expiry_days")]
+    pub default_expiry_days: Option<u32>,
+    #[serde(default = "default_api_key_max_keys_per_user")]
+    pub max_keys_per_user: u32,
+}
+
+fn default_api_key_enabled() -> bool {
+    true
+}
+
+fn default_api_key_prefix() -> String {
+    "SSOK_".to_string()
+}
+
+fn default_api_key_length() -> usize {
+    32
+}
+
+fn default_api_key_default_expiry_days() -> Option<u32> {
+    None // No expiry by default
+}
+
+fn default_api_key_max_keys_per_user() -> u32 {
+    10
+}
+
+impl Default for ApiKeyConfig {
+    fn default() -> Self {
+        Self {
+            enabled: default_api_key_enabled(),
+            prefix: default_api_key_prefix(),
+            key_length: default_api_key_length(),
+            default_expiry_days: default_api_key_default_expiry_days(),
+            max_keys_per_user: default_api_key_max_keys_per_user(),
+        }
+    }
+}
+
 impl Default for RedisStorageConfig {
     fn default() -> Self {
         Self {
@@ -412,6 +460,7 @@ impl Default for Config {
             metrics: MetricsConfig::default(),
             model_mapping: ModelMappingConfig::default(),
             usage_tracking: UsageTrackingConfig::default(),
+            api_keys: ApiKeyConfig::default(),
         }
     }
 }

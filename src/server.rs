@@ -1,7 +1,7 @@
 use crate::{
     auth::{
-        jwt::{JwtService, OAuthClaims, parse_algorithm},
-        middleware::{admin_middleware, jwt_auth_middleware},
+        jwt::{parse_algorithm, JwtService},
+        middleware::{admin_middleware, auth_middleware, jwt_auth_middleware},
         oauth::OAuthService,
     },
     config::Config,
@@ -14,16 +14,11 @@ use crate::{
         create_health_routes, create_protected_auth_routes,
     },
     shutdown::{HttpServerShutdown, ShutdownCoordinator, ShutdownManager, StorageShutdown},
-    storage::{Storage, factory::StorageFactory},
+    storage::{factory::StorageFactory, UserRecord},
     usage_tracking::{create_admin_usage_routes, create_user_usage_routes},
 };
 use axum::{
-    Router,
-    body::Body,
-    extract::{DefaultBodyLimit, Request, State},
-    middleware,
-    middleware::Next,
-    response::Response,
+    body::Body, extract::{ConnectInfo, DefaultBodyLimit, Request}, middleware::{self, Next}, response::Response, Router
 };
 use std::{net::SocketAddr, sync::Arc, time::Duration};
 use tokio::net::TcpListener;
@@ -32,8 +27,9 @@ use tracing::{error, info};
 /// Maximum request body size (10MB) to prevent DoS attacks
 const MAX_BODY_SIZE: usize = 10 * 1024 * 1024;
 
+#[derive(Clone)]
 pub struct Server {
-    pub config: Config,
+    pub config: Arc<Config>,
     pub jwt_service: Arc<JwtService>,
     pub model_service: Arc<ModelService>,
     pub oauth_service: Arc<OAuthService>,
@@ -43,6 +39,7 @@ pub struct Server {
 
 impl Server {
     pub async fn new(config: Config) -> Result<Self, AppError> {
+        let config = Arc::new(config);
         // Initialize metrics if enabled
         let _metrics_handle = if config.metrics.enabled {
             match metrics::init_metrics_with_port(config.metrics.port) {
@@ -77,11 +74,11 @@ impl Server {
         );
 
         // Initialize model service
-        let model_service = Arc::new(ModelService::new(storage.clone(), config.clone()));
+        let model_service = Arc::new(ModelService::new(storage.clone(), (*config).clone()));
 
         // Initialize OAuth service
         let oauth_service = Arc::new(OAuthService::new(
-            config.clone(),
+            (*config).clone(),
             jwt_service.as_ref().clone(),
             storage.clone(),
         ));
@@ -180,7 +177,7 @@ impl Server {
                 create_protected_auth_routes()
                     .with_state(self.oauth_service.clone())
                     .layer(middleware::from_fn_with_state(
-                        self.jwt_service.clone(),
+                        self.clone(),
                         jwt_auth_middleware,
                     )),
             )
@@ -195,49 +192,43 @@ impl Server {
                 create_user_usage_routes()
                     .with_state(self.storage.clone())
                     .layer(middleware::from_fn_with_state(
-                        self.jwt_service.clone(),
+                        self.clone(),
                         jwt_auth_middleware,
                     )),
             )
             // Protected admin usage tracking API routes
-            .nest("/api", {
-                let storage_clone: Arc<Storage> = self.storage.clone();
-                let config_clone: Arc<Config> = Arc::new(self.config.clone());
+            .nest("/api",
                 create_admin_usage_routes()
-                    .with_state(storage_clone.clone())
+                    .with_state(self.storage.clone())
                     .layer(middleware::from_fn_with_state(
-                        self.jwt_service.clone(),
+                        self.clone(),
                         jwt_auth_middleware,
                     ))
-                    .layer(middleware::from_fn(move |request: Request, next: Next| {
-                        let config_arc = config_clone.clone();
-                        let storage_arc = storage_clone.clone();
-                        async move {
-                            admin_middleware(State(config_arc), State(storage_arc), request, next)
-                                .await
-                        }
-                    }))
-            })
-            // Protected Bedrock API routes - usage tracking now handled by ModelService
+                    .layer(middleware::from_fn_with_state(
+                        self.clone(),
+                        admin_middleware,
+                    ))
+            )
+            // Protected Bedrock API routes - Unified authentication (JWT or API key)
             .nest(
                 "/bedrock",
                 create_bedrock_routes()
                     .with_state(self.model_service.clone())
                     .layer(DefaultBodyLimit::max(MAX_BODY_SIZE))
                     .layer(middleware::from_fn_with_state(
-                        self.jwt_service.clone(),
-                        jwt_auth_middleware,
+                        self.clone(),
+                        auth_middleware,
                     )),
             )
-            // Protected Anthropic API routes - usage tracking now handled by ModelService
+            // Protected Anthropic API routes - Unified authentication (JWT or API key)
             .nest(
                 "/anthropic",
                 create_anthropic_routes()
                     .with_state(self.model_service.clone())
                     .layer(DefaultBodyLimit::max(MAX_BODY_SIZE))
                     .layer(middleware::from_fn_with_state(
-                        self.jwt_service.clone(),
-                        jwt_auth_middleware,
+                        self.clone(),
+                        auth_middleware,
                     )),
             )
             // Frontend routes (serve last to not conflict with API routes)
@@ -267,15 +258,15 @@ impl Server {
                     // Get IP from extensions if available (from ConnectInfo)
                     let ip = req
                         .extensions()
-                        .get::<axum::extract::ConnectInfo<SocketAddr>>()
+                        .get::<ConnectInfo<SocketAddr>>()
                         .map(|connect_info| connect_info.0.ip().to_string())
                         .unwrap_or_else(|| "unknown".to_string());
 
                     // Get user from JWT claims if available
                     let user = req
                         .extensions()
-                        .get::<OAuthClaims>()
-                        .map(|claims| claims.sub.to_string())
+                        .get::<UserRecord>()
+                        .map(|user| user.provider_user_id.clone())
                         .unwrap_or_else(|| "anonymous".to_string());
 
                     // Log request with simple format - only for API routes
