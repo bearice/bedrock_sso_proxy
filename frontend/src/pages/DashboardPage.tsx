@@ -413,24 +413,15 @@ export function DashboardPage() {
         <h4>Claude Code Integration (LLM Gateway)</h4>
         <p>Configure Claude Code to use this proxy as an LLM gateway:</p>
 
-        <h5>Method 1: Environment Variables</h5>
+        <h5>Method 1: Standard Anthropic API</h5>
+        <pre>{`export ANTHROPIC_AUTH_TOKEN="${token?.substring(0, 20)}..."
+export ANTHROPIC_BASE_URL="${currentDomain}/anthropic"`}</pre>
+
+        <h5>Method 2: Bedrock Gateway Mode</h5>
         <pre>{`export ANTHROPIC_BEDROCK_BASE_URL="${currentDomain}"
 export ANTHROPIC_AUTH_TOKEN="${token?.substring(0, 20)}..."
 export CLAUDE_CODE_SKIP_BEDROCK_AUTH=1
 export CLAUDE_CODE_USE_BEDROCK=1`}</pre>
-
-        <h5>Method 2: Settings File</h5>
-        <p>
-          Add to your <code>~/.claude/settings.json</code>:
-        </p>
-        <pre>{`{
-  "env": {
-    "ANTHROPIC_BEDROCK_BASE_URL": "${currentDomain}",
-    "ANTHROPIC_AUTH_TOKEN": "${token?.substring(0, 20)}...",
-    "CLAUDE_CODE_SKIP_BEDROCK_AUTH": "1",
-    "CLAUDE_CODE_USE_BEDROCK": "1"
-  }
-}`}</pre>
 
         <div
           style={{
