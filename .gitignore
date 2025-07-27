@@ -3,7 +3,6 @@
 *.pdb
 
 # Configuration
-.claude/settings.local.json
 config.yaml
 
 # Frontend
@@ -25,12 +24,16 @@ frontend/.eslintcache
 # Editor
 .vscode/
 .idea/
+.claude/
+__pycache__
 *.swp
 *.swo
 *~
+*.pyc
 
 # OS
 .DS_Store
 Thumbs.db
-data/*
-.claude/cclsp.json
+/data
+
+

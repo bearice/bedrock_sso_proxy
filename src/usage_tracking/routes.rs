@@ -287,6 +287,8 @@ async fn create_model_cost(
             .unwrap_or_default(),
         output_cost_per_1k_tokens: Decimal::from_f64_retain(request.output_cost_per_1k_tokens)
             .unwrap_or_default(),
+        cache_write_cost_per_1k_tokens: None,
+        cache_read_cost_per_1k_tokens: None,
         updated_at: Utc::now(),
     };
 
@@ -317,6 +319,8 @@ async fn update_model_cost(
             .unwrap_or_default(),
         output_cost_per_1k_tokens: Decimal::from_f64_retain(request.output_cost_per_1k_tokens)
             .unwrap_or_default(),
+        cache_write_cost_per_1k_tokens: None,
+        cache_read_cost_per_1k_tokens: None,
         updated_at: Utc::now(),
     };
 

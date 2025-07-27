@@ -583,7 +583,10 @@ impl OAuthService {
         Ok(clients)
     }
 
-    fn create_oauth_client_static(provider: &OAuthProvider, provider_name: &str) -> Result<Oauth2Client, AppError> {
+    fn create_oauth_client_static(
+        provider: &OAuthProvider,
+        provider_name: &str,
+    ) -> Result<Oauth2Client, AppError> {
         let auth_url = AuthUrl::new(
             provider
                 .authorization_url
@@ -623,7 +626,12 @@ impl OAuthService {
             .as_ref()
             .map(|uri| RedirectUrl::new(uri.clone()))
             .transpose()
-            .map_err(|e| AppError::BadRequest(format!("Invalid redirect URI for provider '{}': {}", provider_name, e)))?;
+            .map_err(|e| {
+                AppError::BadRequest(format!(
+                    "Invalid redirect URI for provider '{}': {}",
+                    provider_name, e
+                ))
+            })?;
 
         let mut client = BasicClient::new(ClientId::new(provider.client_id.clone()))
             .set_client_secret(ClientSecret::new(provider.client_secret.clone()))

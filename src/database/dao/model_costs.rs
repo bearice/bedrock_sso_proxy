@@ -1,8 +1,6 @@
 use crate::database::entities::{StoredModelCost, model_costs};
 use crate::database::{DatabaseError, DatabaseResult};
-use sea_orm::{
-    ActiveValue, ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter, Set,
-};
+use sea_orm::{ActiveValue, ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter, Set};
 use sea_orm_migration::sea_query::OnConflict;
 
 /// Model costs DAO for database operations
@@ -33,6 +31,8 @@ impl ModelCostsDao {
             model_id: Set(cost.model_id.clone()),
             input_cost_per_1k_tokens: Set(cost.input_cost_per_1k_tokens),
             output_cost_per_1k_tokens: Set(cost.output_cost_per_1k_tokens),
+            cache_write_cost_per_1k_tokens: Set(cost.cache_write_cost_per_1k_tokens),
+            cache_read_cost_per_1k_tokens: Set(cost.cache_read_cost_per_1k_tokens),
             updated_at: Set(cost.updated_at),
         };
 
@@ -40,6 +40,8 @@ impl ModelCostsDao {
             .update_columns([
                 model_costs::Column::InputCostPer1kTokens,
                 model_costs::Column::OutputCostPer1kTokens,
+                model_costs::Column::CacheWriteCostPer1kTokens,
+                model_costs::Column::CacheReadCostPer1kTokens,
                 model_costs::Column::UpdatedAt,
             ])
             .to_owned();

@@ -129,6 +129,8 @@ mod tests {
                 request_time: Utc::now() - chrono::Duration::minutes(i as i64 * 10),
                 input_tokens: *input,
                 output_tokens: *output,
+                cache_write_tokens: None,
+                cache_read_tokens: None,
                 total_tokens: input + output,
                 response_time_ms: 200 + (i as u32 * 50),
                 success: true,
@@ -159,6 +161,8 @@ mod tests {
                 model_id: model_id.to_string(),
                 input_cost_per_1k_tokens: input_cost,
                 output_cost_per_1k_tokens: output_cost,
+                cache_write_cost_per_1k_tokens: None,
+                cache_read_cost_per_1k_tokens: None,
                 updated_at: Utc::now(),
             };
             database.model_costs().upsert(&cost).await.unwrap();

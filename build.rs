@@ -102,7 +102,7 @@ fn build_frontend() {
 
 fn embed_csv_modified_time() {
     let csv_path = Path::new("bedrock_pricing.csv");
-    
+
     if let Ok(metadata) = std::fs::metadata(csv_path) {
         if let Ok(modified) = metadata.modified() {
             // Convert to Unix timestamp
@@ -110,9 +110,12 @@ fn embed_csv_modified_time() {
                 .duration_since(std::time::UNIX_EPOCH)
                 .unwrap()
                 .as_secs();
-            
+
             println!("cargo:rustc-env=BEDROCK_CSV_MODIFIED_TIME={}", timestamp);
-            println!("cargo:warning=Embedded CSV modification time: {}", timestamp);
+            println!(
+                "cargo:warning=Embedded CSV modification time: {}",
+                timestamp
+            );
         } else {
             println!("cargo:warning=Could not get CSV modification time, using current time");
         }

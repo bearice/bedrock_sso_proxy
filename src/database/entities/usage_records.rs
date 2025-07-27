@@ -15,6 +15,8 @@ pub struct Model {
     pub request_time: DateTime<Utc>,
     pub input_tokens: u32,
     pub output_tokens: u32,
+    pub cache_write_tokens: Option<u32>,
+    pub cache_read_tokens: Option<u32>,
     pub total_tokens: u32,
     pub response_time_ms: u32,
     pub success: bool,

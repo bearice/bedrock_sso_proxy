@@ -14,6 +14,10 @@ pub struct Model {
     pub input_cost_per_1k_tokens: Decimal,
     #[sea_orm(column_name = "output_cost_per_1k_tokens")]
     pub output_cost_per_1k_tokens: Decimal,
+    #[sea_orm(column_name = "cache_write_cost_per_1k_tokens")]
+    pub cache_write_cost_per_1k_tokens: Option<Decimal>,
+    #[sea_orm(column_name = "cache_read_cost_per_1k_tokens")]
+    pub cache_read_cost_per_1k_tokens: Option<Decimal>,
     pub updated_at: DateTime<Utc>,
 }
 

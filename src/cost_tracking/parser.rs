@@ -21,13 +21,21 @@ struct PricingRecord {
     provider: String,
     input_price: f64,
     output_price: f64,
+    #[allow(dead_code)]
+    batch_input_price: Option<f64>,
+    #[allow(dead_code)]
+    batch_output_price: Option<f64>,
+    cache_write_price: Option<f64>,
+    cache_read_price: Option<f64>,
 }
 
 /// Type alias for pricing data structure
-type PricingData = HashMap<String, HashMap<String, (f64, f64, String, String)>>;
+/// Structure: region_id -> model_id -> (input_price, output_price, cache_write_price, cache_read_price, model_name, provider)
+type PricingData =
+    HashMap<String, HashMap<String, (f64, f64, Option<f64>, Option<f64>, String, String)>>;
 
 /// Cached embedded pricing data parsed from CSV
-/// Structure: region_id -> model_id -> (input_price, output_price, model_name, provider)
+/// Structure: region_id -> model_id -> (input_price, output_price, cache_write_price, cache_read_price, model_name, provider)
 static EMBEDDED_PRICING: Lazy<PricingData> = Lazy::new(|| {
     let mut pricing = HashMap::new();
 
@@ -40,7 +48,7 @@ static EMBEDDED_PRICING: Lazy<PricingData> = Lazy::new(|| {
     pricing
 });
 
-/// Parse CSV pricing data into region -> model -> (input_price, output_price, model_name, provider) structure
+/// Parse CSV pricing data into region -> model -> (input_price, output_price, cache_write_price, cache_read_price, model_name, provider) structure
 fn parse_csv_pricing_data(csv_content: &str, pricing: &mut PricingData) {
     let mut reader = csv::Reader::from_reader(csv_content.as_bytes());
 
@@ -50,12 +58,16 @@ fn parse_csv_pricing_data(csv_content: &str, pricing: &mut PricingData) {
         // CSV already has per-1K pricing
         let input_price_per_1k = record.input_price;
         let output_price_per_1k = record.output_price;
+        let cache_write_price = record.cache_write_price;
+        let cache_read_price = record.cache_read_price;
 
         pricing.entry(record.region_id).or_default().insert(
             record.model_id,
             (
                 input_price_per_1k,
                 output_price_per_1k,
+                cache_write_price,
+                cache_read_price,
                 record.model_name,
                 record.provider,
             ),
@@ -71,6 +83,8 @@ pub struct ModelPricing {
     pub model_id: String,
     pub input_cost_per_1k_tokens: f64,
     pub output_cost_per_1k_tokens: f64,
+    pub cache_write_cost_per_1k_tokens: Option<f64>,
+    pub cache_read_cost_per_1k_tokens: Option<f64>,
     pub provider: String,
     pub region: String,
     pub updated_at: DateTime<Utc>,
@@ -107,11 +121,13 @@ impl CsvPricingSource {
 
         for record in reader.deserialize().flatten() {
             let record: PricingRecord = record;
-            
+
             models.push(ModelPricing {
                 model_id: record.model_id,
                 input_cost_per_1k_tokens: record.input_price,
                 output_cost_per_1k_tokens: record.output_price,
+                cache_write_cost_per_1k_tokens: record.cache_write_price,
+                cache_read_cost_per_1k_tokens: record.cache_read_price,
                 provider: record.provider,
                 region: record.region_id,
                 updated_at: now,
@@ -119,7 +135,9 @@ impl CsvPricingSource {
         }
 
         if models.is_empty() {
-            return Err(AppError::BadRequest("No valid pricing data found in CSV".to_string()));
+            return Err(AppError::BadRequest(
+                "No valid pricing data found in CSV".to_string(),
+            ));
         }
 
         info!("Parsed {} models from CSV content", models.len());
@@ -136,7 +154,7 @@ impl CsvPricingSource {
                 }
             }
         }
-        
+
         // Fallback to current time if we can't get the embedded timestamp
         Utc::now()
     }
@@ -147,12 +165,17 @@ impl CsvPricingSource {
         let csv_modified_date = Self::get_embedded_csv_modified_date();
 
         for (region, region_models) in EMBEDDED_PRICING.iter() {
-            for (model_id, (input_cost, output_cost, _model_name, provider)) in region_models.iter()
+            for (
+                model_id,
+                (input_cost, output_cost, cache_write_cost, cache_read_cost, _model_name, provider),
+            ) in region_models.iter()
             {
                 all_models.push(ModelPricing {
                     model_id: model_id.clone(),
                     input_cost_per_1k_tokens: *input_cost,
                     output_cost_per_1k_tokens: *output_cost,
+                    cache_write_cost_per_1k_tokens: *cache_write_cost,
+                    cache_read_cost_per_1k_tokens: *cache_read_cost,
                     provider: provider.clone(),
                     region: region.clone(),
                     updated_at: csv_modified_date,
@@ -181,12 +204,17 @@ impl PricingDataSource for CsvPricingSource {
         let csv_modified_date = Self::get_embedded_csv_modified_date();
 
         if let Some(region_models) = EMBEDDED_PRICING.get(&self.region) {
-            for (model_id, (input_cost, output_cost, _model_name, provider)) in region_models.iter()
+            for (
+                model_id,
+                (input_cost, output_cost, cache_write_cost, cache_read_cost, _model_name, provider),
+            ) in region_models.iter()
             {
                 models.push(ModelPricing {
                     model_id: model_id.clone(),
                     input_cost_per_1k_tokens: *input_cost,
                     output_cost_per_1k_tokens: *output_cost,
+                    cache_write_cost_per_1k_tokens: *cache_write_cost,
+                    cache_read_cost_per_1k_tokens: *cache_read_cost,
                     provider: provider.clone(),
                     region: self.region.clone(),
                     updated_at: csv_modified_date,
@@ -205,18 +233,32 @@ impl PricingDataSource for CsvPricingSource {
 
     async fn get_model(&self, model_id: &str) -> Result<ModelPricing, AppError> {
         if let Some(region_models) = EMBEDDED_PRICING.get(&self.region) {
-            if let Some((input_cost, output_cost, _model_name, provider)) =
-                region_models.get(model_id)
+            if let Some((
+                input_cost,
+                output_cost,
+                cache_write_cost,
+                cache_read_cost,
+                _model_name,
+                provider,
+            )) = region_models.get(model_id)
             {
                 let csv_modified_date = Self::get_embedded_csv_modified_date();
                 debug!(
-                    "Using CSV pricing for {} in region {}: input=${:.4}/1k, output=${:.4}/1k, updated_at={}",
-                    model_id, self.region, input_cost, output_cost, csv_modified_date
+                    "Using CSV pricing for {} in region {}: input=${:.4}/1k, output=${:.4}/1k, cache_write=${:?}/1k, cache_read=${:?}/1k, updated_at={}",
+                    model_id,
+                    self.region,
+                    input_cost,
+                    output_cost,
+                    cache_write_cost,
+                    cache_read_cost,
+                    csv_modified_date
                 );
                 return Ok(ModelPricing {
                     model_id: model_id.to_string(),
                     input_cost_per_1k_tokens: *input_cost,
                     output_cost_per_1k_tokens: *output_cost,
+                    cache_write_cost_per_1k_tokens: *cache_write_cost,
+                    cache_read_cost_per_1k_tokens: *cache_read_cost,
                     provider: provider.clone(),
                     region: self.region.clone(),
                     updated_at: csv_modified_date,
@@ -235,12 +277,17 @@ impl PricingDataSource for CsvPricingSource {
         let csv_modified_date = Self::get_embedded_csv_modified_date();
 
         if let Some(region_models) = EMBEDDED_PRICING.get(region) {
-            for (model_id, (input_cost, output_cost, _model_name, provider)) in region_models.iter()
+            for (
+                model_id,
+                (input_cost, output_cost, cache_write_cost, cache_read_cost, _model_name, provider),
+            ) in region_models.iter()
             {
                 models.push(ModelPricing {
                     model_id: model_id.clone(),
                     input_cost_per_1k_tokens: *input_cost,
                     output_cost_per_1k_tokens: *output_cost,
+                    cache_write_cost_per_1k_tokens: *cache_write_cost,
+                    cache_read_cost_per_1k_tokens: *cache_read_cost,
                     provider: provider.clone(),
                     region: region.to_string(),
                     updated_at: csv_modified_date,
@@ -328,6 +375,8 @@ mod tests {
             model_id: "test-model".to_string(),
             input_cost_per_1k_tokens: 0.003,
             output_cost_per_1k_tokens: 0.015,
+            cache_write_cost_per_1k_tokens: Some(0.00375),
+            cache_read_cost_per_1k_tokens: Some(0.0003),
             provider: "AWS".to_string(),
             region: "us-east-1".to_string(),
             updated_at: Utc::now(),
@@ -335,6 +384,8 @@ mod tests {
 
         assert_eq!(pricing.input_cost_per_1k_tokens, 0.003);
         assert_eq!(pricing.output_cost_per_1k_tokens, 0.015);
+        assert_eq!(pricing.cache_write_cost_per_1k_tokens, Some(0.00375));
+        assert_eq!(pricing.cache_read_cost_per_1k_tokens, Some(0.0003));
         assert_eq!(pricing.model_id, "test-model");
         assert_eq!(pricing.region, "us-east-1");
     }
@@ -366,36 +417,46 @@ mod tests {
 
     #[test]
     fn test_parse_csv_content() {
-        let csv_content = r#"region_id,model_id,model_name,provider,input_price,output_price
-us-east-1,anthropic.claude-3-haiku-20240307-v1:0,Claude 3 Haiku,Anthropic,0.00025,0.00125
-us-west-2,anthropic.claude-3-sonnet-20240229-v1:0,Claude 3 Sonnet,Anthropic,0.003,0.015"#;
+        let csv_content = r#"region_id,model_id,model_name,provider,input_price,output_price,batch_input_price,batch_output_price,cache_write_price,cache_read_price
+us-east-1,anthropic.claude-3-haiku-20240307-v1:0,Claude 3 Haiku,Anthropic,0.00025,0.00125,0.000125,0.000625,,
+us-west-2,anthropic.claude-3-sonnet-20240229-v1:0,Claude 3 Sonnet,Anthropic,0.003,0.015,0.0015,0.0075,0.00375,0.0003"#;
 
         let models = CsvPricingSource::parse_csv_content(csv_content).unwrap();
-        
+
         assert_eq!(models.len(), 2);
-        
+
         let haiku_model = &models[0];
-        assert_eq!(haiku_model.model_id, "anthropic.claude-3-haiku-20240307-v1:0");
+        assert_eq!(
+            haiku_model.model_id,
+            "anthropic.claude-3-haiku-20240307-v1:0"
+        );
         assert_eq!(haiku_model.region, "us-east-1");
         assert_eq!(haiku_model.provider, "Anthropic");
         assert_eq!(haiku_model.input_cost_per_1k_tokens, 0.00025);
         assert_eq!(haiku_model.output_cost_per_1k_tokens, 0.00125);
-        
+        assert_eq!(haiku_model.cache_write_cost_per_1k_tokens, None);
+        assert_eq!(haiku_model.cache_read_cost_per_1k_tokens, None);
+
         let sonnet_model = &models[1];
-        assert_eq!(sonnet_model.model_id, "anthropic.claude-3-sonnet-20240229-v1:0");
+        assert_eq!(
+            sonnet_model.model_id,
+            "anthropic.claude-3-sonnet-20240229-v1:0"
+        );
         assert_eq!(sonnet_model.region, "us-west-2");
         assert_eq!(sonnet_model.provider, "Anthropic");
         assert_eq!(sonnet_model.input_cost_per_1k_tokens, 0.003);
         assert_eq!(sonnet_model.output_cost_per_1k_tokens, 0.015);
+        assert_eq!(sonnet_model.cache_write_cost_per_1k_tokens, Some(0.00375));
+        assert_eq!(sonnet_model.cache_read_cost_per_1k_tokens, Some(0.0003));
     }
 
     #[test]
     fn test_parse_empty_csv_content() {
-        let csv_content = "region_id,model_id,model_name,provider,input_price,output_price";
-        
+        let csv_content = "region_id,model_id,model_name,provider,input_price,output_price,batch_input_price,batch_output_price,cache_write_price,cache_read_price";
+
         let result = CsvPricingSource::parse_csv_content(csv_content);
         assert!(result.is_err());
-        
+
         if let Err(AppError::BadRequest(msg)) = result {
             assert_eq!(msg, "No valid pricing data found in CSV");
         } else {

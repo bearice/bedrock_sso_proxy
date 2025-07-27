@@ -57,6 +57,12 @@ impl CostTrackingService {
                     pricing.output_cost_per_1k_tokens,
                 )
                 .unwrap_or_default(),
+                cache_write_cost_per_1k_tokens: pricing
+                    .cache_write_cost_per_1k_tokens
+                    .map(|c| Decimal::from_f64_retain(c).unwrap_or_default()),
+                cache_read_cost_per_1k_tokens: pricing
+                    .cache_read_cost_per_1k_tokens
+                    .map(|c| Decimal::from_f64_retain(c).unwrap_or_default()),
                 updated_at: pricing.updated_at,
             };
 
@@ -159,7 +165,10 @@ impl CostTrackingService {
     }
 
     /// Batch update costs from CSV content
-    pub async fn batch_update_from_csv_content(&self, csv_content: &str) -> Result<UpdateCostsResult, AppError> {
+    pub async fn batch_update_from_csv_content(
+        &self,
+        csv_content: &str,
+    ) -> Result<UpdateCostsResult, AppError> {
         info!("Starting batch cost update from provided CSV content");
 
         let mut result = UpdateCostsResult {
@@ -192,6 +201,12 @@ impl CostTrackingService {
                     pricing.output_cost_per_1k_tokens,
                 )
                 .unwrap_or_default(),
+                cache_write_cost_per_1k_tokens: pricing
+                    .cache_write_cost_per_1k_tokens
+                    .map(|c| Decimal::from_f64_retain(c).unwrap_or_default()),
+                cache_read_cost_per_1k_tokens: pricing
+                    .cache_read_cost_per_1k_tokens
+                    .map(|c| Decimal::from_f64_retain(c).unwrap_or_default()),
                 updated_at: pricing.updated_at,
             };
 

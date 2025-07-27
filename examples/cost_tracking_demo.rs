@@ -86,6 +86,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let usage_metadata = UsageMetadata {
         input_tokens: 100,
         output_tokens: 250,
+        cache_write_tokens: Some(10),
+        cache_read_tokens: Some(5),
         region: "us-east-1".to_string(),
         response_time_ms: 1250,
     };
@@ -96,6 +98,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         model_id: "anthropic.claude-sonnet-4-20250514-v1:0".to_string(),
         input_cost_per_1k_tokens: Decimal::from_f64_retain(0.003).unwrap(), // $3 per million tokens
         output_cost_per_1k_tokens: Decimal::from_f64_retain(0.015).unwrap(), // $15 per million tokens
+        cache_write_cost_per_1k_tokens: Some(Decimal::from_f64_retain(0.00375).unwrap()), // $3.75 per million tokens
+        cache_read_cost_per_1k_tokens: Some(Decimal::from_f64_retain(0.0003).unwrap()), // $0.30 per million tokens
         updated_at: Utc::now(),
     };
     database.model_costs().upsert(&claude_sonnet_cost).await?;

@@ -29,14 +29,15 @@ impl UsersDao {
             last_login: Set(user.last_login),
         };
 
-        let on_conflict = OnConflict::columns([users::Column::Provider, users::Column::ProviderUserId])
-            .update_columns([
-                users::Column::Email,
-                users::Column::DisplayName,
-                users::Column::UpdatedAt,
-                users::Column::LastLogin,
-            ])
-            .to_owned();
+        let on_conflict =
+            OnConflict::columns([users::Column::Provider, users::Column::ProviderUserId])
+                .update_columns([
+                    users::Column::Email,
+                    users::Column::DisplayName,
+                    users::Column::UpdatedAt,
+                    users::Column::LastLogin,
+                ])
+                .to_owned();
 
         let result = users::Entity::insert(active_model)
             .on_conflict(on_conflict)

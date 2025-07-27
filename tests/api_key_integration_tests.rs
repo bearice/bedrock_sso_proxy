@@ -20,10 +20,10 @@ async fn create_test_server() -> Server {
     config.api_keys.enabled = true;
 
     let server = Server::new(config).await.unwrap();
-    
+
     // Run database migrations to create tables
     server.database.migrate().await.unwrap();
-    
+
     server
 }
 
@@ -168,10 +168,10 @@ async fn test_api_key_disabled() {
     config.api_keys.enabled = false; // Disable API keys
 
     let server = Server::new(config).await.unwrap();
-    
+
     // Run database migrations to create tables
     server.database.migrate().await.unwrap();
-    
+
     let app = server.create_app();
 
     // Test with API key when disabled

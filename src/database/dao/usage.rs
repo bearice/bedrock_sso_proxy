@@ -55,6 +55,8 @@ impl UsageDao {
             request_time: Set(record.request_time),
             input_tokens: Set(record.input_tokens),
             output_tokens: Set(record.output_tokens),
+            cache_write_tokens: Set(record.cache_write_tokens),
+            cache_read_tokens: Set(record.cache_read_tokens),
             total_tokens: Set(record.total_tokens),
             response_time_ms: Set(record.response_time_ms),
             success: Set(record.success),
@@ -240,23 +242,23 @@ impl UsageDao {
         };
 
         let on_conflict = OnConflict::columns([
-                usage_summaries::Column::UserId,
-                usage_summaries::Column::ModelId,
-                usage_summaries::Column::PeriodType,
-                usage_summaries::Column::PeriodStart,
-            ])
-            .update_columns([
-                usage_summaries::Column::PeriodEnd,
-                usage_summaries::Column::TotalRequests,
-                usage_summaries::Column::TotalInputTokens,
-                usage_summaries::Column::TotalOutputTokens,
-                usage_summaries::Column::TotalTokens,
-                usage_summaries::Column::AvgResponseTimeMs,
-                usage_summaries::Column::SuccessRate,
-                usage_summaries::Column::EstimatedCost,
-                usage_summaries::Column::UpdatedAt,
-            ])
-            .to_owned();
+            usage_summaries::Column::UserId,
+            usage_summaries::Column::ModelId,
+            usage_summaries::Column::PeriodType,
+            usage_summaries::Column::PeriodStart,
+        ])
+        .update_columns([
+            usage_summaries::Column::PeriodEnd,
+            usage_summaries::Column::TotalRequests,
+            usage_summaries::Column::TotalInputTokens,
+            usage_summaries::Column::TotalOutputTokens,
+            usage_summaries::Column::TotalTokens,
+            usage_summaries::Column::AvgResponseTimeMs,
+            usage_summaries::Column::SuccessRate,
+            usage_summaries::Column::EstimatedCost,
+            usage_summaries::Column::UpdatedAt,
+        ])
+        .to_owned();
 
         usage_summaries::Entity::insert(active_model)
             .on_conflict(on_conflict)

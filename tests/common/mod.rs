@@ -37,10 +37,10 @@ impl TestHarness {
         config.aws.secret_access_key = Some("test-secret-key".to_string());
 
         let server = Server::new(config.clone()).await.unwrap();
-        
+
         // Run database migrations even for in-memory database
         server.database.migrate().await.unwrap();
-        
+
         let app = server.create_app();
 
         Self {
