@@ -7,12 +7,10 @@ use thiserror::Error;
 
 pub mod memory;
 pub mod redis;
-pub mod types;
 pub mod typed;
 
 pub use memory::MemoryCache;
-pub use types::{CachedValidation, StateData};
-pub use typed::{typed_cache, CachedObject, TypedCache, TypedCacheStats};
+pub use typed::{CachedObject, TypedCache, TypedCacheStats, typed_cache};
 
 /// Cache error types
 #[derive(Error, Debug)]
@@ -152,30 +150,6 @@ impl CacheManager {
             CacheBackend::Memory(cache) => cache.clear().await,
             CacheBackend::Redis(cache) => cache.clear().await,
         }
-    }
-
-    /// Store OAuth state data
-    pub async fn store_state(
-        &self,
-        state: &str,
-        data: &StateData,
-        ttl_seconds: u64,
-    ) -> CacheResult<()> {
-        let key = format!("oauth_state:{}", state);
-        let ttl = Some(std::time::Duration::from_secs(ttl_seconds));
-        self.set(&key, data, ttl).await
-    }
-
-    /// Get OAuth state data
-    pub async fn get_state(&self, state: &str) -> CacheResult<Option<StateData>> {
-        let key = format!("oauth_state:{}", state);
-        self.get(&key).await
-    }
-
-    /// Delete OAuth state data
-    pub async fn delete_state(&self, state: &str) -> CacheResult<()> {
-        let key = format!("oauth_state:{}", state);
-        self.delete(&key).await
     }
 }
 

@@ -5,11 +5,11 @@
 //! based on the cache backend (memory vs Redis).
 
 use crate::cache::{Cache, CacheBackend, CacheError, CacheResult};
-pub use typed_cache_macro::typed_cache;
 use serde::{Deserialize, Serialize};
 use std::any::type_name;
 use std::marker::PhantomData;
 use std::time::Duration;
+pub use typed_cache_macro::typed_cache;
 
 /// Trait for types that can be cached with automatic structural hashing
 pub trait CachedObject:

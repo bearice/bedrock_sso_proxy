@@ -1,6 +1,6 @@
 use crate::{
     auth::{OAuthClaims, jwt::JwtService, request_context::RequestContext},
-    cache::{CacheManager, StateData},
+    cache::{CacheManager, typed::typed_cache},
     config::{Config, OAuthProvider},
     database::{DatabaseManager, entities::UserRecord},
     error::AppError,
@@ -20,6 +20,16 @@ use uuid::Uuid;
 
 /// Default OAuth state token TTL (10 minutes)
 const OAUTH_STATE_TTL_SECONDS: i64 = 600;
+
+/// CSRF state tokens for OAuth security
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[typed_cache(ttl = 600)] // 10 minutes TTL
+pub struct StateData {
+    pub provider: String,
+    pub redirect_uri: String,
+    pub created_at: chrono::DateTime<Utc>,
+    pub expires_at: chrono::DateTime<Utc>,
+}
 
 // Avoid oauth2 type madness
 pub type Oauth2Client =
@@ -781,7 +791,7 @@ impl HealthChecker for OAuthHealthChecker {
 }
 
 impl OAuthService {
-    // State management methods
+    // State management methods using typed cache
     async fn create_state_internal(
         &self,
         provider: String,
@@ -796,8 +806,10 @@ impl OAuthService {
             expires_at: now + ChronoDuration::seconds(OAUTH_STATE_TTL_SECONDS),
         };
 
-        self.cache
-            .store_state(&state, &state_data, OAUTH_STATE_TTL_SECONDS as u64)
+        // Use typed cache for state data
+        let state_cache = self.cache.get_typed_cache::<StateData>();
+        state_cache
+            .set_default(&state, &state_data)
             .await
             .map_err(|e| AppError::Internal(format!("Failed to store state: {}", e)))?;
 
@@ -805,8 +817,9 @@ impl OAuthService {
     }
 
     async fn get_state_data_internal(&self, state: &str) -> Result<Option<StateData>, AppError> {
-        self.cache
-            .get_state(state)
+        let state_cache = self.cache.get_typed_cache::<StateData>();
+        state_cache
+            .get(state)
             .await
             .map_err(|e| AppError::Internal(format!("Failed to get state: {}", e)))
     }
@@ -815,10 +828,15 @@ impl OAuthService {
         &self,
         state: &str,
     ) -> Result<Option<StateData>, AppError> {
-        let state_data = self.get_state_data_internal(state).await?;
+        let state_cache = self.cache.get_typed_cache::<StateData>();
+        let state_data = state_cache
+            .get(state)
+            .await
+            .map_err(|e| AppError::Internal(format!("Failed to get state: {}", e)))?;
+
         if state_data.is_some() {
-            self.cache
-                .delete_state(state)
+            state_cache
+                .delete(state)
                 .await
                 .map_err(|e| AppError::Internal(format!("Failed to delete state: {}", e)))?;
         }

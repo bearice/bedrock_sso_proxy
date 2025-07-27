@@ -1,12 +1,12 @@
+use crate::cache::typed::typed_cache;
 use chrono::{DateTime, Utc};
 use rust_decimal::Decimal;
 use sea_orm::entity::prelude::*;
 use serde::{Deserialize, Serialize};
-use crate::cache::typed::typed_cache;
 
 #[derive(Clone, Debug, PartialEq, DeriveEntityModel, Serialize, Deserialize)]
 #[sea_orm(table_name = "usage_records")]
-#[typed_cache(ttl = 300)]  // 5 minutes
+#[typed_cache(ttl = 300)] // 5 minutes
 pub struct Model {
     #[sea_orm(primary_key)]
     pub id: i32,
