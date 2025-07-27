@@ -82,8 +82,11 @@ impl Server {
         // Initialize cache
         let cache = Arc::new(if config.storage.redis.enabled {
             CacheManager::new_redis(
-                crate::cache::redis::RedisCache::new(&config.storage.redis.url, config.storage.redis.key_prefix.clone())
-                    .map_err(AppError::Cache)?,
+                crate::cache::redis::RedisCache::new(
+                    &config.storage.redis.url,
+                    config.storage.redis.key_prefix.clone(),
+                )
+                .map_err(AppError::Cache)?,
             )
         } else {
             CacheManager::new_memory()
@@ -115,11 +118,16 @@ impl Server {
     }
 
     pub async fn run(&self) -> Result<(), AppError> {
+        // Run database migrations on startup to ensure tables exist
+        info!("Running database migrations");
+        self.database.migrate().await.map_err(AppError::Database)?;
+        info!("Database migrations completed successfully");
+
         // Initialize shutdown coordinator
         let shutdown_coordinator = ShutdownCoordinator::new();
         let mut shutdown_manager = ShutdownManager::new(Duration::from_secs(30));
 
-        // Initialize model costs in the background
+        // Initialize model costs in the background (now that migrations are complete)
         let model_service_clone = self.model_service.clone();
         tokio::spawn(async move {
             if let Err(e) = model_service_clone.initialize_model_costs().await {

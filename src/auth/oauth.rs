@@ -575,7 +575,7 @@ impl OAuthService {
 
         for provider_name in config.list_oauth_providers() {
             if let Some(provider) = config.get_oauth_provider(&provider_name) {
-                let client = Arc::new(Self::create_oauth_client_static(&provider)?);
+                let client = Arc::new(Self::create_oauth_client_static(&provider, &provider_name)?);
                 clients.insert(provider_name, client);
             }
         }
@@ -583,33 +583,47 @@ impl OAuthService {
         Ok(clients)
     }
 
-    fn create_oauth_client_static(provider: &OAuthProvider) -> Result<Oauth2Client, AppError> {
+    fn create_oauth_client_static(provider: &OAuthProvider, provider_name: &str) -> Result<Oauth2Client, AppError> {
         let auth_url = AuthUrl::new(
             provider
                 .authorization_url
                 .as_ref()
                 .ok_or_else(|| {
-                    AppError::BadRequest("Authorization URL not configured".to_string())
+                    AppError::BadRequest(format!(
+                        "Authorization URL not configured for OAuth provider '{}'. Please check your configuration. \
+                         For known providers (google, github, microsoft, gitlab), URLs should be auto-configured. \
+                         For custom providers or providers requiring domain/tenant configuration (auth0, okta), \
+                         you must specify the authorization_url explicitly.",
+                        provider_name
+                    ))
                 })?
                 .clone(),
         )
-        .map_err(|e| AppError::BadRequest(format!("Invalid authorization URL: {}", e)))?;
+        .map_err(|e| AppError::BadRequest(format!("Invalid authorization URL for provider '{}': {}", provider_name, e)))?;
 
         let token_url = TokenUrl::new(
             provider
                 .token_url
                 .as_ref()
-                .ok_or_else(|| AppError::BadRequest("Token URL not configured".to_string()))?
+                .ok_or_else(|| {
+                    AppError::BadRequest(format!(
+                        "Token URL not configured for OAuth provider '{}'. Please check your configuration. \
+                         For known providers (google, github, microsoft, gitlab), URLs should be auto-configured. \
+                         For custom providers or providers requiring domain/tenant configuration (auth0, okta), \
+                         you must specify the token_url explicitly.",
+                        provider_name
+                    ))
+                })?
                 .clone(),
         )
-        .map_err(|e| AppError::BadRequest(format!("Invalid token URL: {}", e)))?;
+        .map_err(|e| AppError::BadRequest(format!("Invalid token URL for provider '{}': {}", provider_name, e)))?;
 
         let redirect_url = provider
             .redirect_uri
             .as_ref()
             .map(|uri| RedirectUrl::new(uri.clone()))
             .transpose()
-            .map_err(|e| AppError::BadRequest(format!("Invalid redirect URI: {}", e)))?;
+            .map_err(|e| AppError::BadRequest(format!("Invalid redirect URI for provider '{}': {}", provider_name, e)))?;
 
         let mut client = BasicClient::new(ClientId::new(provider.client_id.clone()))
             .set_client_secret(ClientSecret::new(provider.client_secret.clone()))
