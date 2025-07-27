@@ -22,3 +22,6 @@ pub type UsageRecord = usage_records::Model;
 pub type UsageSummary = usage_summaries::Model;
 pub type StoredModelCost = model_costs::Model;
 pub type ApiKeyRecord = api_keys::Model;
+
+// Database entities use derive macro with TTL attributes
+// All implementations are generated automatically via #[derive(CacheableDeriv)]

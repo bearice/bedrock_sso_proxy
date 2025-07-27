@@ -8,9 +8,11 @@ use thiserror::Error;
 pub mod memory;
 pub mod redis;
 pub mod types;
+pub mod typed;
 
 pub use memory::MemoryCache;
 pub use types::{CachedValidation, StateData};
+pub use typed::{typed_cache, CachedObject, TypedCache, TypedCacheStats};
 
 /// Cache error types
 #[derive(Error, Debug)]
@@ -56,6 +58,7 @@ pub trait Cache: Send + Sync {
 }
 
 /// Cache backend enum - either Redis or memory cache
+#[derive(Clone)]
 pub enum CacheBackend {
     Memory(MemoryCache),
     Redis(redis::RedisCache),
@@ -93,6 +96,11 @@ impl CacheManager {
             }
             _ => Ok(Self::new_memory()),
         }
+    }
+
+    /// Get a typed cache for type T
+    pub fn get_typed_cache<T: CachedObject>(&self) -> TypedCache<T> {
+        TypedCache::new(self.backend.clone())
     }
 
     /// Get value from cache

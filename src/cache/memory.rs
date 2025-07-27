@@ -24,6 +24,7 @@ impl CacheEntry {
 }
 
 /// In-memory cache implementation
+#[derive(Clone)]
 pub struct MemoryCache {
     store: Arc<RwLock<HashMap<String, CacheEntry>>>,
 }

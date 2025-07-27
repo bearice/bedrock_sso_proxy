@@ -1,9 +1,11 @@
 use chrono::{DateTime, Utc};
 use sea_orm::entity::prelude::*;
 use serde::{Deserialize, Serialize};
+use crate::cache::typed::typed_cache;
 
 #[derive(Clone, Debug, PartialEq, DeriveEntityModel, Eq, Serialize, Deserialize)]
 #[sea_orm(table_name = "refresh_tokens")]
+#[typed_cache(ttl = 600)]  // 10 minutes
 pub struct Model {
     #[sea_orm(primary_key)]
     pub id: i32,

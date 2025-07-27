@@ -3,9 +3,11 @@ use rand::{Rng, distr::Alphanumeric};
 use sea_orm::entity::prelude::*;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
+use crate::cache::typed::typed_cache;
 
 #[derive(Clone, Debug, PartialEq, DeriveEntityModel, Eq, Serialize, Deserialize)]
 #[sea_orm(table_name = "api_keys")]
+#[typed_cache(ttl = 300)]  // 5 minutes
 pub struct Model {
     #[sea_orm(primary_key)]
     pub id: i32,

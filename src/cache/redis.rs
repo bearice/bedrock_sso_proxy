@@ -4,6 +4,7 @@ use std::{sync::Arc, time::Duration};
 use tokio::sync::Mutex;
 
 /// Redis cache implementation with single connection and reconnection logic
+#[derive(Clone)]
 pub struct RedisCache {
     client: Client,
     connection: Arc<Mutex<Option<redis::aio::MultiplexedConnection>>>,
