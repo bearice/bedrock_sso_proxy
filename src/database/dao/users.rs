@@ -44,7 +44,21 @@ impl UsersDao {
             .await
             .map_err(|e| DatabaseError::Database(e.to_string()))?;
 
-        Ok(result.last_insert_id)
+        // If last_insert_id is 0, it means the record already existed and was updated
+        // We need to find the existing record to get its ID
+        if result.last_insert_id == 0 {
+            let existing_user = users::Entity::find()
+                .filter(users::Column::Provider.eq(&user.provider))
+                .filter(users::Column::ProviderUserId.eq(&user.provider_user_id))
+                .one(&self.db)
+                .await
+                .map_err(|e| DatabaseError::Database(e.to_string()))?
+                .ok_or(DatabaseError::NotFound)?;
+
+            Ok(existing_user.id)
+        } else {
+            Ok(result.last_insert_id)
+        }
     }
 
     /// Find user by provider and provider user ID
