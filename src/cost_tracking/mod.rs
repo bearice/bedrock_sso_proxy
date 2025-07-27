@@ -1,6 +1,6 @@
-mod aws_pricing;
+mod parser;
 
-pub use aws_pricing::*;
+pub use parser::*;
 
 use crate::{database::DatabaseManager, error::AppError};
 use rust_decimal::{Decimal, prelude::ToPrimitive};
@@ -21,9 +21,9 @@ impl CostTrackingService {
         }
     }
 
-    /// Update costs for all models from AWS API (no fallback - fails if API unavailable)
-    pub async fn update_all_model_costs(&self) -> Result<UpdateCostsResult, AppError> {
-        info!("Starting cost update for all models from AWS API");
+    /// Batch update costs for all models from CSV data
+    pub async fn batch_update_all_model_costs(&self) -> Result<UpdateCostsResult, AppError> {
+        info!("Starting batch cost update for all models from CSV data");
 
         let mut result = UpdateCostsResult {
             updated_models: Vec::new(),
@@ -31,25 +31,24 @@ impl CostTrackingService {
             total_processed: 0,
         };
 
-        // Get all live pricing data from AWS API (fails if API unavailable)
-        let all_live_pricing = self
-            .pricing_client
-            .fetch_all_models_from_aws()
+        // Get all pricing data from CSV (all regions, all models)
+        let all_pricing = PricingClient::get_batch_update_data()
             .await
-            .map_err(|e| {
-                AppError::Internal(format!("Failed to fetch live pricing from AWS API: {}", e))
-            })?;
+            .map_err(|e| AppError::Internal(format!("Failed to get CSV pricing data: {}", e)))?;
 
-        result.total_processed = all_live_pricing.len();
+        result.total_processed = all_pricing.len();
         info!(
-            "Processing {} models for cost updates from AWS API",
-            all_live_pricing.len()
+            "Processing {} models for batch cost updates from CSV data",
+            all_pricing.len()
         );
 
-        for pricing in all_live_pricing {
+        for pricing in all_pricing {
+            // Create unique model identifier with region
+            let model_key = format!("{}:{}", pricing.region, pricing.model_id);
+
             let stored_cost = crate::database::entities::model_costs::Model {
                 id: 0, // Will be set by database
-                model_id: pricing.model_id.clone(),
+                model_id: model_key.clone(),
                 input_cost_per_1k_tokens: Decimal::from_f64_retain(
                     pricing.input_cost_per_1k_tokens,
                 )
@@ -64,22 +63,23 @@ impl CostTrackingService {
             match self.database.model_costs().upsert(&stored_cost).await {
                 Ok(()) => {
                     info!(
-                        "Updated cost for {} from AWS API: input=${:.4}/1k, output=${:.4}/1k",
+                        "Updated cost for {} (region: {}): input=${:.4}/1k, output=${:.4}/1k",
                         pricing.model_id,
+                        pricing.region,
                         pricing.input_cost_per_1k_tokens,
                         pricing.output_cost_per_1k_tokens
                     );
                     result.updated_models.push(UpdatedModelCost {
-                        model_id: pricing.model_id.clone(),
+                        model_id: model_key,
                         input_cost_per_1k_tokens: pricing.input_cost_per_1k_tokens,
                         output_cost_per_1k_tokens: pricing.output_cost_per_1k_tokens,
                         provider: pricing.provider.clone(),
                     });
                 }
                 Err(e) => {
-                    warn!("Failed to store cost for {}: {}", pricing.model_id, e);
+                    warn!("Failed to store cost for {}: {}", model_key, e);
                     result.failed_models.push(FailedModelUpdate {
-                        model_id: pricing.model_id.clone(),
+                        model_id: model_key,
                         error: e.to_string(),
                     });
                 }
@@ -87,7 +87,7 @@ impl CostTrackingService {
         }
 
         info!(
-            "Cost update completed: {} updated, {} failed, {} total",
+            "Batch cost update completed: {} updated, {} failed, {} total",
             result.updated_models.len(),
             result.failed_models.len(),
             result.total_processed
@@ -96,78 +96,14 @@ impl CostTrackingService {
         Ok(result)
     }
 
-    /// Initialize model costs from embedded data (only if database is empty)
+    /// Initialize model costs from embedded CSV data (only if database is empty)
     pub async fn initialize_model_costs_from_embedded(
         &self,
     ) -> Result<UpdateCostsResult, AppError> {
-        info!("Initializing model costs from embedded pricing data");
+        info!("Initializing model costs from embedded CSV pricing data");
 
-        let mut result = UpdateCostsResult {
-            updated_models: Vec::new(),
-            failed_models: Vec::new(),
-            total_processed: 0,
-        };
-
-        // Get all pricing data from embedded AWS pricing file
-        let all_pricing = self
-            .pricing_client
-            .load_all_models_from_embedded()
-            .await
-            .map_err(|e| {
-                AppError::Internal(format!("Failed to get embedded pricing data: {}", e))
-            })?;
-
-        result.total_processed = all_pricing.len();
-
-        for pricing in all_pricing {
-            let stored_cost = crate::database::entities::model_costs::Model {
-                id: 0, // Will be set by database
-                model_id: pricing.model_id.clone(),
-                input_cost_per_1k_tokens: Decimal::from_f64_retain(
-                    pricing.input_cost_per_1k_tokens,
-                )
-                .unwrap_or_default(),
-                output_cost_per_1k_tokens: Decimal::from_f64_retain(
-                    pricing.output_cost_per_1k_tokens,
-                )
-                .unwrap_or_default(),
-                updated_at: chrono::Utc::now(),
-            };
-
-            // Store in database
-            match self.database.model_costs().upsert(&stored_cost).await {
-                Ok(()) => {
-                    info!(
-                        "Initialized cost for {}: input=${:.4}/1k, output=${:.4}/1k",
-                        pricing.model_id,
-                        pricing.input_cost_per_1k_tokens,
-                        pricing.output_cost_per_1k_tokens
-                    );
-                    result.updated_models.push(UpdatedModelCost {
-                        model_id: pricing.model_id.clone(),
-                        input_cost_per_1k_tokens: pricing.input_cost_per_1k_tokens,
-                        output_cost_per_1k_tokens: pricing.output_cost_per_1k_tokens,
-                        provider: pricing.provider.clone(),
-                    });
-                }
-                Err(e) => {
-                    warn!("Failed to initialize cost for {}: {}", pricing.model_id, e);
-                    result.failed_models.push(FailedModelUpdate {
-                        model_id: pricing.model_id.clone(),
-                        error: e.to_string(),
-                    });
-                }
-            }
-        }
-
-        info!(
-            "Cost initialization completed: {} initialized, {} failed, {} total",
-            result.updated_models.len(),
-            result.failed_models.len(),
-            result.total_processed
-        );
-
-        Ok(result)
+        // Just use the batch update method for initialization
+        self.batch_update_all_model_costs().await
     }
 
     /// Get cost summary for all models
@@ -199,6 +135,100 @@ impl CostTrackingService {
         }
 
         Ok(summary)
+    }
+
+    /// Get cost for a specific model in a specific region
+    pub async fn get_model_cost(
+        &self,
+        model_id: &str,
+        region: &str,
+    ) -> Result<ModelPricing, AppError> {
+        self.pricing_client
+            .get_models_for_region(region)
+            .await?
+            .into_iter()
+            .find(|m| m.model_id == model_id)
+            .ok_or_else(|| {
+                AppError::NotFound(format!("Model {} not found in region {}", model_id, region))
+            })
+    }
+
+    /// Get all available regions
+    pub fn get_available_regions() -> Vec<String> {
+        PricingClient::get_available_regions()
+    }
+
+    /// Batch update costs from CSV content
+    pub async fn batch_update_from_csv_content(&self, csv_content: &str) -> Result<UpdateCostsResult, AppError> {
+        info!("Starting batch cost update from provided CSV content");
+
+        let mut result = UpdateCostsResult {
+            updated_models: Vec::new(),
+            failed_models: Vec::new(),
+            total_processed: 0,
+        };
+
+        // Parse CSV content
+        let all_pricing = PricingClient::parse_csv_content(csv_content)?;
+
+        result.total_processed = all_pricing.len();
+        info!(
+            "Processing {} models for batch cost updates from CSV content",
+            all_pricing.len()
+        );
+
+        for pricing in all_pricing {
+            // Create unique model identifier with region
+            let model_key = format!("{}:{}", pricing.region, pricing.model_id);
+
+            let stored_cost = crate::database::entities::model_costs::Model {
+                id: 0, // Will be set by database
+                model_id: model_key.clone(),
+                input_cost_per_1k_tokens: Decimal::from_f64_retain(
+                    pricing.input_cost_per_1k_tokens,
+                )
+                .unwrap_or_default(),
+                output_cost_per_1k_tokens: Decimal::from_f64_retain(
+                    pricing.output_cost_per_1k_tokens,
+                )
+                .unwrap_or_default(),
+                updated_at: pricing.updated_at,
+            };
+
+            match self.database.model_costs().upsert(&stored_cost).await {
+                Ok(()) => {
+                    info!(
+                        "Updated cost for {} (region: {}): input=${:.4}/1k, output=${:.4}/1k",
+                        pricing.model_id,
+                        pricing.region,
+                        pricing.input_cost_per_1k_tokens,
+                        pricing.output_cost_per_1k_tokens
+                    );
+                    result.updated_models.push(UpdatedModelCost {
+                        model_id: model_key,
+                        input_cost_per_1k_tokens: pricing.input_cost_per_1k_tokens,
+                        output_cost_per_1k_tokens: pricing.output_cost_per_1k_tokens,
+                        provider: pricing.provider.clone(),
+                    });
+                }
+                Err(e) => {
+                    warn!("Failed to store cost for {}: {}", model_key, e);
+                    result.failed_models.push(FailedModelUpdate {
+                        model_id: model_key,
+                        error: e.to_string(),
+                    });
+                }
+            }
+        }
+
+        info!(
+            "Batch cost update from CSV content completed: {} updated, {} failed, {} total",
+            result.updated_models.len(),
+            result.failed_models.len(),
+            result.total_processed
+        );
+
+        Ok(result)
     }
 }
 

@@ -335,18 +335,26 @@ async fn delete_model_cost(
     Ok(StatusCode::NO_CONTENT)
 }
 
-/// Update all model costs from AWS Price List API (admin only)
-/// Fails if AWS API is unavailable - leaves current pricing unchanged
+/// Update all model costs from uploaded CSV data (admin only)
+/// Requires CSV content in request body - does not use embedded data
 async fn update_all_model_costs(
     State(server): State<crate::server::Server>,
+    body: String,
 ) -> Result<Json<UpdateCostsResult>, AppError> {
     // Admin permissions already checked by middleware
+
+    // Validate that CSV content is provided
+    if body.trim().is_empty() {
+        return Err(AppError::BadRequest(
+            "CSV content is required for price updates. Please provide pricing data in the request body.".to_string()
+        ));
+    }
 
     // Create cost tracking service with us-east-1 region for pricing data
     let cost_service = CostTrackingService::new(server.database.clone(), "us-east-1".to_string());
 
-    // Update model costs from AWS API only (no fallback - preserves existing data on failure)
-    let result = cost_service.update_all_model_costs().await?;
+    // Process the provided CSV content
+    let result = cost_service.batch_update_from_csv_content(&body).await?;
 
     Ok(Json(result))
 }
