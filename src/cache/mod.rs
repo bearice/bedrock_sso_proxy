@@ -80,17 +80,18 @@ impl CacheManager {
             backend: CacheBackend::Redis(redis_cache),
         }
     }
-    
+
     /// Create cache manager from configuration
     pub async fn new_from_config(config: &crate::config::Config) -> CacheResult<Self> {
         match config.cache.backend.as_str() {
             "redis" => {
-                let redis_cache = redis::RedisCache::new(&config.cache.redis_url, config.cache.redis_key_prefix.clone())?;
+                let redis_cache = redis::RedisCache::new(
+                    &config.cache.redis_url,
+                    config.cache.redis_key_prefix.clone(),
+                )?;
                 Ok(Self::new_redis(redis_cache))
             }
-            "memory" | _ => {
-                Ok(Self::new_memory())
-            }
+            _ => Ok(Self::new_memory()),
         }
     }
 

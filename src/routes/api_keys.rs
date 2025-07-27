@@ -143,7 +143,6 @@ mod tests {
         config::Config,
         database::{DatabaseManager, entities::UserRecord},
     };
-    use std::sync::Arc;
     use axum::{
         body::Body,
         http::{Request, StatusCode},
@@ -152,6 +151,7 @@ mod tests {
     use chrono::Utc;
     use jsonwebtoken::Algorithm;
     use serde_json;
+    use std::sync::Arc;
     use tower::ServiceExt;
 
     async fn create_test_components() -> (Arc<DatabaseManager>, Arc<CacheManager>) {
