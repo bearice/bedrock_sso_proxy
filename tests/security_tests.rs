@@ -4,7 +4,6 @@ use axum::{
 };
 use base64::Engine;
 use bedrock_sso_proxy::auth::jwt::OAuthClaims;
-use jsonwebtoken::{EncodingKey, Header, encode};
 use std::sync::Arc;
 
 mod common;
@@ -13,7 +12,8 @@ use common::{RequestBuilder, TestHarness, helpers};
 #[tokio::test]
 async fn test_security_sql_injection_attempts() {
     let harness = TestHarness::new().await;
-    let token = harness.create_integration_token(123);
+    let created_user_id = harness.create_test_user("test1@example.com").await;
+    let token = harness.create_integration_token(created_user_id);
 
     // Test SQL injection attempts in model ID
     let malicious_model_ids = vec![
@@ -57,7 +57,8 @@ async fn test_security_sql_injection_attempts() {
 #[tokio::test]
 async fn test_security_xss_attempts() {
     let harness = TestHarness::new().await;
-    let token = harness.create_security_token(123, 3600);
+    let created_user_id = harness.create_test_user("test2@example.com").await;
+    let token = harness.create_security_token(created_user_id, 3600);
 
     // Test XSS payloads in request body
     let xss_payloads = vec![
@@ -90,7 +91,8 @@ async fn test_security_xss_attempts() {
 #[tokio::test]
 async fn test_security_oversized_requests() {
     let harness = TestHarness::new().await;
-    let token = harness.create_security_token(123, 3600);
+    let created_user_id = harness.create_test_user("test3@example.com").await;
+    let token = harness.create_security_token(created_user_id, 3600);
 
     // Create extremely large payload (1MB)
     let large_content = "A".repeat(1024 * 1024);
@@ -120,7 +122,8 @@ async fn test_security_oversized_requests() {
 #[tokio::test]
 async fn test_security_header_injection() {
     let harness = TestHarness::new().await;
-    let token = harness.create_security_token(123, 3600);
+    let created_user_id = harness.create_test_user("test4@example.com").await;
+    let token = harness.create_security_token(created_user_id, 3600);
 
     // Test header injection attempts
     let malicious_headers = vec![
@@ -163,7 +166,8 @@ async fn test_security_header_injection() {
 #[tokio::test]
 async fn test_security_invalid_content_types() {
     let harness = TestHarness::new().await;
-    let token = harness.create_security_token(123, 3600);
+    let created_user_id = harness.create_test_user("test5@example.com").await;
+    let token = harness.create_security_token(created_user_id, 3600);
 
     // Test various invalid or unusual content types
     let invalid_content_types = vec![
@@ -212,7 +216,8 @@ async fn test_security_invalid_content_types() {
 #[tokio::test]
 async fn test_security_path_traversal() {
     let harness = TestHarness::new().await;
-    let token = harness.create_security_token(123, 3600);
+    let created_user_id = harness.create_test_user("test6@example.com").await;
+    let token = harness.create_security_token(created_user_id, 3600);
 
     // Test path traversal attempts
     let path_traversal_attempts = vec![
@@ -249,7 +254,8 @@ async fn test_security_path_traversal() {
 #[tokio::test]
 async fn test_security_malformed_json_bodies() {
     let harness = TestHarness::new().await;
-    let token = harness.create_security_token(123, 3600);
+    let created_user_id = harness.create_test_user("test7@example.com").await;
+    let token = harness.create_security_token(created_user_id, 3600);
 
     // Test various malformed JSON bodies
     let malformed_json = vec![
@@ -288,7 +294,8 @@ async fn test_security_malformed_json_bodies() {
 #[tokio::test]
 async fn test_security_http_method_tampering() {
     let harness = TestHarness::new().await;
-    let token = harness.create_security_token(123, 3600);
+    let created_user_id = harness.create_test_user("test8@example.com").await;
+    let token = harness.create_security_token(created_user_id, 3600);
 
     // Test various HTTP methods on protected endpoints
     let methods = vec![
@@ -330,8 +337,9 @@ async fn test_security_http_method_tampering() {
 #[tokio::test]
 async fn test_security_jwt_algorithm_confusion() {
     let harness = TestHarness::new().await;
+    let created_user_id = harness.create_test_user("test9@example.com").await;
 
-    let claims = OAuthClaims::new(999, 3600);
+    let claims = OAuthClaims::new(created_user_id, 3600);
 
     // Test 1: Create a manually crafted "none" algorithm token
     // This simulates the classic algorithm confusion attack
@@ -382,14 +390,7 @@ async fn test_security_jwt_algorithm_confusion() {
     }
 
     // Test 3: Verify that valid HS256 token still works (positive control)
-    let valid_header = Header::default(); // HS256 is the default algorithm
-
-    let valid_token = encode(
-        &valid_header,
-        &claims,
-        &EncodingKey::from_secret(harness.jwt_secret.as_ref()),
-    )
-    .unwrap();
+    let valid_token = harness.create_security_token(created_user_id, 3600);
 
     let request =
         RequestBuilder::invoke_model_with_auth("test-model", &valid_token, r#"{"messages": []}"#);
@@ -406,7 +407,8 @@ async fn test_security_jwt_algorithm_confusion() {
 #[tokio::test]
 async fn test_security_rate_limiting_simulation() {
     let harness = Arc::new(TestHarness::new().await);
-    let token = harness.create_security_token(123, 3600);
+    let created_user_id = harness.create_test_user("test10@example.com").await;
+    let token = harness.create_security_token(created_user_id, 3600);
 
     // Simulate rapid fire requests (potential DoS attempt)
     let mut handles = vec![];

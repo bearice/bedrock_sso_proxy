@@ -759,7 +759,9 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_config_with_partial_logging() {
+        let _guard = EnvGuard::new();
         let yaml_content = r#"
 server:
   host: "localhost"

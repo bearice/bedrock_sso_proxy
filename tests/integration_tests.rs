@@ -9,18 +9,20 @@ use common::{RequestBuilder, TestHarness};
 #[tokio::test]
 async fn test_integration_jwt_token_validation() {
     let harness = TestHarness::with_secret("integration-test-secret-123").await;
-    let token = harness.create_integration_token(123);
+    let created_user_id = harness.create_test_user("test1@example.com").await;
+    let token = harness.create_integration_token(created_user_id);
 
     // Verify we can decode the token
     let claims = harness.verify_token(&token).unwrap();
-    assert_eq!(claims.sub, 123); // sub field now contains the user_id
+    assert_eq!(claims.sub, created_user_id); // sub field now contains the user_id
 }
 
 #[tokio::test]
 async fn test_integration_server_with_real_jwt() {
     let harness = TestHarness::with_secret("integration-test-secret-456").await;
+    let created_user_id = harness.create_test_user("test2@example.com").await;
 
-    let token = harness.create_integration_token(123);
+    let token = harness.create_integration_token(created_user_id);
 
     let request = RequestBuilder::health_with_auth(&token);
 
@@ -31,10 +33,11 @@ async fn test_integration_server_with_real_jwt() {
 #[tokio::test]
 async fn test_integration_invalid_signature() {
     let harness = TestHarness::new().await;
+    let created_user_id = harness.create_test_user("test3@example.com").await;
 
     // Create token with different secret (will fail validation)
     let wrong_harness = TestHarness::with_secret("wrong-secret").await;
-    let token = wrong_harness.create_integration_token(123);
+    let token = wrong_harness.create_integration_token(created_user_id);
 
     let request =
         RequestBuilder::invoke_model_with_auth("test-model", &token, r#"{"messages": []}"#);
@@ -47,8 +50,9 @@ async fn test_integration_invalid_signature() {
 async fn test_integration_token_with_custom_claims() {
     // Use standard test harness to avoid JWT secret mismatch issues
     let harness = TestHarness::new().await;
+    let created_user_id = harness.create_test_user("test456@example.com").await;
 
-    let token = harness.create_integration_token(456);
+    let token = harness.create_integration_token(created_user_id);
 
     // Test that JWT with custom claims works for authenticated endpoints
     let request = RequestBuilder::health_with_auth(&token);
@@ -59,6 +63,7 @@ async fn test_integration_token_with_custom_claims() {
 #[tokio::test]
 async fn test_integration_malformed_authorization_header() {
     let harness = TestHarness::new().await;
+    let _created_user_id = harness.create_test_user("test789@example.com").await;
 
     // Test various malformed authorization headers
     let malformed_headers = vec![
@@ -87,7 +92,8 @@ async fn test_integration_malformed_authorization_header() {
 #[tokio::test]
 async fn test_integration_concurrent_requests() {
     let harness = Arc::new(TestHarness::new().await);
-    let token = harness.create_integration_token(789);
+    let created_user_id = harness.create_test_user("test789c@example.com").await;
+    let token = harness.create_integration_token(created_user_id);
 
     // Create multiple concurrent requests
     let mut handles = vec![];
@@ -119,9 +125,10 @@ async fn test_integration_concurrent_requests() {
 #[tokio::test]
 async fn test_integration_token_expiration_edge_cases() {
     let harness = TestHarness::new().await;
+    harness.create_test_user("test1@example.com").await;
 
     // Create token that expires in 1 second
-    let short_token = harness.create_token_with_expiry(1, 999);
+    let short_token = harness.create_token_with_expiry(1, 1);
 
     // Request should work immediately
     let request = RequestBuilder::health_with_auth(&short_token);
