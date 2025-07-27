@@ -4,6 +4,7 @@ use chrono::Utc;
 use sea_orm::{
     ActiveModelTrait, ActiveValue, ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter, Set,
 };
+use sea_orm_migration::sea_query::OnConflict;
 
 /// Users DAO for database operations
 pub struct UsersDao {
@@ -15,52 +16,35 @@ impl UsersDao {
         Self { db }
     }
 
-    /// Create or update user
+    /// Create or update user using native upsert
     pub async fn upsert(&self, user: &UserRecord) -> DatabaseResult<i32> {
-        // Try to find existing user
-        let existing = users::Entity::find()
-            .filter(users::Column::Provider.eq(&user.provider))
-            .filter(users::Column::ProviderUserId.eq(&user.provider_user_id))
-            .one(&self.db)
+        let active_model = users::ActiveModel {
+            id: ActiveValue::NotSet, // Let database auto-assign ID
+            provider_user_id: Set(user.provider_user_id.clone()),
+            provider: Set(user.provider.clone()),
+            email: Set(user.email.clone()),
+            display_name: Set(user.display_name.clone()),
+            created_at: Set(user.created_at),
+            updated_at: Set(user.updated_at),
+            last_login: Set(user.last_login),
+        };
+
+        let on_conflict = OnConflict::columns([users::Column::Provider, users::Column::ProviderUserId])
+            .update_columns([
+                users::Column::Email,
+                users::Column::DisplayName,
+                users::Column::UpdatedAt,
+                users::Column::LastLogin,
+            ])
+            .to_owned();
+
+        let result = users::Entity::insert(active_model)
+            .on_conflict(on_conflict)
+            .exec(&self.db)
             .await
             .map_err(|e| DatabaseError::Database(e.to_string()))?;
 
-        match existing {
-            Some(existing_user) => {
-                // Update existing user
-                let mut active_model = users::ActiveModel::from(existing_user);
-                active_model.email = Set(user.email.clone());
-                active_model.display_name = Set(user.display_name.clone());
-                active_model.updated_at = Set(user.updated_at);
-                active_model.last_login = Set(user.last_login);
-
-                let updated = active_model
-                    .update(&self.db)
-                    .await
-                    .map_err(|e| DatabaseError::Database(e.to_string()))?;
-
-                Ok(updated.id)
-            }
-            None => {
-                // Insert new user
-                let active_model = users::ActiveModel {
-                    id: ActiveValue::NotSet, // Let database auto-assign ID
-                    provider_user_id: Set(user.provider_user_id.clone()),
-                    provider: Set(user.provider.clone()),
-                    email: Set(user.email.clone()),
-                    display_name: Set(user.display_name.clone()),
-                    created_at: Set(user.created_at),
-                    updated_at: Set(user.updated_at),
-                    last_login: Set(user.last_login),
-                };
-                let result = active_model
-                    .insert(&self.db)
-                    .await
-                    .map_err(|e| DatabaseError::Database(e.to_string()))?;
-
-                Ok(result.id)
-            }
-        }
+        Ok(result.last_insert_id)
     }
 
     /// Find user by provider and provider user ID

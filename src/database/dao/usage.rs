@@ -6,6 +6,7 @@ use sea_orm::{
     ActiveModelTrait, ActiveValue, ColumnTrait, DatabaseConnection, EntityTrait, FromQueryResult,
     PaginatorTrait, QueryFilter, QueryOrder, QuerySelect, Set,
 };
+use sea_orm_migration::sea_query::OnConflict;
 
 /// Usage query parameters
 #[derive(Debug, Default)]
@@ -218,63 +219,50 @@ impl UsageDao {
         })
     }
 
-    /// Store/update usage summary
+    /// Store/update usage summary using native upsert
     pub async fn upsert_summary(&self, summary: &UsageSummary) -> DatabaseResult<()> {
-        // Try to find existing summary
-        let existing = usage_summaries::Entity::find()
-            .filter(usage_summaries::Column::UserId.eq(summary.user_id))
-            .filter(usage_summaries::Column::ModelId.eq(&summary.model_id))
-            .filter(usage_summaries::Column::PeriodType.eq(&summary.period_type))
-            .filter(usage_summaries::Column::PeriodStart.eq(summary.period_start))
-            .one(&self.db)
+        let active_model = usage_summaries::ActiveModel {
+            id: ActiveValue::NotSet,
+            user_id: Set(summary.user_id),
+            model_id: Set(summary.model_id.clone()),
+            period_type: Set(summary.period_type.clone()),
+            period_start: Set(summary.period_start),
+            period_end: Set(summary.period_end),
+            total_requests: Set(summary.total_requests),
+            total_input_tokens: Set(summary.total_input_tokens),
+            total_output_tokens: Set(summary.total_output_tokens),
+            total_tokens: Set(summary.total_tokens),
+            avg_response_time_ms: Set(summary.avg_response_time_ms),
+            success_rate: Set(summary.success_rate),
+            estimated_cost: Set(summary.estimated_cost),
+            created_at: Set(summary.created_at),
+            updated_at: Set(summary.updated_at),
+        };
+
+        let on_conflict = OnConflict::columns([
+                usage_summaries::Column::UserId,
+                usage_summaries::Column::ModelId,
+                usage_summaries::Column::PeriodType,
+                usage_summaries::Column::PeriodStart,
+            ])
+            .update_columns([
+                usage_summaries::Column::PeriodEnd,
+                usage_summaries::Column::TotalRequests,
+                usage_summaries::Column::TotalInputTokens,
+                usage_summaries::Column::TotalOutputTokens,
+                usage_summaries::Column::TotalTokens,
+                usage_summaries::Column::AvgResponseTimeMs,
+                usage_summaries::Column::SuccessRate,
+                usage_summaries::Column::EstimatedCost,
+                usage_summaries::Column::UpdatedAt,
+            ])
+            .to_owned();
+
+        usage_summaries::Entity::insert(active_model)
+            .on_conflict(on_conflict)
+            .exec(&self.db)
             .await
             .map_err(|e| DatabaseError::Database(e.to_string()))?;
-
-        match existing {
-            Some(existing_summary) => {
-                // Update existing
-                let mut active_model = usage_summaries::ActiveModel::from(existing_summary);
-                active_model.period_end = Set(summary.period_end);
-                active_model.total_requests = Set(summary.total_requests);
-                active_model.total_input_tokens = Set(summary.total_input_tokens);
-                active_model.total_output_tokens = Set(summary.total_output_tokens);
-                active_model.total_tokens = Set(summary.total_tokens);
-                active_model.avg_response_time_ms = Set(summary.avg_response_time_ms);
-                active_model.success_rate = Set(summary.success_rate);
-                active_model.estimated_cost = Set(summary.estimated_cost);
-                active_model.updated_at = Set(summary.updated_at);
-
-                active_model
-                    .update(&self.db)
-                    .await
-                    .map_err(|e| DatabaseError::Database(e.to_string()))?;
-            }
-            None => {
-                // Insert new
-                let active_model = usage_summaries::ActiveModel {
-                    id: ActiveValue::NotSet,
-                    user_id: Set(summary.user_id),
-                    model_id: Set(summary.model_id.clone()),
-                    period_type: Set(summary.period_type.clone()),
-                    period_start: Set(summary.period_start),
-                    period_end: Set(summary.period_end),
-                    total_requests: Set(summary.total_requests),
-                    total_input_tokens: Set(summary.total_input_tokens),
-                    total_output_tokens: Set(summary.total_output_tokens),
-                    total_tokens: Set(summary.total_tokens),
-                    avg_response_time_ms: Set(summary.avg_response_time_ms),
-                    success_rate: Set(summary.success_rate),
-                    estimated_cost: Set(summary.estimated_cost),
-                    created_at: Set(summary.created_at),
-                    updated_at: Set(summary.updated_at),
-                };
-
-                active_model
-                    .insert(&self.db)
-                    .await
-                    .map_err(|e| DatabaseError::Database(e.to_string()))?;
-            }
-        }
 
         Ok(())
     }
