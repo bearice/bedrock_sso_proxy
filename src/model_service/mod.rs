@@ -1164,6 +1164,7 @@ mod tests {
         // Add a model cost to storage
         let model_cost = StoredModelCost {
             id: 0,
+            region: "us-east-1".to_string(),
             model_id: "test-model".to_string(),
             input_cost_per_1k_tokens: Decimal::new(3, 3), // 0.003 exactly
             output_cost_per_1k_tokens: Decimal::new(15, 3), // 0.015 exactly

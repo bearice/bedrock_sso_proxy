@@ -116,6 +116,7 @@ pub enum UsageSummaries {
 pub enum ModelCosts {
     Table,
     Id,
+    Region,
     ModelId,
     InputCostPer1kTokens,
     OutputCostPer1kTokens,

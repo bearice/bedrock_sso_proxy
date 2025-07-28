@@ -16,7 +16,19 @@ impl ModelCostsDao {
         Self { db }
     }
 
-    /// Get model cost by model ID
+    /// Get model cost by region and model ID
+    pub async fn find_by_region_and_model(&self, region: &str, model_id: &str) -> DatabaseResult<Option<StoredModelCost>> {
+        let cost = model_costs::Entity::find()
+            .filter(model_costs::Column::Region.eq(region))
+            .filter(model_costs::Column::ModelId.eq(model_id))
+            .one(&self.db)
+            .await
+            .map_err(|e| DatabaseError::Database(e.to_string()))?;
+
+        Ok(cost)
+    }
+
+    /// Get model cost by model ID (deprecated - use find_by_region_and_model)
     pub async fn find_by_model(&self, model_id: &str) -> DatabaseResult<Option<StoredModelCost>> {
         let cost = model_costs::Entity::find()
             .filter(model_costs::Column::ModelId.eq(model_id))
@@ -27,7 +39,7 @@ impl ModelCostsDao {
         Ok(cost)
     }
 
-    /// Store or update model cost using native upsert
+    /// Store or update model cost using individual upserts for SQLite compatibility
     pub async fn upsert_many(&self, costs: &[StoredModelCost]) -> DatabaseResult<()> {
         debug!("Upserting {} model_costs", costs.len());
         let tx = self
@@ -40,6 +52,7 @@ impl ModelCostsDao {
             .map(|cost| model_costs::ActiveModel {
                 id: ActiveValue::NotSet,
                 model_id: Set(cost.model_id.clone()),
+                region: Set(cost.region.clone()),
                 input_cost_per_1k_tokens: Set(cost.input_cost_per_1k_tokens),
                 output_cost_per_1k_tokens: Set(cost.output_cost_per_1k_tokens),
                 cache_write_cost_per_1k_tokens: Set(cost.cache_write_cost_per_1k_tokens),
@@ -48,7 +61,7 @@ impl ModelCostsDao {
             })
             .collect();
 
-        let on_conflict = OnConflict::column(model_costs::Column::ModelId)
+        let on_conflict = OnConflict::columns([model_costs::Column::Region, model_costs::Column::ModelId])
             .update_columns([
                 model_costs::Column::InputCostPer1kTokens,
                 model_costs::Column::OutputCostPer1kTokens,
@@ -68,9 +81,7 @@ impl ModelCostsDao {
         }
         tx.commit()
             .await
-            .map_err(|e| DatabaseError::Database(e.to_string()))?;
-
-        Ok(())
+            .map_err(|e| DatabaseError::Database(e.to_string()))
     }
 
     /// Get all model costs
@@ -83,7 +94,19 @@ impl ModelCostsDao {
         Ok(costs)
     }
 
-    /// Delete model cost
+    /// Delete model cost by region and model ID
+    pub async fn delete_by_region_and_model(&self, region: &str, model_id: &str) -> DatabaseResult<()> {
+        model_costs::Entity::delete_many()
+            .filter(model_costs::Column::Region.eq(region))
+            .filter(model_costs::Column::ModelId.eq(model_id))
+            .exec(&self.db)
+            .await
+            .map_err(|e| DatabaseError::Database(e.to_string()))?;
+
+        Ok(())
+    }
+
+    /// Delete model cost (deprecated - use delete_by_region_and_model)
     pub async fn delete(&self, model_id: &str) -> DatabaseResult<()> {
         model_costs::Entity::delete_many()
             .filter(model_costs::Column::ModelId.eq(model_id))

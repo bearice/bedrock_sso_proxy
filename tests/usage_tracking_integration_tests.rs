@@ -151,6 +151,7 @@ async fn setup_test_data(database: &dyn DatabaseManager) -> (i32, i32) {
         .into_iter()
         .map(|(model_id, input_cost, output_cost)| StoredModelCost {
             id: 0,
+            region: "us-east-1".to_string(),
             model_id: model_id.to_string(),
             input_cost_per_1k_tokens: input_cost,
             output_cost_per_1k_tokens: output_cost,

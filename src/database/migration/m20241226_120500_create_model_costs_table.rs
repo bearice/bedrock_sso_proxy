@@ -23,7 +23,11 @@ impl MigrationTrait for Migration {
                         ColumnDef::new(ModelCosts::ModelId)
                             .string()
                             .not_null()
-                            .unique_key(),
+                    )
+                    .col(
+                        ColumnDef::new(ModelCosts::Region)
+                            .string()
+                            .not_null()
                     )
                     .col(
                         ColumnDef::new(Alias::new("input_cost_per_1k_tokens"))
@@ -49,9 +53,11 @@ impl MigrationTrait for Migration {
             .create_index(
                 Index::create()
                     .if_not_exists()
-                    .name("idx_model_costs_model_id")
+                    .name("idx_model_costs_region_model_id")
                     .table(ModelCosts::Table)
+                    .col(ModelCosts::Region)
                     .col(ModelCosts::ModelId)
+                    .unique()
                     .to_owned(),
             )
             .await?;

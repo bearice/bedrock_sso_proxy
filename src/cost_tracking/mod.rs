@@ -55,12 +55,10 @@ impl CostTrackingService {
         let stored_cost:Vec<_> = all_pricing
             .iter()
             .map(|pricing| {
-                // Create unique model identifier with region
-                let model_key = format!("{}:{}", pricing.region_id, pricing.model_id);
-
                 StoredModelCost {
                     id: 0, // Will be set by database
-                    model_id: model_key.clone(),
+                    region: pricing.region_id.clone(),
+                    model_id: pricing.model_id.clone(),
                     input_cost_per_1k_tokens: Decimal::from_f64_retain(
                         pricing.input_price,
                     )

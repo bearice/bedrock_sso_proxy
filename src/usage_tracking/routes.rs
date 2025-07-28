@@ -282,6 +282,7 @@ async fn create_model_cost(
 
     let cost = StoredModelCost {
         id: 0, // Will be set by database
+        region: "us-east-1".to_string(), // Default region for manual cost updates
         model_id: request.model_id,
         input_cost_per_1k_tokens: Decimal::from_f64_retain(request.input_cost_per_1k_tokens)
             .unwrap_or_default(),
@@ -314,6 +315,7 @@ async fn update_model_cost(
 
     let cost = StoredModelCost {
         id: 0, // Will be set by database
+        region: "us-east-1".to_string(), // Default region for manual cost updates
         model_id: model_id.clone(),
         input_cost_per_1k_tokens: Decimal::from_f64_retain(request.input_cost_per_1k_tokens)
             .unwrap_or_default(),

@@ -8,7 +8,9 @@ use serde::{Deserialize, Serialize};
 pub struct Model {
     #[sea_orm(primary_key)]
     pub id: i32,
-    #[sea_orm(unique)]
+    #[sea_orm(indexed)]
+    pub region: String,
+    #[sea_orm(indexed)]
     pub model_id: String,
     #[sea_orm(column_name = "input_cost_per_1k_tokens")]
     pub input_cost_per_1k_tokens: Decimal,

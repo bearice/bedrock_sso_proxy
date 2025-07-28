@@ -21,6 +21,7 @@ pub struct TestHarness {
     pub server: Server,
 }
 
+#[allow(dead_code)]
 impl TestHarness {
     /// Create test harness with default secret
     pub async fn new() -> Self {

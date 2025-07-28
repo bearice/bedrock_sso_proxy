@@ -69,6 +69,9 @@ pub trait DatabaseManager: Send + Sync {
 
     /// Get cache statistics for all cached DAOs
     fn get_cache_stats(&self) -> Option<CacheStats>;
+
+    /// Get direct database connection (for migrations and admin operations)
+    fn connection(&self) -> &DatabaseConnection;
 }
 
 /// Database connection manager implementation with optional caching
@@ -164,6 +167,11 @@ impl DatabaseManager for DatabaseManagerImpl {
         let api_keys = self.api_keys().get_cache_stats();
 
         Some(CacheStats { users, api_keys })
+    }
+
+    /// Get direct database connection (for migrations and admin operations)
+    fn connection(&self) -> &DatabaseConnection {
+        &self.connection
     }
 }
 
