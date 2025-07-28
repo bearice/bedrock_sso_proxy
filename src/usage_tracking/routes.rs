@@ -292,7 +292,7 @@ async fn create_model_cost(
         updated_at: Utc::now(),
     };
 
-    server.database.model_costs().upsert(&cost).await?;
+    server.database.model_costs().upsert_many(&[cost]).await?;
     Ok(StatusCode::CREATED)
 }
 
@@ -324,7 +324,7 @@ async fn update_model_cost(
         updated_at: Utc::now(),
     };
 
-    server.database.model_costs().upsert(&cost).await?;
+    server.database.model_costs().upsert_many(&[cost]).await?;
     Ok(StatusCode::OK)
 }
 
@@ -355,7 +355,7 @@ async fn update_all_model_costs(
     }
 
     // Create cost tracking service with us-east-1 region for pricing data
-    let cost_service = CostTrackingService::new(server.database.clone(), "us-east-1".to_string());
+    let cost_service = CostTrackingService::new(server.database.clone());
 
     // Process the provided CSV content
     let result = cost_service.batch_update_from_csv_content(&body).await?;
@@ -369,7 +369,7 @@ async fn get_cost_summary(
 ) -> Result<Json<CostSummary>, AppError> {
     // Admin permissions already checked by middleware
 
-    let cost_service = CostTrackingService::new(server.database.clone(), "us-east-1".to_string());
+    let cost_service = CostTrackingService::new(server.database.clone());
     let summary = cost_service.get_cost_summary().await?;
 
     Ok(Json(summary))

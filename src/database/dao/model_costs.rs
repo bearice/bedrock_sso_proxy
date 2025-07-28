@@ -25,8 +25,8 @@ impl ModelCostsDao {
     }
 
     /// Store or update model cost using native upsert
-    pub async fn upsert(&self, cost: &StoredModelCost) -> DatabaseResult<()> {
-        let active_model = model_costs::ActiveModel {
+    pub async fn upsert_many(&self, costs: &[StoredModelCost]) -> DatabaseResult<()> {
+        let active_models:Vec<_> = costs.iter().map(|cost| model_costs::ActiveModel {
             id: ActiveValue::NotSet,
             model_id: Set(cost.model_id.clone()),
             input_cost_per_1k_tokens: Set(cost.input_cost_per_1k_tokens),
@@ -34,7 +34,7 @@ impl ModelCostsDao {
             cache_write_cost_per_1k_tokens: Set(cost.cache_write_cost_per_1k_tokens),
             cache_read_cost_per_1k_tokens: Set(cost.cache_read_cost_per_1k_tokens),
             updated_at: Set(cost.updated_at),
-        };
+        }).collect();
 
         let on_conflict = OnConflict::column(model_costs::Column::ModelId)
             .update_columns([
@@ -46,7 +46,7 @@ impl ModelCostsDao {
             ])
             .to_owned();
 
-        model_costs::Entity::insert(active_model)
+        model_costs::Entity::insert_many(active_models)
             .on_conflict(on_conflict)
             .exec(&self.db)
             .await

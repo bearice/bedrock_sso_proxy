@@ -147,8 +147,9 @@ async fn setup_test_data(database: &dyn DatabaseManager) -> (i32, i32) {
         ("test-new-model", Decimal::new(1, 3), Decimal::new(5, 3)), // 0.001, 0.005
     ];
 
-    for (model_id, input_cost, output_cost) in model_costs {
-        let cost = StoredModelCost {
+    let costs: Vec<_> = model_costs
+        .into_iter()
+        .map(|(model_id, input_cost, output_cost)| StoredModelCost {
             id: 0,
             model_id: model_id.to_string(),
             input_cost_per_1k_tokens: input_cost,
@@ -156,9 +157,9 @@ async fn setup_test_data(database: &dyn DatabaseManager) -> (i32, i32) {
             cache_write_cost_per_1k_tokens: None,
             cache_read_cost_per_1k_tokens: None,
             updated_at: Utc::now(),
-        };
-        database.model_costs().upsert(&cost).await.unwrap();
-    }
+        })
+        .collect();
+    database.model_costs().upsert_many(&costs).await.unwrap();
 
     (user1_id, admin_id)
 }

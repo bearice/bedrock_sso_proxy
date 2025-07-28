@@ -736,7 +736,7 @@ impl ModelService for ModelServiceImpl {
         tracing::info!("Initializing model costs from fallback data");
 
         let cost_service =
-            CostTrackingService::new(self.database.clone(), self.config.aws.region.clone());
+            CostTrackingService::new(self.database.clone());
 
         // Check if we already have cost data
         let existing_costs = self.database.model_costs().get_all().await.map_err(|e| {
@@ -750,10 +750,8 @@ impl ModelService for ModelServiceImpl {
             match cost_service.initialize_model_costs_from_embedded().await {
                 Ok(result) => {
                     tracing::info!(
-                        "Successfully initialized {} model costs from embedded data ({} updated, {} failed)",
-                        result.total_processed,
-                        result.updated_models.len(),
-                        result.failed_models.len()
+                        "Successfully initialized {} model costs from embedded data",
+                        result.total_processed
                     );
                 }
                 Err(e) => {
@@ -1173,7 +1171,7 @@ mod tests {
             cache_read_cost_per_1k_tokens: Some(Decimal::new(3, 4)), // 0.0003 exactly
             updated_at: Utc::now(),
         };
-        database.model_costs().upsert(&model_cost).await.unwrap();
+        database.model_costs().upsert_many(&[model_cost]).await.unwrap();
 
         // Calculate cost for 100 input tokens, 50 output tokens, no cache tokens
         let cost = model_service
