@@ -139,7 +139,6 @@ mod tests {
     use super::*;
     use crate::{
         auth::{jwt::JwtService, middleware::jwt_auth_middleware},
-        cache::CacheManager,
         config::Config,
         database::{DatabaseManager, entities::UserRecord},
     };
@@ -149,29 +148,9 @@ mod tests {
         middleware,
     };
     use chrono::Utc;
-    use jsonwebtoken::Algorithm;
     use serde_json;
     use std::sync::Arc;
     use tower::ServiceExt;
-
-    async fn create_test_components() -> (Arc<DatabaseManager>, Arc<CacheManager>) {
-        let mut config = Config::default();
-        config.cache.backend = "memory".to_string();
-        config.database.enabled = true;
-        config.database.url = "sqlite::memory:".to_string();
-
-        let cache = Arc::new(CacheManager::new_memory());
-        let database = Arc::new(
-            DatabaseManager::new_from_config(&config, cache.clone())
-                .await
-                .unwrap(),
-        );
-
-        // Run migrations to create tables
-        database.migrate().await.unwrap();
-
-        (database, cache)
-    }
 
     async fn create_test_user(database: &Arc<DatabaseManager>) -> i32 {
         let user = UserRecord {
@@ -192,28 +171,34 @@ mod tests {
         jwt_service.create_oauth_token(&claims).unwrap()
     }
 
-    async fn create_test_server() -> (Arc<DatabaseManager>, Arc<CacheManager>, JwtService) {
-        let (database, cache) = create_test_components().await;
-        let jwt_service = JwtService::new("test-secret".to_string(), Algorithm::HS256).unwrap();
-        (database, cache, jwt_service)
+    async fn create_test_server() -> Server {
+        // Create unified test configuration
+        let mut config = Config::default();
+        config.cache.backend = "memory".to_string();
+        config.database.enabled = true;
+        config.database.url = "sqlite::memory:".to_string();
+        config.jwt.secret = "test-secret".to_string();
+        config.jwt.algorithm = "HS256".to_string();
+
+        // Create server with all services initialized
+        let server = Server::new(config).await.unwrap();
+        
+        // Run migrations to create tables
+        server.database.migrate().await.unwrap();
+        
+        server
     }
 
     #[tokio::test]
     async fn test_create_api_key() {
-        let (database, cache, jwt_service) = create_test_server().await;
-        let user_id = create_test_user(&database).await;
-
-        // Create server state for middleware
-        let config = Config::default();
-        let mut server = Server::new(config).await.unwrap();
-        server.cache = cache;
-        server.database = database;
+        let server = create_test_server().await;
+        let user_id = create_test_user(&server.database).await;
 
         let app = create_api_key_routes()
             .with_state(server.clone())
-            .layer(middleware::from_fn_with_state(server, jwt_auth_middleware));
+            .layer(middleware::from_fn_with_state(server.clone(), jwt_auth_middleware));
 
-        let token = create_test_jwt(&jwt_service, user_id);
+        let token = create_test_jwt(&server.jwt_service, user_id);
         let request_body = CreateApiKeyRequest {
             name: "Test Key".to_string(),
             expires_in_days: Some(30),
@@ -242,24 +227,18 @@ mod tests {
 
     #[tokio::test]
     async fn test_list_api_keys() {
-        let (database, cache, jwt_service) = create_test_server().await;
-        let user_id = create_test_user(&database).await;
+        let server = create_test_server().await;
+        let user_id = create_test_user(&server.database).await;
 
         // Create a test API key first
         let (api_key, _) = ApiKey::new(user_id, "Test Key".to_string(), None);
-        database.api_keys().store(&api_key).await.unwrap();
-
-        // Create server state for middleware
-        let config = Config::default();
-        let mut server = Server::new(config).await.unwrap();
-        server.cache = cache;
-        server.database = database;
+        server.database.api_keys().store(&api_key).await.unwrap();
 
         let app = create_api_key_routes()
             .with_state(server.clone())
-            .layer(middleware::from_fn_with_state(server, jwt_auth_middleware));
+            .layer(middleware::from_fn_with_state(server.clone(), jwt_auth_middleware));
 
-        let token = create_test_jwt(&jwt_service, user_id);
+        let token = create_test_jwt(&server.jwt_service, user_id);
 
         let request = Request::builder()
             .uri("/")
@@ -282,20 +261,14 @@ mod tests {
 
     #[tokio::test]
     async fn test_create_api_key_invalid_name() {
-        let (database, cache, jwt_service) = create_test_server().await;
-        let user_id = create_test_user(&database).await;
-
-        // Create server state for middleware
-        let config = Config::default();
-        let mut server = Server::new(config).await.unwrap();
-        server.cache = cache;
-        server.database = database;
+        let server = create_test_server().await;
+        let user_id = create_test_user(&server.database).await;
 
         let app = create_api_key_routes()
             .with_state(server.clone())
-            .layer(middleware::from_fn_with_state(server, jwt_auth_middleware));
+            .layer(middleware::from_fn_with_state(server.clone(), jwt_auth_middleware));
 
-        let token = create_test_jwt(&jwt_service, user_id);
+        let token = create_test_jwt(&server.jwt_service, user_id);
         let request_body = CreateApiKeyRequest {
             name: "".to_string(), // Empty name
             expires_in_days: None,
