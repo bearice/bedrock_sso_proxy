@@ -28,56 +28,36 @@ struct Cli {
         help = "Connect directly to upstream API (AWS Bedrock or Anthropic) instead of through proxy"
     )]
     direct: bool,
+
+    #[arg(short = 'm', long)]
+    model: Option<String>,
+
+    #[arg(
+        short = 'a',
+        long = "anthropic",
+        help = "Use Anthropic API format (default: Bedrock format)"
+    )]
+    anthropic: bool,
+
+    #[arg(
+        short = 'k',
+        long = "api-key",
+        help = "API key for authentication (SSOK_ prefix for proxy, or Anthropic key for direct)"
+    )]
+    api_key: Option<String>,
+
+    #[arg(long = "streaming")]
+    streaming: bool,
 }
 
 #[derive(Subcommand)]
 enum Commands {
     /// Interactive chat with a model
-    Chat {
-        #[arg(short = 'm', long)]
-        model: Option<String>,
-
-        #[arg(short = 's', long)]
-        streaming: bool,
-
-        #[arg(
-            short = 'a',
-            long = "anthropic",
-            help = "Use Anthropic API format (default: Bedrock format)"
-        )]
-        anthropic: bool,
-
-        #[arg(
-            short = 'k',
-            long = "api-key",
-            help = "API key for authentication (SSOK_ prefix for proxy, or Anthropic key for direct)"
-        )]
-        api_key: Option<String>,
-    },
+    Chat,
     /// Send a single message to a model
     Message {
-        #[arg(short = 'm', long)]
-        model: Option<String>,
-
         #[arg(short = 't', long)]
         text: String,
-
-        #[arg(short = 's', long)]
-        streaming: bool,
-
-        #[arg(
-            short = 'a',
-            long = "anthropic",
-            help = "Use Anthropic API format (default: Bedrock format)"
-        )]
-        anthropic: bool,
-
-        #[arg(
-            short = 'k',
-            long = "api-key",
-            help = "API key for authentication (SSOK_ prefix for proxy, or Anthropic key for direct)"
-        )]
-        api_key: Option<String>,
     },
     /// Test server health
     Health,
@@ -912,37 +892,24 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Create E2E client
     let client = E2EClient::new(cli.server_url, &config.jwt.secret, &config, cli.direct)?;
 
+    let model = cli.model.unwrap_or_else(|| E2EClient::get_default_model(cli.anthropic).to_string());
+
     match cli.command {
         Commands::Health => {
             client.health_check().await?;
         }
-        Commands::Message {
-            model,
-            text,
-            streaming,
-            anthropic,
-            api_key,
-        } => {
-            let model = model.unwrap_or_else(|| E2EClient::get_default_model(anthropic).to_string());
-            
-            if anthropic {
-                client.send_anthropic_message(&model, &text, streaming, &api_key).await?;
+        Commands::Message { text } => {
+            if cli.anthropic {
+                client.send_anthropic_message(&model, &text, cli.streaming, &cli.api_key).await?;
             } else {
-                client.send_message(&model, &text, streaming).await?;
+                client.send_message(&model, &text, cli.streaming).await?;
             }
         }
-        Commands::Chat {
-            model,
-            streaming,
-            anthropic,
-            api_key,
-        } => {
-            let model = model.unwrap_or_else(|| E2EClient::get_default_model(anthropic).to_string());
-            
-            if anthropic {
-                client.anthropic_interactive_chat(&model, streaming, &api_key).await?;
+        Commands::Chat => {
+            if cli.anthropic {
+                client.anthropic_interactive_chat(&model, cli.streaming, &cli.api_key).await?;
             } else {
-                client.interactive_chat(&model, streaming).await?;
+                client.interactive_chat(&model, cli.streaming).await?;
             }
         }
     }
