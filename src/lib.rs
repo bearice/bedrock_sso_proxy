@@ -14,5 +14,8 @@ pub mod server;
 pub mod shutdown;
 pub mod usage_tracking;
 
+#[cfg(any(test, feature = "test-utils", debug_assertions))]
+pub mod test_utils;
+
 pub use config::Config;
 pub use server::Server;

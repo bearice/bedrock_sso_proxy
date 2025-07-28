@@ -1,34 +1,17 @@
 use bedrock_sso_proxy::{
-    anthropic::transform::transform_bedrock_event_to_anthropic,
-    aws::bedrock::BedrockRuntimeImpl,
-    cache::CacheManager,
-    config::Config,
-    database::DatabaseManager,
-    model_service::{EventStreamParser, ModelService},
+    anthropic::transform::transform_bedrock_event_to_anthropic, model_service::EventStreamParser,
+    test_utils::TestServerBuilder,
 };
 use bytes::Bytes;
 use futures_util::StreamExt;
 use std::sync::Arc;
 
-async fn create_test_setup() -> (Arc<ModelService>, Arc<DatabaseManager>) {
-    let mut config = Config::default();
-    config.cache.backend = "memory".to_string();
-    config.database.enabled = true;
-    config.database.url = "sqlite::memory:".to_string();
-    config.metrics.enabled = false;
-
-    let cache_manager = Arc::new(CacheManager::new_memory());
-    let database = Arc::new(
-        DatabaseManager::new_from_config(&config, cache_manager)
-            .await
-            .unwrap(),
-    );
-    database.migrate().await.unwrap();
-
-    let bedrock = Arc::new(BedrockRuntimeImpl::new_test());
-    let model_service = Arc::new(ModelService::new(bedrock, database.clone(), config));
-
-    (model_service, database)
+async fn create_test_setup() -> (
+    Arc<dyn bedrock_sso_proxy::model_service::ModelService>,
+    Arc<dyn bedrock_sso_proxy::database::DatabaseManager>,
+) {
+    let server = TestServerBuilder::new().build().await;
+    (server.model_service, server.database)
 }
 
 #[tokio::test]
@@ -168,14 +151,18 @@ async fn test_stream_integration_with_fixture() {
 #[tokio::test]
 async fn test_bedrock_route_receives_exact_binary_stream() {
     let (model_service, _database) = create_test_setup().await;
-    
+
     // Load the binary fixture - this is what AWS would send
     let binary_data = include_bytes!("fixtures/stream-out.bin");
-    
+
     // Test that ParsedEventStream correctly processes the binary data
-    let stream = futures_util::stream::iter(vec![Bytes::from(binary_data.to_vec())].into_iter().map(Ok::<_, reqwest::Error>));
+    let stream = futures_util::stream::iter(
+        vec![Bytes::from(binary_data.to_vec())]
+            .into_iter()
+            .map(Ok::<_, reqwest::Error>),
+    );
     let boxed_stream = Box::new(stream);
-    
+
     let usage_tracker = bedrock_sso_proxy::model_service::UsageTracker {
         model_request: bedrock_sso_proxy::model_service::ModelRequest {
             model_id: "claude-sonnet-4-20250514".to_string(),
@@ -187,22 +174,20 @@ async fn test_bedrock_route_receives_exact_binary_stream() {
         model_service: model_service.clone(),
         start_time: std::time::Instant::now(),
     };
-    
-    let parsed_event_stream = bedrock_sso_proxy::model_service::ParsedEventStream::new(
-        boxed_stream,
-        Some(usage_tracker),
-    );
-    
+
+    let parsed_event_stream =
+        bedrock_sso_proxy::model_service::ParsedEventStream::new(boxed_stream, Some(usage_tracker));
+
     // Collect events from the parsed stream
     let events: Vec<_> = parsed_event_stream.collect().await;
-    
+
     // Verify we got events back
     assert!(!events.is_empty(), "Should parse events from binary stream");
-    
+
     // Verify the events contain the expected data
     let mut has_message_start = false;
     let mut has_message_stop = false;
-    
+
     for event_result in events {
         match event_result {
             Ok(sse_event) => {
@@ -219,24 +204,28 @@ async fn test_bedrock_route_receives_exact_binary_stream() {
             }
         }
     }
-    
+
     assert!(has_message_start, "Should have message_start event");
     assert!(has_message_stop, "Should have message_stop event");
-    
+
     println!("✅ Bedrock route binary stream test passed!");
 }
 
 #[tokio::test]
 async fn test_bedrock_route_returns_exact_binary_format() {
     let (model_service, _database) = create_test_setup().await;
-    
+
     // Load the binary fixture - this is what AWS sends
     let binary_data = include_bytes!("fixtures/stream-out.bin");
-    
+
     // Create stream response from model service
-    let stream = futures_util::stream::iter(vec![Bytes::from(binary_data.to_vec())].into_iter().map(Ok::<_, reqwest::Error>));
+    let stream = futures_util::stream::iter(
+        vec![Bytes::from(binary_data.to_vec())]
+            .into_iter()
+            .map(Ok::<_, reqwest::Error>),
+    );
     let boxed_stream = Box::new(stream);
-    
+
     let usage_tracker = bedrock_sso_proxy::model_service::UsageTracker {
         model_request: bedrock_sso_proxy::model_service::ModelRequest {
             model_id: "claude-sonnet-4-20250514".to_string(),
@@ -248,18 +237,16 @@ async fn test_bedrock_route_returns_exact_binary_format() {
         model_service: model_service.clone(),
         start_time: std::time::Instant::now(),
     };
-    
-    let parsed_event_stream = bedrock_sso_proxy::model_service::ParsedEventStream::new(
-        boxed_stream,
-        Some(usage_tracker),
-    );
-    
+
+    let parsed_event_stream =
+        bedrock_sso_proxy::model_service::ParsedEventStream::new(boxed_stream, Some(usage_tracker));
+
     // Collect binary chunks that would be sent to Bedrock route client
     let mut binary_chunks = Vec::new();
     let mut total_size = 0;
-    
+
     let events: Vec<_> = parsed_event_stream.collect().await;
-    
+
     for event_result in events {
         match event_result {
             Ok(sse_event) => {
@@ -272,21 +259,33 @@ async fn test_bedrock_route_returns_exact_binary_format() {
             }
         }
     }
-    
+
     // Verify we got binary data back
     assert!(!binary_chunks.is_empty(), "Should have binary chunks");
     assert!(total_size > 0, "Should have non-zero total size");
-    
+
     // Verify the binary data maintains the original AWS Event Stream format
     let first_chunk = &binary_chunks[0];
-    assert!(first_chunk.len() >= 12, "Should have at least 12 bytes for Event Stream header");
-    
+    assert!(
+        first_chunk.len() >= 12,
+        "Should have at least 12 bytes for Event Stream header"
+    );
+
     // Check that it starts with the total length field (4 bytes, big endian)
-    let total_length = u32::from_be_bytes([first_chunk[0], first_chunk[1], first_chunk[2], first_chunk[3]]);
+    let total_length = u32::from_be_bytes([
+        first_chunk[0],
+        first_chunk[1],
+        first_chunk[2],
+        first_chunk[3],
+    ]);
     assert!(total_length > 0, "Should have valid total length");
-    
+
     println!("✅ Bedrock route returns exact binary format!");
-    println!("Binary chunks: {}, Total size: {} bytes", binary_chunks.len(), total_size);
+    println!(
+        "Binary chunks: {}, Total size: {} bytes",
+        binary_chunks.len(),
+        total_size
+    );
 }
 
 #[tokio::test]

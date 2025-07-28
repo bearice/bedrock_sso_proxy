@@ -4,7 +4,7 @@
 //! It offers automatic cache invalidation, type safety, and performance optimization
 //! for read-heavy database operations.
 
-use crate::cache::CacheManager;
+use crate::cache::CacheManagerImpl;
 use crate::cache::typed::{CachedObject, TypedCache};
 use crate::database::DatabaseResult;
 use async_trait::async_trait;
@@ -49,7 +49,7 @@ where
     D: Send + Sync + Clone,
 {
     /// Create a new cached DAO wrapper
-    pub fn new(inner: D, cache: &CacheManager) -> Self {
+    pub fn new(inner: D, cache: &CacheManagerImpl) -> Self {
         Self {
             inner,
             cache: cache.get_typed_cache(),
@@ -296,7 +296,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_cached_dao_basic_operations() {
-        let backend = CacheManager::new_memory();
+        let backend = CacheManagerImpl::new_memory();
         let cached_dao = CachedDao::<(), UserRecord>::new((), &backend);
 
         let user = UserRecord {
@@ -332,7 +332,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_cache_invalidation() {
-        let backend = CacheManager::new_memory();
+        let backend = CacheManagerImpl::new_memory();
         let cached_dao = CachedDao::<(), UserRecord>::new((), &backend);
 
         // Cache an entry

@@ -1,5 +1,6 @@
 use crate::error::AppError;
 use crate::health::{HealthCheckResult, HealthChecker};
+use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use jsonwebtoken::{
     Algorithm, DecodingKey, EncodingKey, Header, Validation, decode, encode, jwk::Jwk,
@@ -90,15 +91,34 @@ impl OAuthClaims {
     }
 }
 
+/// JWT service trait for dependency injection and testing
+#[async_trait]
+pub trait JwtService: Send + Sync {
+    /// Create OAuth token from claims
+    fn create_oauth_token(&self, claims: &OAuthClaims) -> Result<String, AppError>;
+
+    /// Validate OAuth token and return claims
+    fn validate_oauth_token(&self, token: &str) -> Result<OAuthClaims, AppError>;
+
+    /// Validate token (alias for validate_oauth_token)
+    fn validate_token(&self, token: &str) -> Result<OAuthClaims, AppError>;
+
+    /// Get algorithm used by this service
+    fn algorithm(&self) -> Algorithm;
+
+    /// Get secret used by this service
+    fn secret(&self) -> &str;
+}
+
 #[derive(Clone)]
-pub struct JwtService {
+pub struct JwtServiceImpl {
     pub secret: String,
     pub algorithm: Algorithm,
     encoding_key: EncodingKey,
     decoding_key: DecodingKey,
 }
 
-impl JwtService {
+impl JwtServiceImpl {
     pub fn new(secret: String, algorithm: Algorithm) -> Result<Self, AppError> {
         let encoding_key = create_encoding_key(&secret, algorithm)?;
         let decoding_key = create_decoding_key(&secret, algorithm)?;
@@ -111,13 +131,23 @@ impl JwtService {
         })
     }
 
-    pub fn create_oauth_token(&self, claims: &OAuthClaims) -> Result<String, AppError> {
+    /// Create a health checker for this JWT service
+    pub fn health_checker(&self) -> Arc<JwtHealthChecker> {
+        Arc::new(JwtHealthChecker {
+            service: self.clone(),
+        })
+    }
+}
+
+#[async_trait]
+impl JwtService for JwtServiceImpl {
+    fn create_oauth_token(&self, claims: &OAuthClaims) -> Result<String, AppError> {
         let header = Header::new(self.algorithm);
         encode(&header, claims, &self.encoding_key)
             .map_err(|e| AppError::Internal(format!("Failed to create token: {}", e)))
     }
 
-    pub fn validate_oauth_token(&self, token: &str) -> Result<OAuthClaims, AppError> {
+    fn validate_oauth_token(&self, token: &str) -> Result<OAuthClaims, AppError> {
         let mut validation = Validation::new(self.algorithm);
         validation.validate_exp = true;
         validation.leeway = 0;
@@ -128,21 +158,22 @@ impl JwtService {
         Ok(token_data.claims)
     }
 
-    pub fn validate_token(&self, token: &str) -> Result<OAuthClaims, AppError> {
+    fn validate_token(&self, token: &str) -> Result<OAuthClaims, AppError> {
         self.validate_oauth_token(token)
     }
 
-    /// Create a health checker for this JWT service
-    pub fn health_checker(&self) -> Arc<JwtHealthChecker> {
-        Arc::new(JwtHealthChecker {
-            service: self.clone(),
-        })
+    fn algorithm(&self) -> Algorithm {
+        self.algorithm
+    }
+
+    fn secret(&self) -> &str {
+        &self.secret
     }
 }
 
 /// Health checker implementation for JWT service
 pub struct JwtHealthChecker {
-    service: JwtService,
+    service: JwtServiceImpl,
 }
 
 #[async_trait::async_trait]
@@ -280,7 +311,7 @@ mod tests {
 
     #[test]
     fn test_jwt_service_oauth_token() {
-        let service = JwtService::new("test-secret".to_string(), Algorithm::HS256).unwrap();
+        let service = JwtServiceImpl::new("test-secret".to_string(), Algorithm::HS256).unwrap();
 
         let claims = OAuthClaims::new(1, 3600);
 

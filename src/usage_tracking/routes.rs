@@ -389,18 +389,7 @@ mod tests {
     #[tokio::test]
     async fn test_create_user_usage_routes() {
         async fn create_test_server() -> crate::server::Server {
-            let mut config = crate::config::Config::default();
-            config.cache.backend = "memory".to_string();
-            config.database.enabled = true;
-            config.database.url = "sqlite::memory:".to_string();
-            config.metrics.enabled = false;
-
-            let server = crate::server::Server::new(config).await.unwrap();
-
-            // Run migrations to create tables
-            server.database.migrate().await.unwrap();
-
-            server
+            crate::test_utils::TestServerBuilder::new().build().await
         }
 
         let server = create_test_server().await;

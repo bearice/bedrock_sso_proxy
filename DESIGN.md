@@ -2660,3 +2660,356 @@ pub struct UsageMetadata {
 4. Clean up unused middleware code
 
 This architecture will be significantly simpler, more accurate, and easier to maintain than the current middleware-based approach.
+
+---
+
+## Testing Architecture
+
+### Current Testing Problems (Pre-Refactoring)
+
+The existing test infrastructure has several critical issues that make it difficult to maintain and extend:
+
+#### Code Duplication and Maintenance Burden
+- **13 files** with duplicated test setup code
+- **8 different** `create_test_server()` implementations across modules
+- **15 instances** of `Server::new()` in tests with inconsistent configurations
+- **Heavy external dependencies**: Real SQLite databases, real cache systems, real AWS services
+
+#### Brittle Test Infrastructure
+- **Fragile tests**: Any change to `Server::new()` breaks multiple test modules
+- **Slow execution**: Each test spins up full infrastructure (database, cache, metrics)
+- **Poor isolation**: Tests share state through real services, leading to flaky behavior
+- **Difficult refactoring**: Service changes require updating tests across multiple modules
+
+#### Technical Debt
+- **No dependency injection**: Services are hard-coded in `Server` struct
+- **No service abstractions**: Cannot easily mock or replace components
+- **Testing anti-patterns**: Complex test setup with real external dependencies
+- **Maintenance overhead**: Every service change requires updating multiple test files
+
+### New Testing Architecture (Post-Refactoring)
+
+#### Service Trait Pattern
+**Consistent naming convention**: `XxxService` trait with `XxxServiceImpl` implementation
+
+```rust
+// Service trait definitions
+pub trait DatabaseManager: Send + Sync {
+    async fn users(&self) -> &dyn UserDao;
+    async fn api_keys(&self) -> &dyn ApiKeyDao;
+    async fn migrate(&self) -> Result<(), DatabaseError>;
+}
+
+pub trait CacheManager: Send + Sync {
+    async fn get(&self, key: &str) -> Result<Option<String>, CacheError>;
+    async fn set(&self, key: &str, value: &str, ttl: Option<u64>) -> Result<(), CacheError>;
+}
+
+pub trait JwtService: Send + Sync {
+    fn create_oauth_token(&self, claims: &OAuthClaims) -> Result<String, JwtError>;
+    fn validate_oauth_token(&self, token: &str) -> Result<OAuthClaims, JwtError>;
+}
+
+pub trait ModelService: Send + Sync {
+    async fn invoke_model(&self, model_id: &str, body: String) -> Result<String, ModelError>;
+}
+
+// Implementation structs (renamed from existing)
+pub struct DatabaseManagerImpl { /* existing DatabaseManager fields */ }
+pub struct CacheManagerImpl { /* existing CacheManager fields */ }
+pub struct JwtServiceImpl { /* existing JwtService fields */ }
+pub struct ModelServiceImpl { /* existing ModelService fields */ }
+```
+
+#### Dependency Injection Pattern
+**Server struct modified for testability**:
+
+```rust
+pub struct Server {
+    pub config: Arc<Config>,
+    pub database: Arc<dyn DatabaseManager>,
+    pub cache: Arc<dyn CacheManager>,
+    pub jwt_service: Arc<dyn JwtService>,
+    pub model_service: Arc<dyn ModelService>,
+    // ... other services
+}
+
+impl Server {
+    // Production constructor
+    pub async fn new(config: Config) -> Result<Self, AppError> {
+        let database = Arc::new(DatabaseManagerImpl::new(config.clone()).await?);
+        let cache = Arc::new(CacheManagerImpl::new(config.clone()).await?);
+        let jwt_service = Arc::new(JwtServiceImpl::new(config.clone())?);
+        let model_service = Arc::new(ModelServiceImpl::new(config.clone()));
+        
+        Ok(Self { config, database, cache, jwt_service, model_service })
+    }
+    
+    // Test constructor with dependency injection
+    pub fn new_with_services(
+        config: Config,
+        database: Arc<dyn DatabaseManager>,
+        cache: Arc<dyn CacheManager>,
+        jwt_service: Arc<dyn JwtService>,
+        model_service: Arc<dyn ModelService>,
+    ) -> Self {
+        Self { config, database, cache, jwt_service, model_service }
+    }
+}
+```
+
+#### Centralized Test Utilities
+**Single source of truth for test setup**:
+
+```rust
+// src/test_utils.rs
+pub struct TestServerBuilder {
+    config: Config,
+    use_memory_db: bool,
+    use_memory_cache: bool,
+    jwt_secret: Option<String>,
+}
+
+impl TestServerBuilder {
+    pub fn new() -> Self {
+        Self {
+            config: Config::default(),
+            use_memory_db: true,        // Default to memory for tests
+            use_memory_cache: true,     // Default to memory for tests  
+            jwt_secret: Some("test-secret".to_string()),
+        }
+    }
+    
+    pub fn with_real_database(mut self) -> Self {
+        self.use_memory_db = false;
+        self
+    }
+    
+    pub async fn build(self) -> Server {
+        let mut config = self.config;
+        
+        if self.use_memory_db {
+            config.database.url = "sqlite::memory:".to_string();
+        }
+        
+        if self.use_memory_cache {
+            config.cache.backend = "memory".to_string();
+        }
+        
+        if let Some(secret) = self.jwt_secret {
+            config.jwt.secret = secret;
+        }
+        
+        let server = Server::new(config).await.unwrap();
+        server.database.migrate().await.unwrap();
+        server
+    }
+}
+
+// Helper functions
+pub async fn create_test_user(database: &Arc<dyn DatabaseManager>) -> i32 {
+    let user = UserRecord { /* test user data */ };
+    database.users().upsert(&user).await.unwrap()
+}
+
+pub fn create_test_jwt(jwt_service: &Arc<dyn JwtService>, user_id: i32) -> String {
+    let claims = OAuthClaims::new(user_id, 3600);
+    jwt_service.create_oauth_token(&claims).unwrap()
+}
+```
+
+#### Leveraging Existing Memory Implementations
+**No new mock implementations needed** - reuse existing optimized components:
+
+- **Database**: `sqlite::memory:` (already used in tests) - fast, isolated, full SQL support
+- **Cache**: `MemoryCache` (already implemented) - concurrent, TTL-aware, high performance
+- **Minimal AWS Mocks**: Simple implementations for `BedrockRuntime` trait
+- **OAuth Mocks**: Basic test implementations for provider interactions
+
+### Testing Strategy
+
+#### Test Categories by Speed and Scope
+
+**Unit Tests** (Fast, Isolated):
+- **Memory-based services**: `sqlite::memory:` + `MemoryCache`
+- **Mocked external dependencies**: AWS, OAuth providers
+- **Focused scope**: Single component or function
+- **Execution time**: <100ms per test
+- **Parallelization**: High (isolated state)
+
+**Integration Tests** (Medium, Real Services):
+- **Real services**: Actual database, cache, but controlled environment
+- **Focused scenarios**: Multi-component interactions
+- **Execution time**: 100ms-1s per test
+- **Parallelization**: Medium (shared services)
+
+**End-to-End Tests** (Slow, Full System):
+- **Full system validation**: Real external services where necessary
+- **User journey testing**: Complete workflows
+- **Execution time**: 1s+ per test
+- **Parallelization**: Low (shared system state)
+
+#### Test Organization
+
+```
+tests/
+├── unit/           # Fast, isolated, memory-based
+│   ├── auth/
+│   ├── database/
+│   ├── cache/
+│   └── routes/
+├── integration/    # Medium, real services, focused
+│   ├── api_flows/
+│   ├── oauth_flows/
+│   └── streaming/
+└── e2e/           # Slow, full system
+    ├── client_integration/
+    └── security/
+```
+
+### Benefits of New Architecture
+
+#### Performance Improvements
+- **5-10x faster tests**: Memory backends eliminate I/O bottlenecks
+- **Better parallelization**: Isolated test state enables concurrent execution
+- **Reduced flakiness**: No external dependencies or shared state
+- **Faster CI/CD**: Quicker feedback loops for development
+
+#### Maintainability Improvements
+- **Single source of truth**: One `TestServerBuilder` for all test setup
+- **Reuse existing code**: Leverage optimized `MemoryCache` and `sqlite::memory:`
+- **Type safety**: Compile-time detection of service interface changes
+- **Better test organization**: Clear separation of unit vs integration vs e2e
+- **Consistent naming**: `Service` trait + `ServiceImpl` pattern throughout
+
+#### Development Experience
+- **Faster development**: Quick test feedback enables rapid iteration
+- **Easier debugging**: Predictable behavior with isolated test state
+- **Better CI/CD**: Reliable test execution with consistent timing
+- **Simplified onboarding**: Clear patterns for new developers
+
+### Implementation Architecture
+
+#### Updated Module Structure
+
+```
+src/
+├── test_utils.rs          # NEW: Centralized test utilities
+├── database/
+│   ├── mod.rs             # DatabaseManager trait + DatabaseManagerImpl
+│   └── ...
+├── cache/
+│   ├── mod.rs             # CacheManager trait + CacheManagerImpl  
+│   └── ...
+├── auth/
+│   ├── jwt.rs             # JwtService trait + JwtServiceImpl
+│   └── ...
+├── model_service/
+│   ├── mod.rs             # ModelService trait + ModelServiceImpl
+│   └── ...
+├── server/
+│   ├── mod.rs             # Server with dependency injection
+│   └── ...
+└── routes/
+    ├── api_keys.rs        # Updated to use TestServerBuilder
+    ├── anthropic.rs       # Updated to use TestServerBuilder
+    ├── bedrock.rs         # Updated to use TestServerBuilder
+    └── ...
+```
+
+#### Refactored Test Example
+
+```rust
+// Before: Complex, duplicated setup
+#[cfg(test)]
+mod tests {
+    async fn create_test_server() -> Server {
+        let mut config = Config::default();
+        config.cache.backend = "memory".to_string();
+        config.database.url = "sqlite::memory:".to_string();
+        config.jwt.secret = "test-secret".to_string();
+        
+        let server = Server::new(config).await.unwrap();
+        server.database.migrate().await.unwrap();
+        server
+    }
+
+    #[tokio::test]
+    async fn test_create_api_key() {
+        let server = create_test_server().await;
+        let user_id = create_test_user(&server.database).await;
+        let token = create_test_jwt(&server.jwt_service, user_id);
+        // ... test logic
+    }
+}
+
+// After: Clean, centralized setup
+#[cfg(test)]
+mod tests {
+    use crate::test_utils::{TestServerBuilder, create_test_user, create_test_jwt};
+    
+    #[tokio::test]
+    async fn test_create_api_key() {
+        let server = TestServerBuilder::new().build().await;
+        let user_id = create_test_user(&server.database).await;
+        let token = create_test_jwt(&server.jwt_service, user_id);
+        // ... test logic
+    }
+}
+```
+
+### Migration Strategy
+
+#### Incremental Refactoring Approach
+1. **Documentation First**: Update DESIGN.md before any code changes
+2. **Create Test Utils**: Build `TestServerBuilder` alongside existing setup
+3. **Add Service Traits**: Introduce trait abstractions without breaking changes
+4. **Update Server**: Add dependency injection constructor
+5. **Refactor Tests**: Module by module, starting with `api_keys.rs`
+6. **Clean Up**: Remove duplicated test setup code
+
+#### Backward Compatibility
+- **Keep existing APIs**: No breaking changes to public interfaces
+- **Gradual migration**: Tests can be updated incrementally
+- **Maintain test coverage**: Ensure no regression during refactoring
+
+### Testing Best Practices
+
+#### Guidelines for Maintainable Tests
+
+**Test Categorization**:
+- **Unit tests**: Use `TestServerBuilder::new().build()` for isolated testing
+- **Integration tests**: Use `TestServerBuilder::new().with_real_database().build()` for multi-component testing
+- **End-to-end tests**: Use full system setup only when necessary
+
+**Service Mocking**:
+- **Prefer memory implementations**: Use `sqlite::memory:` and `MemoryCache` over custom mocks
+- **Mock external services**: Create minimal implementations for AWS, OAuth
+- **Avoid over-mocking**: Use real implementations when they're fast and isolated
+
+**Test Organization**:
+- **Clear naming**: Tests should clearly indicate what they're testing
+- **Focused scope**: Each test should verify one specific behavior
+- **Minimal setup**: Use the lightest possible test setup for each test category
+
+#### When to Use Different Test Types
+
+**Use Unit Tests When**:
+- Testing individual functions or components
+- Verifying business logic
+- Checking error handling
+- Performance is critical (fast feedback)
+
+**Use Integration Tests When**:
+- Testing component interactions
+- Verifying database operations
+- Testing authentication flows
+- Checking cache behavior
+
+**Use End-to-End Tests When**:
+- Testing complete user workflows
+- Verifying security measures
+- Testing real external service integrations
+- Validating system behavior under load
+
+This testing architecture provides a solid foundation for maintainable, fast, and reliable tests while leveraging existing optimized components and following consistent patterns throughout the codebase.

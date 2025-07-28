@@ -79,8 +79,8 @@ pub async fn auth_middleware(
 /// Authenticate with JWT token and return UserRecord
 async fn authenticate_with_jwt(
     token: &str,
-    database: &Arc<DatabaseManager>,
-    jwt_service: &Arc<JwtService>,
+    database: &Arc<dyn DatabaseManager>,
+    jwt_service: &Arc<dyn JwtService>,
 ) -> Result<UserRecord, AppError> {
     // Validate JWT token and get claims
     let claims = jwt_service.validate_oauth_token(token)?;
@@ -93,7 +93,7 @@ async fn authenticate_with_jwt(
 /// Authenticate with API key and return UserRecord
 async fn authenticate_with_api_key(
     api_key: &str,
-    database: &Arc<DatabaseManager>,
+    database: &Arc<dyn DatabaseManager>,
 ) -> Result<UserRecord, AppError> {
     // Validate API key format
     validate_api_key_format(api_key, API_KEY_PREFIX)?;
@@ -121,7 +121,7 @@ async fn authenticate_with_api_key(
 
 async fn get_user_record(
     user_id: i32,
-    database: &Arc<DatabaseManager>,
+    database: &Arc<dyn DatabaseManager>,
 ) -> Result<UserRecord, AppError> {
     let user = database
         .users()
@@ -135,8 +135,8 @@ async fn get_user_record(
 
 /// JWT-only authentication middleware (for web UI routes that don't support API keys)
 pub async fn jwt_only_middleware(
-    State(jwt_service): State<Arc<JwtService>>,
-    State(database): State<Arc<DatabaseManager>>,
+    State(jwt_service): State<Arc<dyn JwtService>>,
+    State(database): State<Arc<dyn DatabaseManager>>,
     mut request: Request,
     next: Next,
 ) -> Result<Response, AppError> {
@@ -270,24 +270,13 @@ mod tests {
         }
     }
 
-    fn create_test_token(jwt_service: &JwtService, user_id: i32) -> String {
+    fn create_test_token(jwt_service: &dyn JwtService, user_id: i32) -> String {
         let claims = OAuthClaims::new(user_id, 3600);
         jwt_service.create_oauth_token(&claims).unwrap()
     }
 
     async fn create_test_server() -> crate::server::Server {
-        let mut config = crate::config::Config::default();
-        config.cache.backend = "memory".to_string();
-        config.database.enabled = true;
-        config.database.url = "sqlite::memory:".to_string(); // Use in-memory database
-        config.metrics.enabled = false;
-
-        let server = crate::server::Server::new(config).await.unwrap();
-
-        // Run migrations to create tables
-        server.database.migrate().await.unwrap();
-
-        server
+        crate::test_utils::TestServerBuilder::new().build().await
     }
 
     async fn create_test_user(
@@ -323,7 +312,7 @@ mod tests {
                     jwt_auth_middleware,
                 ));
 
-        let token = create_test_token(&server.jwt_service, user_id);
+        let token = create_test_token(server.jwt_service.as_ref(), user_id);
         let request = Request::builder()
             .uri("/test")
             .header("Authorization", format!("Bearer {}", token))
@@ -340,7 +329,7 @@ mod tests {
 
         // Create test user first
         let user_id = create_test_user(&server, 123, "test@example.com").await;
-        let oauth_token = create_test_token(&server.jwt_service, user_id);
+        let oauth_token = create_test_token(server.jwt_service.as_ref(), user_id);
 
         let app =
             Router::new()
@@ -366,7 +355,7 @@ mod tests {
 
         // Create test user first
         let user_id = create_test_user(&server, 123, "test@example.com").await;
-        let oauth_token = create_test_token(&server.jwt_service, user_id);
+        let oauth_token = create_test_token(server.jwt_service.as_ref(), user_id);
 
         let app = Router::new()
             .route("/test", get(test_claims_handler))
@@ -503,7 +492,7 @@ mod tests {
                 jwt_auth_middleware,
             ));
 
-        let token = create_test_token(&server.jwt_service, user_id);
+        let token = create_test_token(server.jwt_service.as_ref(), user_id);
         let request = Request::builder()
             .uri("/test")
             .header("Authorization", format!("Bearer {}", token))
@@ -533,17 +522,11 @@ mod tests {
         ) -> crate::server::Server {
             let mut config = Config::default();
             config.admin.emails = admin_emails;
-            config.cache.backend = "memory".to_string();
-            config.database.enabled = true;
-            config.database.url = "sqlite::memory:".to_string(); // Use in-memory database
-            config.metrics.enabled = false;
 
-            let server = crate::server::Server::new(config).await.unwrap();
-
-            // Run migrations to create tables
-            server.database.migrate().await.unwrap();
-
-            server
+            crate::test_utils::TestServerBuilder::new()
+                .with_config(config)
+                .build()
+                .await
         }
 
         async fn create_admin_test_user(
@@ -587,7 +570,7 @@ mod tests {
 
             let app = create_test_app(server.clone());
 
-            let token = create_test_token(&server.jwt_service, user_id);
+            let token = create_test_token(server.jwt_service.as_ref(), user_id);
             let request = Request::builder()
                 .uri("/admin")
                 .header("Authorization", format!("Bearer {}", token))
@@ -608,7 +591,7 @@ mod tests {
 
             let app = create_test_app(server.clone());
 
-            let token = create_test_token(&server.jwt_service, user_id);
+            let token = create_test_token(server.jwt_service.as_ref(), user_id);
             let request = Request::builder()
                 .uri("/admin")
                 .header("Authorization", format!("Bearer {}", token))
@@ -629,7 +612,7 @@ mod tests {
 
             let app = create_test_app(server.clone());
 
-            let token = create_test_token(&server.jwt_service, user_id);
+            let token = create_test_token(server.jwt_service.as_ref(), user_id);
             let request = Request::builder()
                 .uri("/admin")
                 .header("Authorization", format!("Bearer {}", token))
@@ -667,7 +650,7 @@ mod tests {
 
             let app = create_test_app(server.clone());
 
-            let token = create_test_token(&server.jwt_service, 999);
+            let token = create_test_token(server.jwt_service.as_ref(), 999);
             let request = Request::builder()
                 .uri("/admin")
                 .header("Authorization", format!("Bearer {}", token))
@@ -687,7 +670,7 @@ mod tests {
 
             let app = create_test_app(server.clone());
 
-            let token = create_test_token(&server.jwt_service, user_id);
+            let token = create_test_token(server.jwt_service.as_ref(), user_id);
             let request = Request::builder()
                 .uri("/admin")
                 .header("Authorization", format!("Bearer {}", token))
@@ -712,7 +695,7 @@ mod tests {
 
             let app = create_test_app(server.clone());
 
-            let token = create_test_token(&server.jwt_service, user_id1);
+            let token = create_test_token(server.jwt_service.as_ref(), user_id1);
             let request = Request::builder()
                 .uri("/admin")
                 .header("Authorization", format!("Bearer {}", token))
@@ -727,7 +710,7 @@ mod tests {
 
             let app2 = create_test_app(server.clone());
 
-            let token2 = create_test_token(&server.jwt_service, user_id2);
+            let token2 = create_test_token(server.jwt_service.as_ref(), user_id2);
             let request2 = Request::builder()
                 .uri("/admin")
                 .header("Authorization", format!("Bearer {}", token2))

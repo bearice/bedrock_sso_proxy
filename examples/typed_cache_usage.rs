@@ -1,10 +1,10 @@
-use bedrock_sso_proxy::cache::CacheManager;
+use bedrock_sso_proxy::cache::CacheManagerImpl;
 use bedrock_sso_proxy::database::entities::UserRecord;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Create cache manager
-    let cache_manager = CacheManager::new_memory();
+    let cache_manager = CacheManagerImpl::new_memory();
 
     // Get a typed cache for UserRecord
     let user_cache = cache_manager.get_typed_cache::<UserRecord>();

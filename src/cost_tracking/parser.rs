@@ -2,15 +2,11 @@ use crate::error::AppError;
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use once_cell::sync::Lazy;
-use rust_embed::RustEmbed;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use tracing::{debug, info};
 
-#[derive(RustEmbed)]
-#[folder = "."]
-#[include = "bedrock_pricing.csv"]
-struct PricingAssets;
+const DEFAULT_PRICE_DATA: &str = include_str!("../../bedrock_pricing.csv");
 
 /// CSV record structure for pricing data
 #[derive(Debug, Deserialize)]
@@ -36,20 +32,12 @@ type PricingData =
 
 /// Cached embedded pricing data parsed from CSV
 /// Structure: region_id -> model_id -> (input_price, output_price, cache_write_price, cache_read_price, model_name, provider)
-static EMBEDDED_PRICING: Lazy<PricingData> = Lazy::new(|| {
-    let mut pricing = HashMap::new();
-
-    if let Some(pricing_file) = PricingAssets::get("bedrock_pricing.csv") {
-        if let Ok(csv_content) = std::str::from_utf8(&pricing_file.data) {
-            parse_csv_pricing_data(csv_content, &mut pricing);
-        }
-    }
-
-    pricing
-});
+static EMBEDDED_PRICING: Lazy<PricingData> =
+    Lazy::new(|| parse_csv_pricing_data(DEFAULT_PRICE_DATA));
 
 /// Parse CSV pricing data into region -> model -> (input_price, output_price, cache_write_price, cache_read_price, model_name, provider) structure
-fn parse_csv_pricing_data(csv_content: &str, pricing: &mut PricingData) {
+fn parse_csv_pricing_data(csv_content: &str) -> PricingData {
+    let mut pricing: PricingData = HashMap::new();
     let mut reader = csv::Reader::from_reader(csv_content.as_bytes());
 
     for record in reader.deserialize().flatten() {
@@ -75,6 +63,7 @@ fn parse_csv_pricing_data(csv_content: &str, pricing: &mut PricingData) {
     }
 
     info!("Loaded pricing data for {} regions from CSV", pricing.len());
+    pricing
 }
 
 /// Unified pricing information for a Bedrock model
@@ -163,7 +152,7 @@ impl CsvPricingSource {
     pub async fn get_all_models_all_regions() -> Result<Vec<ModelPricing>, AppError> {
         let mut all_models = Vec::new();
         let csv_modified_date = Self::get_embedded_csv_modified_date();
-
+        println!("{:?}", EMBEDDED_PRICING);
         for (region, region_models) in EMBEDDED_PRICING.iter() {
             for (
                 model_id,
@@ -337,11 +326,6 @@ impl PricingClient {
         CsvPricingSource::get_all_models_all_regions().await
     }
 
-    /// Get all available regions
-    pub fn get_available_regions() -> Vec<String> {
-        CsvPricingSource::get_available_regions()
-    }
-
     /// Get batch update data for all models
     pub async fn get_batch_update_data() -> Result<Vec<ModelPricing>, AppError> {
         CsvPricingSource::get_batch_update_data().await
@@ -403,16 +387,8 @@ mod tests {
     #[tokio::test]
     async fn test_batch_update_data() {
         let batch_data = CsvPricingSource::get_batch_update_data().await.unwrap();
-        debug!("Loaded {} models for batch update", batch_data.len());
+        println!("Loaded {} models for batch update", batch_data.len());
         assert!(!batch_data.is_empty());
-    }
-
-    #[test]
-    fn test_available_regions() {
-        let regions = CsvPricingSource::get_available_regions();
-        debug!("Available regions: {:?}", regions);
-        assert!(!regions.is_empty());
-        assert!(regions.contains(&"us-east-1".to_string()));
     }
 
     #[test]

@@ -2,18 +2,18 @@ pub mod config;
 
 use crate::{
     auth::{
-        jwt::{JwtService, parse_algorithm},
+        jwt::{JwtService, JwtServiceImpl, parse_algorithm},
         middleware::{admin_middleware, auth_middleware, jwt_auth_middleware},
         oauth::OAuthService,
     },
     aws::bedrock::BedrockRuntimeImpl,
-    cache::CacheManager,
+    cache::{CacheManager, CacheManagerImpl},
     config::Config,
-    database::{DatabaseManager, entities::UserRecord},
+    database::{DatabaseManager, DatabaseManagerImpl, entities::UserRecord},
     error::AppError,
     health::HealthService,
     metrics,
-    model_service::ModelService,
+    model_service::{ModelService, ModelServiceImpl},
     routes::{
         create_anthropic_routes, create_api_key_routes, create_auth_routes, create_bedrock_routes,
         create_frontend_router, create_health_routes, create_protected_auth_routes,
@@ -42,16 +42,40 @@ const MAX_BODY_SIZE: usize = 10 * 1024 * 1024;
 #[derive(Clone)]
 pub struct Server {
     pub config: Arc<Config>,
-    pub jwt_service: Arc<JwtService>,
-    pub model_service: Arc<ModelService>,
+    pub jwt_service: Arc<dyn JwtService>,
+    pub model_service: Arc<dyn ModelService>,
     pub oauth_service: Arc<OAuthService>,
     pub health_service: Arc<HealthService>,
-    pub database: Arc<DatabaseManager>,
-    pub cache: Arc<CacheManager>,
+    pub database: Arc<dyn DatabaseManager>,
+    pub cache: Arc<dyn CacheManager>,
     pub streaming_manager: Arc<StreamingConnectionManager>,
 }
 
 impl Server {
+    /// Create a new server with dependency injection for testing
+    pub fn new_with_dependencies(
+        config: Arc<Config>,
+        jwt_service: Arc<dyn JwtService>,
+        model_service: Arc<dyn ModelService>,
+        oauth_service: Arc<OAuthService>,
+        health_service: Arc<HealthService>,
+        database: Arc<dyn DatabaseManager>,
+        cache: Arc<dyn CacheManager>,
+    ) -> Self {
+        Self {
+            config,
+            jwt_service,
+            model_service,
+            oauth_service,
+            health_service,
+            database,
+            cache,
+            streaming_manager: Arc::new(StreamingConnectionManager::new(Arc::new(
+                ShutdownCoordinator::new(),
+            ))),
+        }
+    }
+
     pub async fn new(config: Config) -> Result<Self, AppError> {
         let config = Arc::new(config);
         // Initialize metrics if enabled
@@ -78,40 +102,51 @@ impl Server {
 
         // Initialize JWT service
         let jwt_algorithm = parse_algorithm(&config.jwt.algorithm)?;
-        let jwt_service = Arc::new(JwtService::new(config.jwt.secret.clone(), jwt_algorithm)?);
+        let jwt_service: Arc<dyn JwtService> = Arc::new(JwtServiceImpl::new(
+            config.jwt.secret.clone(),
+            jwt_algorithm,
+        )?);
 
-        // Initialize cache
-        let cache = Arc::new(CacheManager::new_from_config(&config.cache).await?);
+        // Initialize cache (create concrete instances for services that need them)
+        let cache_impl = Arc::new(CacheManagerImpl::new_from_config(&config.cache).await?);
+        let cache: Arc<dyn CacheManager> = cache_impl.clone();
 
         // Initialize database
-        let database = Arc::new(
-            DatabaseManager::new_from_config(&config, cache.clone())
+        let database_impl = Arc::new(
+            DatabaseManagerImpl::new_from_config(&config, cache_impl.clone())
                 .await
                 .map_err(AppError::Database)?,
         );
+        let database: Arc<dyn DatabaseManager> = database_impl.clone();
 
         let bedrock = Arc::new(BedrockRuntimeImpl::new(config.aws.clone()));
         // Initialize model service
-        let model_service = Arc::new(ModelService::new(
+        let model_service: Arc<dyn ModelService> = Arc::new(ModelServiceImpl::new(
             bedrock.clone(),
             database.clone(),
             (*config).clone(),
         ));
 
-        // Initialize OAuth service
+        // Initialize OAuth service (needs concrete cache type)
         let oauth_service = Arc::new(OAuthService::new(
             (*config).clone(),
-            jwt_service.as_ref().clone(),
+            jwt_service.clone(),
             database.clone(),
-            cache.clone(),
+            cache_impl.clone(),
         )?);
 
         // Initialize health service
         let health_service = Arc::new(HealthService::new());
-        health_service.register(cache.clone()).await;
-        health_service.register(database.clone()).await;
+
+        // Create concrete instances for health registration
+        let jwt_service_impl = JwtServiceImpl::new(config.jwt.secret.clone(), jwt_algorithm)?;
+
+        health_service.register(cache_impl).await;
+        health_service.register(database_impl).await;
         health_service.register(bedrock.health_checker()).await;
-        health_service.register(jwt_service.health_checker()).await;
+        health_service
+            .register(jwt_service_impl.health_checker())
+            .await;
         health_service
             .register(oauth_service.health_checker())
             .await;
@@ -146,13 +181,15 @@ impl Server {
         )));
 
         // Update model service with streaming manager for proper tracking
-        let model_service_with_streaming = Arc::new(
-            ModelService::new(
-                Arc::new(crate::aws::bedrock::BedrockRuntimeImpl::new(self.config.aws.clone())),
+        let model_service_with_streaming: Arc<dyn ModelService> = Arc::new(
+            ModelServiceImpl::new(
+                Arc::new(crate::aws::bedrock::BedrockRuntimeImpl::new(
+                    self.config.aws.clone(),
+                )),
                 self.database.clone(),
                 (*self.config).clone(),
             )
-            .with_streaming_manager(streaming_manager.clone())
+            .with_streaming_manager(streaming_manager.clone()),
         );
 
         // Initialize model costs in the background (now that migrations are complete)
@@ -164,7 +201,9 @@ impl Server {
         });
 
         // Register components for graceful shutdown (order matters: token tracking first, then streaming, then cache, then database)
-        shutdown_manager.register(TokenTrackingShutdown::new(model_service_with_streaming.clone()));
+        shutdown_manager.register(TokenTrackingShutdown::new(
+            model_service_with_streaming.clone(),
+        ));
         shutdown_manager.register(StreamingShutdown::new(streaming_manager.clone()));
         shutdown_manager.register(CacheShutdown::new(self.cache.clone()));
         shutdown_manager.register(DatabaseShutdown::new(self.database.clone()));
@@ -233,7 +272,7 @@ impl Server {
     }
 
     // Creates an application router with custom model service
-    pub fn create_app_with_model_service(&self, model_service: Arc<ModelService>) -> Router {
+    pub fn create_app_with_model_service(&self, model_service: Arc<dyn ModelService>) -> Router {
         self.create_app_internal_with_model_service(model_service)
     }
 
@@ -251,7 +290,10 @@ impl Server {
     }
 
     // Internal method that creates the application router with custom model service
-    fn create_app_internal_with_model_service(&self, model_service: Arc<ModelService>) -> Router {
+    fn create_app_internal_with_model_service(
+        &self,
+        model_service: Arc<dyn ModelService>,
+    ) -> Router {
         let mut app = Router::new()
             // OAuth authentication routes (no auth required)
             .nest(
@@ -408,17 +450,8 @@ mod tests {
 
     // Common test setup function
     async fn create_test_server() -> (Server, Config) {
-        let mut config = Config::default();
-        config.cache.backend = "memory".to_string();
-        config.database.enabled = true;
-        config.database.url = "sqlite::memory:".to_string();
-        config.metrics.enabled = false;
-
-        let server = Server::new(config.clone()).await.unwrap();
-
-        // Run migrations to create tables
-        server.database.migrate().await.unwrap();
-
+        let server = crate::test_utils::TestServerBuilder::new().build().await;
+        let config = (*server.config).clone();
         (server, config)
     }
 

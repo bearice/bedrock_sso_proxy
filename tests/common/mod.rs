@@ -3,7 +3,10 @@ use axum::{
     body::Body,
     http::{Method, Request, StatusCode},
 };
-use bedrock_sso_proxy::{Config, Server, auth::OAuthClaims, database::entities::UserRecord};
+use bedrock_sso_proxy::{
+    Config, Server, auth::OAuthClaims, database::entities::UserRecord,
+    test_utils::TestServerBuilder,
+};
 use chrono::Utc;
 use jsonwebtoken::{Algorithm, DecodingKey, EncodingKey, Header, Validation, decode, encode};
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -28,23 +31,25 @@ impl TestHarness {
     pub async fn with_secret(secret: &str) -> Self {
         let mut config = Config::default();
         config.jwt.secret = secret.to_string();
-        config.cache.backend = "memory".to_string();
-        config.database.enabled = false;
-        config.metrics.enabled = false;
+        config.database.enabled = true; // Enable database for testing
+
+        // Disable API keys for security tests to focus on JWT authentication
+        config.api_keys.enabled = false;
 
         // Add test AWS credentials for integration tests
         config.aws.access_key_id = Some("test-access-key".to_string());
         config.aws.secret_access_key = Some("test-secret-key".to_string());
 
-        let server = Server::new(config.clone()).await.unwrap();
-
-        // Run database migrations even for in-memory database
-        server.database.migrate().await.unwrap();
+        let server = TestServerBuilder::new()
+            .with_config(config.clone())
+            .with_jwt_secret(secret.to_string()) // Ensure server uses the same secret
+            .build()
+            .await;
 
         let app = server.create_app();
 
         Self {
-            jwt_secret: config.jwt.secret.clone(),
+            jwt_secret: secret.to_string(), // Use the actual secret, not the config one
             config,
             app,
             server,

@@ -1,5 +1,5 @@
 use crate::{
-    auth::jwt::OAuthClaims,
+    database::entities::UserRecord,
     error::AppError,
     model_service::{ModelRequest, ModelService},
 };
@@ -14,7 +14,7 @@ use axum::{
 use futures_util::StreamExt;
 use std::sync::Arc;
 
-pub fn create_bedrock_routes() -> Router<Arc<ModelService>> {
+pub fn create_bedrock_routes() -> Router<Arc<dyn ModelService>> {
     Router::new()
         .route("/model/{model_id}/invoke", post(invoke_model))
         .route(
@@ -25,8 +25,8 @@ pub fn create_bedrock_routes() -> Router<Arc<ModelService>> {
 
 async fn invoke_model(
     Path(model_id): Path<String>,
-    State(model_service): State<Arc<ModelService>>,
-    Extension(claims): Extension<OAuthClaims>,
+    State(model_service): State<Arc<dyn ModelService>>,
+    Extension(user): Extension<UserRecord>,
     headers: HeaderMap,
     body: Bytes,
 ) -> Result<(StatusCode, HeaderMap, Bytes), AppError> {
@@ -35,8 +35,8 @@ async fn invoke_model(
         return Err(AppError::BadRequest("Model ID cannot be empty".to_string()));
     }
 
-    // Extract user_id directly from JWT claims
-    let user_id = claims.sub;
+    // Extract user_id from authenticated user record
+    let user_id = user.id;
 
     // Create ModelRequest
     let model_request = ModelRequest {
@@ -72,8 +72,8 @@ async fn invoke_model(
 /// Handle streaming invoke model requests (Server-Sent Events)
 async fn invoke_model_with_response_stream(
     Path(model_id): Path<String>,
-    State(model_service): State<Arc<ModelService>>,
-    Extension(claims): Extension<OAuthClaims>,
+    State(model_service): State<Arc<dyn ModelService>>,
+    Extension(user): Extension<UserRecord>,
     headers: HeaderMap,
     body: Bytes,
 ) -> Result<Response, AppError> {
@@ -84,8 +84,8 @@ async fn invoke_model_with_response_stream(
         return Err(AppError::BadRequest("Model ID cannot be empty".to_string()));
     }
 
-    // Extract user_id directly from JWT claims
-    let user_id = claims.sub;
+    // Extract user_id from authenticated user record
+    let user_id = user.id;
 
     // Create ModelRequest
     let model_request = ModelRequest {
@@ -128,9 +128,10 @@ async fn invoke_model_with_response_stream(
             }
 
             // Set content type to match AWS Bedrock response format
-            response
-                .headers_mut()
-                .insert("content-type", "application/vnd.amazon.eventstream".parse().unwrap());
+            response.headers_mut().insert(
+                "content-type",
+                "application/vnd.amazon.eventstream".parse().unwrap(),
+            );
             response
                 .headers_mut()
                 .insert("cache-control", "no-cache".parse().unwrap());
@@ -150,13 +151,13 @@ async fn invoke_model_with_response_stream(
     }
 }
 
-// Note: user_id is now directly extracted from JWT claims via claims.user_id()
-// This eliminates the need for database lookups or hash calculations on every request
+// Note: user_id is now directly extracted from authenticated UserRecord
+// This supports both JWT and API key authentication methods
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{auth::middleware::jwt_auth_middleware, config::Config};
+    use crate::auth::middleware::jwt_auth_middleware;
     use axum::{
         body::Body,
         http::{Request, StatusCode},
@@ -165,18 +166,7 @@ mod tests {
     use tower::ServiceExt;
 
     async fn create_test_server() -> crate::server::Server {
-        let mut config = Config::default();
-        config.cache.backend = "memory".to_string();
-        config.database.enabled = true;
-        config.database.url = "sqlite::memory:".to_string(); // Use in-memory database
-        config.metrics.enabled = false;
-
-        let server = crate::server::Server::new(config).await.unwrap();
-
-        // Run migrations to create tables
-        server.database.migrate().await.unwrap();
-
-        server
+        crate::test_utils::TestServerBuilder::new().build().await
     }
 
     async fn create_test_user(server: &crate::server::Server, user_id: i32, email: &str) -> i32 {
@@ -249,14 +239,17 @@ mod tests {
             ));
 
         // Create a valid JWT token for the test
-        fn create_oauth_token(jwt_service: &crate::auth::jwt::JwtService, user_id: i32) -> String {
+        fn create_oauth_token(
+            jwt_service: &dyn crate::auth::jwt::JwtService,
+            user_id: i32,
+        ) -> String {
             let claims = crate::auth::jwt::OAuthClaims::new(user_id, 3600);
             jwt_service.create_oauth_token(&claims).unwrap()
         }
 
         // Create test user first
         let user_id = create_test_user(&server, 1, "test@example.com").await;
-        let token = create_oauth_token(&server.jwt_service, user_id);
+        let token = create_oauth_token(server.jwt_service.as_ref(), user_id);
 
         let request = Request::builder()
             .uri("/model//invoke-with-response-stream") // Empty model ID

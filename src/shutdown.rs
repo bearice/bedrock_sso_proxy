@@ -1,3 +1,4 @@
+use crate::model_service::ModelService;
 use std::{
     collections::HashMap,
     sync::{
@@ -12,7 +13,6 @@ use tokio::{
     time::timeout,
 };
 use tracing::{error, info};
-use crate::model_service::ModelService;
 
 /// Graceful shutdown coordinator
 #[derive(Clone)]
@@ -158,11 +158,11 @@ impl ShutdownManager {
 /// Database component that implements graceful shutdown
 pub struct DatabaseShutdown {
     name: String,
-    database: Arc<crate::database::DatabaseManager>,
+    database: Arc<dyn crate::database::DatabaseManager>,
 }
 
 impl DatabaseShutdown {
-    pub fn new(database: Arc<crate::database::DatabaseManager>) -> Self {
+    pub fn new(database: Arc<dyn crate::database::DatabaseManager>) -> Self {
         Self {
             name: "Database".to_string(),
             database,
@@ -196,11 +196,11 @@ impl GracefulShutdown for DatabaseShutdown {
 /// Cache component that implements graceful shutdown
 pub struct CacheShutdown {
     name: String,
-    cache: Arc<crate::cache::CacheManager>,
+    cache: Arc<dyn crate::cache::CacheManager>,
 }
 
 impl CacheShutdown {
-    pub fn new(cache: Arc<crate::cache::CacheManager>) -> Self {
+    pub fn new(cache: Arc<dyn crate::cache::CacheManager>) -> Self {
         Self {
             name: "Cache".to_string(),
             cache,
@@ -468,11 +468,11 @@ impl GracefulShutdown for StreamingShutdown {
 /// Token tracking shutdown component for ModelService
 pub struct TokenTrackingShutdown {
     name: String,
-    model_service: Arc<ModelService>,
+    model_service: Arc<dyn ModelService>,
 }
 
 impl TokenTrackingShutdown {
-    pub fn new(model_service: Arc<ModelService>) -> Self {
+    pub fn new(model_service: Arc<dyn ModelService>) -> Self {
         Self {
             name: "Token Tracking".to_string(),
             model_service,

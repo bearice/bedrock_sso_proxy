@@ -5,7 +5,7 @@
 
 use super::cached::{CacheKeyBuilder, CachedDao};
 use super::users::UsersDao;
-use crate::cache::CacheManager;
+use crate::cache::CacheManagerImpl;
 use crate::database::DatabaseResult;
 use crate::database::entities::UserRecord;
 
@@ -17,7 +17,7 @@ pub struct CachedUsersDao {
 
 impl CachedUsersDao {
     /// Create a new cached users DAO
-    pub fn new(users_dao: UsersDao, cache: &CacheManager) -> Self {
+    pub fn new(users_dao: UsersDao, cache: &CacheManagerImpl) -> Self {
         Self {
             cached_dao: CachedDao::new(users_dao, cache),
             key_builder: CacheKeyBuilder::new("user"),
@@ -149,7 +149,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_cache_key_generation() {
-        let cache = CacheManager::new_memory();
+        let cache = CacheManagerImpl::new_memory();
         let users_dao = UsersDao::new(DatabaseConnection::default());
         let cached_dao = CachedUsersDao::new(users_dao, &cache);
 

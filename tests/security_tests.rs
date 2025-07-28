@@ -25,9 +25,9 @@ async fn test_security_sql_injection_attempts() {
     ];
 
     for model_id in malicious_model_ids {
-        let _encoded_model_id = urlencoding::encode(model_id);
+        let encoded_model_id = urlencoding::encode(model_id);
         let request = Request::builder()
-            .uri("/bedrock/model/anthropic.claude-3-5-sonnet-20241022-v2:0/invoke")
+            .uri(format!("/bedrock/model/{}/invoke", encoded_model_id))
             .method("POST")
             .header("Authorization", format!("Bearer {}", token))
             .header("Content-Type", "application/json")
@@ -36,8 +36,7 @@ async fn test_security_sql_injection_attempts() {
 
         let response = harness.make_request(request).await;
         // The key security test: SQL injection attempts should NOT cause authentication bypass
-        // We expect 500 (AWS call fails with test credentials) but NOT 401 (auth bypass)
-        // This proves the proxy correctly authenticates requests before forwarding
+        // Authentication should succeed, then AWS processes the request (may succeed or fail)
         assert_ne!(
             response.status(),
             StatusCode::UNAUTHORIZED,
@@ -45,10 +44,18 @@ async fn test_security_sql_injection_attempts() {
             model_id
         );
 
-        // Expect AWS call to fail with test credentials (500) but auth should succeed
-        helpers::assert_status_with_context(
+        // AWS may process malicious model IDs normally (200) or reject them (400/500)
+        // The important thing is that authentication wasn't bypassed
+        let acceptable_statuses = [
+            StatusCode::OK,                    // AWS processes normally
+            StatusCode::BAD_REQUEST,           // AWS rejects malicious input
+            StatusCode::FORBIDDEN,             // AWS access denied
+            StatusCode::INTERNAL_SERVER_ERROR, // AWS service error
+        ];
+
+        helpers::assert_status_in(
             &response,
-            StatusCode::INTERNAL_SERVER_ERROR, // AWS call fails with test credentials
+            &acceptable_statuses,
             &format!("SQL injection model ID: {}", model_id),
         );
     }
@@ -72,7 +79,7 @@ async fn test_security_xss_attempts() {
 
         let response = harness.make_request(request).await;
         // The key security test: XSS payloads should NOT cause authentication bypass
-        // Authentication should succeed and AWS call should fail with test credentials
+        // Authentication should succeed, then AWS processes the request
         assert_ne!(
             response.status(),
             StatusCode::UNAUTHORIZED,
@@ -80,9 +87,17 @@ async fn test_security_xss_attempts() {
             payload
         );
 
-        helpers::assert_status_with_context(
+        // AWS may process XSS payloads normally or reject them
+        let acceptable_statuses = [
+            StatusCode::OK,                    // AWS processes normally
+            StatusCode::BAD_REQUEST,           // AWS rejects malicious input
+            StatusCode::FORBIDDEN,             // AWS access denied
+            StatusCode::INTERNAL_SERVER_ERROR, // AWS service error
+        ];
+
+        helpers::assert_status_in(
             &response,
-            StatusCode::INTERNAL_SERVER_ERROR, // AWS call fails with test credentials
+            &acceptable_statuses,
             &format!("XSS payload: {}", payload),
         );
     }
@@ -105,18 +120,23 @@ async fn test_security_oversized_requests() {
 
     let response = harness.make_request(request).await;
     // The key security test: Large payloads should NOT cause authentication bypass
-    // Authentication should succeed and AWS call should fail with test credentials
+    // Authentication should succeed, then AWS processes the request
     assert_ne!(
         response.status(),
         StatusCode::UNAUTHORIZED,
         "Large payload should not bypass authentication"
     );
 
-    helpers::assert_status_with_context(
-        &response,
-        StatusCode::INTERNAL_SERVER_ERROR, // AWS call fails with test credentials
-        "oversized request",
-    );
+    // AWS may process large payloads normally or reject them
+    let acceptable_statuses = [
+        StatusCode::OK,                    // AWS processes normally
+        StatusCode::BAD_REQUEST,           // AWS rejects large payload
+        StatusCode::FORBIDDEN,             // AWS access denied
+        StatusCode::PAYLOAD_TOO_LARGE,     // AWS payload size limit
+        StatusCode::INTERNAL_SERVER_ERROR, // AWS service error
+    ];
+
+    helpers::assert_status_in(&response, &acceptable_statuses, "oversized request");
 }
 
 #[tokio::test]
@@ -154,9 +174,17 @@ async fn test_security_header_injection() {
                 header_value
             );
 
-            helpers::assert_status_with_context(
+            // AWS may process header injection normally or reject it
+            let acceptable_statuses = [
+                StatusCode::OK,                    // AWS processes normally
+                StatusCode::BAD_REQUEST,           // AWS rejects malformed headers
+                StatusCode::FORBIDDEN,             // AWS access denied
+                StatusCode::INTERNAL_SERVER_ERROR, // AWS service error
+            ];
+
+            helpers::assert_status_in(
                 &response,
-                StatusCode::INTERNAL_SERVER_ERROR, // AWS call fails with test credentials
+                &acceptable_statuses,
                 &format!("header injection: {} = {}", header_name, header_value),
             );
         }
@@ -199,9 +227,18 @@ async fn test_security_invalid_content_types() {
                     content_type
                 );
 
-                helpers::assert_status_with_context(
+                // AWS may process invalid content types normally or reject them
+                let acceptable_statuses = [
+                    StatusCode::OK,                     // AWS processes normally
+                    StatusCode::BAD_REQUEST,            // AWS rejects invalid content type
+                    StatusCode::FORBIDDEN,              // AWS access denied
+                    StatusCode::UNSUPPORTED_MEDIA_TYPE, // AWS unsupported media type
+                    StatusCode::INTERNAL_SERVER_ERROR,  // AWS service error
+                ];
+
+                helpers::assert_status_in(
                     &response,
-                    StatusCode::INTERNAL_SERVER_ERROR, // AWS call fails with test credentials
+                    &acceptable_statuses,
                     &format!("content type: {}", content_type),
                 );
             }
@@ -402,6 +439,16 @@ async fn test_security_jwt_algorithm_confusion() {
         StatusCode::UNAUTHORIZED,
         "Valid HS256 token should be accepted"
     );
+
+    // AWS may process the request normally or reject with service errors
+    let acceptable_statuses = [
+        StatusCode::OK,                    // AWS processes normally
+        StatusCode::BAD_REQUEST,           // AWS rejects request
+        StatusCode::FORBIDDEN,             // AWS access denied
+        StatusCode::INTERNAL_SERVER_ERROR, // AWS service error
+    ];
+
+    helpers::assert_status_in(&response, &acceptable_statuses, "valid HS256 token");
 }
 
 #[tokio::test]

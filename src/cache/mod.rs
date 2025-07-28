@@ -30,6 +30,31 @@ pub enum CacheError {
 
 pub type CacheResult<T> = Result<T, CacheError>;
 
+/// Cache manager trait for dependency injection and testing
+/// Note: Generic methods are handled by the concrete implementations
+#[async_trait::async_trait]
+pub trait CacheManager: Send + Sync {
+    /// Delete from cache
+    async fn delete(&self, key: &str) -> CacheResult<()>;
+
+    /// Check if key exists in cache
+    async fn exists(&self, key: &str) -> CacheResult<bool>;
+
+    /// Clear cache
+    async fn clear(&self) -> CacheResult<()>;
+
+    /// Get JSON value from cache (dyn compatible)
+    async fn get_json(&self, key: &str) -> CacheResult<Option<serde_json::Value>>;
+
+    /// Set JSON value in cache (dyn compatible)
+    async fn set_json(
+        &self,
+        key: &str,
+        value: &serde_json::Value,
+        ttl: Option<std::time::Duration>,
+    ) -> CacheResult<()>;
+}
+
 /// Cache trait for different cache implementations
 #[async_trait::async_trait]
 pub trait Cache: Send + Sync {
@@ -65,12 +90,13 @@ enum CacheBackend {
     Redis(redis::RedisCache),
 }
 
-/// Cache manager - uses either Redis or memory cache, not both
-pub struct CacheManager {
+/// Cache manager implementation - uses either Redis or memory cache, not both
+#[derive(Clone)]
+pub struct CacheManagerImpl {
     backend: CacheBackend,
 }
 
-impl CacheManager {
+impl CacheManagerImpl {
     /// Create new cache manager with memory cache (for testing/single instance)
     pub fn new_memory() -> Self {
         Self {
@@ -91,7 +117,9 @@ impl CacheManager {
             _ => Ok(Self::new_memory()),
         }
     }
+}
 
+impl CacheManagerImpl {
     /// Get a typed cache for type T
     pub fn get_typed_cache<T: CachedObject>(&self) -> TypedCache<T> {
         TypedCache::new(self.backend.clone())
@@ -123,9 +151,12 @@ impl CacheManager {
             CacheBackend::Redis(cache) => cache.set(key, value, ttl).await,
         }
     }
+}
 
+#[async_trait::async_trait]
+impl CacheManager for CacheManagerImpl {
     /// Delete from cache
-    pub async fn delete(&self, key: &str) -> CacheResult<()> {
+    async fn delete(&self, key: &str) -> CacheResult<()> {
         match &self.backend {
             CacheBackend::Memory(cache) => cache.delete(key).await,
             CacheBackend::Redis(cache) => cache.delete(key).await,
@@ -133,7 +164,7 @@ impl CacheManager {
     }
 
     /// Check if key exists in cache
-    pub async fn exists(&self, key: &str) -> CacheResult<bool> {
+    async fn exists(&self, key: &str) -> CacheResult<bool> {
         match &self.backend {
             CacheBackend::Memory(cache) => cache.exists(key).await,
             CacheBackend::Redis(cache) => cache.exists(key).await,
@@ -141,22 +172,43 @@ impl CacheManager {
     }
 
     /// Clear cache
-    pub async fn clear(&self) -> CacheResult<()> {
+    async fn clear(&self) -> CacheResult<()> {
         match &self.backend {
             CacheBackend::Memory(cache) => cache.clear().await,
             CacheBackend::Redis(cache) => cache.clear().await,
         }
     }
+
+    /// Get JSON value from cache (dyn compatible)
+    async fn get_json(&self, key: &str) -> CacheResult<Option<serde_json::Value>> {
+        match &self.backend {
+            CacheBackend::Memory(cache) => cache.get(key).await,
+            CacheBackend::Redis(cache) => cache.get(key).await,
+        }
+    }
+
+    /// Set JSON value in cache (dyn compatible)
+    async fn set_json(
+        &self,
+        key: &str,
+        value: &serde_json::Value,
+        ttl: Option<std::time::Duration>,
+    ) -> CacheResult<()> {
+        match &self.backend {
+            CacheBackend::Memory(cache) => cache.set(key, value, ttl).await,
+            CacheBackend::Redis(cache) => cache.set(key, value, ttl).await,
+        }
+    }
 }
 
-impl Default for CacheManager {
+impl Default for CacheManagerImpl {
     fn default() -> Self {
         Self::new_memory()
     }
 }
 
 #[async_trait::async_trait]
-impl HealthChecker for CacheManager {
+impl HealthChecker for CacheManagerImpl {
     fn name(&self) -> &str {
         "cache"
     }

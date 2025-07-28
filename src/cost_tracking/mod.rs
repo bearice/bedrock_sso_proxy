@@ -9,12 +9,12 @@ use tracing::{info, warn};
 
 /// Cost tracking service for AWS Bedrock models
 pub struct CostTrackingService {
-    database: Arc<DatabaseManager>,
+    database: Arc<dyn DatabaseManager>,
     pricing_client: PricingClient,
 }
 
 impl CostTrackingService {
-    pub fn new(database: Arc<DatabaseManager>, aws_region: String) -> Self {
+    pub fn new(database: Arc<dyn DatabaseManager>, aws_region: String) -> Self {
         Self {
             database,
             pricing_client: PricingClient::new(aws_region),
@@ -157,11 +157,6 @@ impl CostTrackingService {
             .ok_or_else(|| {
                 AppError::NotFound(format!("Model {} not found in region {}", model_id, region))
             })
-    }
-
-    /// Get all available regions
-    pub fn get_available_regions() -> Vec<String> {
-        PricingClient::get_available_regions()
     }
 
     /// Batch update costs from CSV content

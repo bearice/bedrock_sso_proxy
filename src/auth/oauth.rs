@@ -1,7 +1,7 @@
 use crate::{
     auth::config::OAuthProvider,
     auth::{OAuthClaims, jwt::JwtService, request_context::RequestContext},
-    cache::{CacheManager, typed::typed_cache},
+    cache::{CacheManagerImpl, typed::typed_cache},
     config::Config,
     database::{DatabaseManager, entities::UserRecord},
     error::AppError,
@@ -79,19 +79,19 @@ pub struct ProvidersResponse {
 
 pub struct OAuthService {
     config: Config,
-    jwt_service: JwtService,
+    jwt_service: Arc<dyn JwtService>,
     http_client: Client,
-    database: Arc<DatabaseManager>,
-    cache: Arc<CacheManager>,
+    database: Arc<dyn DatabaseManager>,
+    cache: Arc<CacheManagerImpl>,
     oauth_clients: HashMap<String, Arc<Oauth2Client>>,
 }
 
 impl OAuthService {
     pub fn new(
         config: Config,
-        jwt_service: JwtService,
-        database: Arc<DatabaseManager>,
-        cache: Arc<CacheManager>,
+        jwt_service: Arc<dyn JwtService>,
+        database: Arc<dyn DatabaseManager>,
+        cache: Arc<CacheManagerImpl>,
     ) -> Result<Self, AppError> {
         let oauth_clients = Self::initialize_oauth_clients(&config)?;
 
@@ -859,8 +859,8 @@ impl OAuthService {
 mod tests {
     use super::*;
     use crate::auth::config::{JwtConfig, OAuthConfig, OAuthProvider};
-    use crate::auth::jwt::JwtService;
     use crate::cache::config::CacheConfig;
+    use crate::database::DatabaseManagerImpl;
     use jsonwebtoken::Algorithm;
     use std::collections::HashMap;
 
@@ -904,14 +904,14 @@ mod tests {
         }
     }
 
-    async fn create_test_components() -> (Arc<DatabaseManager>, Arc<CacheManager>) {
+    async fn create_test_components() -> (Arc<dyn DatabaseManager>, Arc<CacheManagerImpl>) {
         let mut config = Config::default();
         config.cache.backend = "memory".to_string();
         config.database.enabled = true;
         config.database.url = "sqlite::memory:".to_string();
-        let cache = Arc::new(CacheManager::new_memory());
+        let cache = Arc::new(CacheManagerImpl::new_memory());
         let database = Arc::new(
-            DatabaseManager::new_from_config(&config, cache.clone())
+            DatabaseManagerImpl::new_from_config(&config, cache.clone())
                 .await
                 .unwrap(),
         );
@@ -923,7 +923,10 @@ mod tests {
     async fn test_oauth_service_creation() {
         let config = create_test_config();
         let (database, cache) = create_test_components().await;
-        let jwt_service = JwtService::new("test-secret".to_string(), Algorithm::HS256).unwrap();
+        let jwt_service = Arc::new(
+            crate::auth::jwt::JwtServiceImpl::new("test-secret".to_string(), Algorithm::HS256)
+                .unwrap(),
+        );
 
         let oauth_service = OAuthService::new(config, jwt_service, database, cache).unwrap();
 
@@ -938,7 +941,10 @@ mod tests {
     async fn test_get_authorization_url() {
         let config = create_test_config();
         let (database, cache) = create_test_components().await;
-        let jwt_service = JwtService::new("test-secret".to_string(), Algorithm::HS256).unwrap();
+        let jwt_service = Arc::new(
+            crate::auth::jwt::JwtServiceImpl::new("test-secret".to_string(), Algorithm::HS256)
+                .unwrap(),
+        );
         let oauth_service = OAuthService::new(config, jwt_service, database, cache).unwrap();
 
         let result = oauth_service
@@ -960,7 +966,10 @@ mod tests {
     async fn test_get_authorization_url_unknown_provider() {
         let config = create_test_config();
         let (database, cache) = create_test_components().await;
-        let jwt_service = JwtService::new("test-secret".to_string(), Algorithm::HS256).unwrap();
+        let jwt_service = Arc::new(
+            crate::auth::jwt::JwtServiceImpl::new("test-secret".to_string(), Algorithm::HS256)
+                .unwrap(),
+        );
         let oauth_service = OAuthService::new(config, jwt_service, database, cache).unwrap();
 
         let result = oauth_service
@@ -973,7 +982,10 @@ mod tests {
     async fn test_list_providers() {
         let config = create_test_config();
         let (database, cache) = create_test_components().await;
-        let jwt_service = JwtService::new("test-secret".to_string(), Algorithm::HS256).unwrap();
+        let jwt_service = Arc::new(
+            crate::auth::jwt::JwtServiceImpl::new("test-secret".to_string(), Algorithm::HS256)
+                .unwrap(),
+        );
         let oauth_service = OAuthService::new(config, jwt_service, database, cache).unwrap();
 
         let providers = oauth_service.list_providers();
@@ -989,7 +1001,10 @@ mod tests {
     async fn test_display_names() {
         let config = create_test_config();
         let (database, cache) = create_test_components().await;
-        let jwt_service = JwtService::new("test-secret".to_string(), Algorithm::HS256).unwrap();
+        let jwt_service = Arc::new(
+            crate::auth::jwt::JwtServiceImpl::new("test-secret".to_string(), Algorithm::HS256)
+                .unwrap(),
+        );
         let oauth_service = OAuthService::new(config, jwt_service, database, cache).unwrap();
 
         assert_eq!(oauth_service.get_display_name("google"), "Google");

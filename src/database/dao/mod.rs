@@ -2,7 +2,6 @@ pub mod api_keys;
 pub mod api_keys_cached;
 pub mod audit_logs;
 pub mod cached;
-pub mod cached_integration_test;
 pub mod model_costs;
 pub mod refresh_tokens;
 pub mod usage;

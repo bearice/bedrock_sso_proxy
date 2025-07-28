@@ -7,7 +7,7 @@ use crate::{
             transform_bedrock_to_anthropic, validate_anthropic_request,
         },
     },
-    auth::jwt::OAuthClaims,
+    database::entities::UserRecord,
     error::AppError,
     model_service::{ModelRequest, ModelService},
 };
@@ -25,22 +25,22 @@ use std::sync::Arc;
 use tracing::{error, info};
 
 /// Create routes for Anthropic API endpoints
-pub fn create_anthropic_routes() -> Router<Arc<ModelService>> {
+pub fn create_anthropic_routes() -> Router<Arc<dyn ModelService>> {
     Router::new().route("/v1/messages", post(create_message))
 }
 
 /// Handle POST /v1/messages - Anthropic API format message creation
 /// Supports both streaming and non-streaming responses based on the `stream` parameter
 pub async fn create_message(
-    State(model_service): State<Arc<ModelService>>,
-    Extension(claims): Extension<OAuthClaims>,
+    State(model_service): State<Arc<dyn ModelService>>,
+    Extension(user): Extension<UserRecord>,
     headers: HeaderMap,
     body: Bytes,
 ) -> Result<Response, AppError> {
     info!("Handling Anthropic API /v1/messages request");
 
-    // Extract user_id directly from JWT claims
-    let user_id = claims.sub;
+    // Extract user_id from authenticated user record
+    let user_id = user.id;
     tracing::trace!("User ID from JWT claims: {}", user_id);
 
     // Log request body details for debugging
@@ -136,7 +136,7 @@ pub async fn create_message(
 
 /// Handle non-streaming message requests
 async fn handle_non_streaming_message(
-    model_service: Arc<ModelService>,
+    model_service: Arc<dyn ModelService>,
     headers: HeaderMap,
     bedrock_model_id: String,
     bedrock_body: Vec<u8>,
@@ -246,7 +246,7 @@ async fn handle_non_streaming_message(
 
 /// Handle streaming message requests
 async fn handle_streaming_message(
-    model_service: Arc<ModelService>,
+    model_service: Arc<dyn ModelService>,
     headers: HeaderMap,
     bedrock_model_id: String,
     bedrock_body: Vec<u8>,
@@ -353,7 +353,7 @@ async fn handle_streaming_message(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{auth::middleware::jwt_auth_middleware, config::Config};
+    use crate::auth::middleware::jwt_auth_middleware;
     use axum::{
         body::Body,
         http::{Request, StatusCode},
@@ -363,18 +363,7 @@ mod tests {
     use tower::ServiceExt;
 
     async fn create_test_server() -> crate::server::Server {
-        let mut config = Config::default();
-        config.cache.backend = "memory".to_string();
-        config.database.enabled = true;
-        config.database.url = "sqlite::memory:".to_string(); // Use in-memory database
-        config.metrics.enabled = false;
-
-        let server = crate::server::Server::new(config).await.unwrap();
-
-        // Run migrations to create tables
-        server.database.migrate().await.unwrap();
-
-        server
+        crate::test_utils::TestServerBuilder::new().build().await
     }
 
     async fn create_test_user(server: &crate::server::Server, user_id: i32, email: &str) -> i32 {
@@ -478,14 +467,17 @@ mod tests {
             ));
 
         // Create a valid JWT token for the test
-        fn create_oauth_token(jwt_service: &crate::auth::jwt::JwtService, user_id: i32) -> String {
+        fn create_oauth_token(
+            jwt_service: &dyn crate::auth::jwt::JwtService,
+            user_id: i32,
+        ) -> String {
             let claims = crate::auth::jwt::OAuthClaims::new(user_id, 3600);
             jwt_service.create_oauth_token(&claims).unwrap()
         }
 
         // Create test user first
         let user_id = create_test_user(&server, 1, "test@example.com").await;
-        let token = create_oauth_token(&server.jwt_service, user_id);
+        let token = create_oauth_token(server.jwt_service.as_ref(), user_id);
 
         let request = Request::builder()
             .uri("/v1/messages")

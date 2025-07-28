@@ -327,7 +327,7 @@ mod tests {
     use super::*;
     use crate::{
         auth::config::{JwtConfig, OAuthConfig, OAuthProvider},
-        auth::{jwt::JwtService, oauth::OAuthService},
+        auth::oauth::OAuthService,
         cache::config::CacheConfig,
         config::Config,
     };
@@ -383,14 +383,16 @@ mod tests {
         db_config.database.enabled = true;
         db_config.database.url = "sqlite::memory:".to_string();
 
-        let cache = Arc::new(crate::cache::CacheManager::new_memory());
+        let cache = Arc::new(crate::cache::CacheManagerImpl::new_memory());
         let database = Arc::new(
-            crate::database::DatabaseManager::new_from_config(&db_config, cache.clone())
+            crate::database::DatabaseManagerImpl::new_from_config(&db_config, cache.clone())
                 .await
                 .unwrap(),
         );
-        let jwt_service = JwtService::new("test-secret".to_string(), Algorithm::HS256).unwrap();
-        Arc::new(OAuthService::new(config, jwt_service, database, cache).unwrap())
+        let jwt_service =
+            crate::auth::jwt::JwtServiceImpl::new("test-secret".to_string(), Algorithm::HS256)
+                .unwrap();
+        Arc::new(OAuthService::new(config, Arc::new(jwt_service), database, cache).unwrap())
     }
 
     #[tokio::test]

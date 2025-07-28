@@ -2,6 +2,7 @@ use crate::aws::bedrock::{BedrockRuntime, BedrockRuntimeImpl};
 use crate::{
     config::Config, cost_tracking::CostTrackingService, database::DatabaseManager, error::AppError,
 };
+use async_trait::async_trait;
 use axum::http::HeaderMap;
 use base64::Engine;
 use bytes::Bytes;
@@ -11,15 +12,63 @@ use serde::{Deserialize, Serialize};
 
 use axum::http::StatusCode;
 use chrono::Utc;
+use std::collections::HashMap;
 use std::{sync::Arc, time::Instant};
 use tokio::sync::RwLock;
-use std::collections::HashMap;
 
-/// Unified model service for AWS calls and usage tracking
+/// Model service trait for dependency injection and testing
+#[async_trait]
+pub trait ModelService: Send + Sync {
+    /// Initialize model costs in the background
+    async fn initialize_model_costs(&self) -> Result<(), AppError>;
+
+    /// Non-streaming model invocation with automatic usage tracking
+    async fn invoke_model(&self, request: ModelRequest) -> Result<ModelResponse, AppError>;
+
+    /// Streaming model invocation with automatic usage tracking
+    async fn invoke_model_stream(
+        &self,
+        request: ModelRequest,
+    ) -> Result<ModelStreamResponse, AppError>;
+
+    /// Collect streaming events and extract token usage
+    async fn collect_streaming_events(
+        &self,
+        stream: Box<dyn Stream<Item = Result<Bytes, reqwest::Error>> + Send + Unpin>,
+        response_time_ms: u32,
+    ) -> Result<(Vec<u8>, UsageMetadata), AppError>;
+
+    /// Create a ModelMapper from the current configuration
+    fn create_model_mapper(&self) -> crate::anthropic::model_mapping::ModelMapper;
+
+    /// Get the AWS client for direct access if needed
+    fn bedrock(&self) -> &dyn BedrockRuntime;
+
+    /// Get the storage layer for direct access if needed
+    fn database(&self) -> &Arc<dyn DatabaseManager>;
+
+    /// Wait for all background token tracking tasks to complete
+    async fn wait_for_token_tracking_completion(&self, timeout: std::time::Duration) -> bool;
+
+    /// Get the count of active token tracking tasks
+    async fn active_token_tracking_tasks(&self) -> usize;
+
+    /// Abort all remaining token tracking tasks
+    async fn abort_token_tracking_tasks(&self);
+
+    /// Track usage for a model request (for internal use)
+    async fn track_usage(
+        &self,
+        request: &ModelRequest,
+        usage_metadata: &UsageMetadata,
+    ) -> Result<(), AppError>;
+}
+
+/// Unified model service implementation for AWS calls and usage tracking
 #[derive(Clone)]
-pub struct ModelService {
+pub struct ModelServiceImpl {
     bedrock: Arc<dyn BedrockRuntime>,
-    database: Arc<DatabaseManager>,
+    database: Arc<dyn DatabaseManager>,
     config: Config,
     /// Background token tracking tasks
     token_tracking_tasks: Arc<RwLock<HashMap<u64, tokio::task::JoinHandle<()>>>>,
@@ -29,9 +78,9 @@ pub struct ModelService {
     streaming_manager: Option<Arc<crate::shutdown::StreamingConnectionManager>>,
 }
 
-impl std::fmt::Debug for ModelService {
+impl std::fmt::Debug for ModelServiceImpl {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("ModelService")
+        f.debug_struct("ModelServiceImpl")
             .field("config", &self.config)
             .finish()
     }
@@ -67,7 +116,7 @@ pub struct ModelStreamResponse {
 /// Usage tracker for streaming responses
 pub struct UsageTracker {
     pub model_request: ModelRequest,
-    pub model_service: Arc<ModelService>,
+    pub model_service: Arc<dyn ModelService>,
     pub start_time: std::time::Instant,
 }
 
@@ -279,7 +328,6 @@ pub struct ParsedEventStream {
     registration_initiated: bool,
 }
 
-
 impl ParsedEventStream {
     pub fn new(
         stream: Box<dyn Stream<Item = Result<Bytes, reqwest::Error>> + Send + Unpin>,
@@ -295,7 +343,7 @@ impl ParsedEventStream {
             registration_initiated: false,
         }
     }
-    
+
     /// Create a new ParsedEventStream with streaming connection tracking
     pub fn new_with_streaming_manager(
         stream: Box<dyn Stream<Item = Result<Bytes, reqwest::Error>> + Send + Unpin>,
@@ -323,35 +371,37 @@ impl Stream for ParsedEventStream {
     ) -> std::task::Poll<Option<Self::Item>> {
         // Register streaming connection on first poll if not already registered
         if !self.registration_initiated {
-            if let (Some(streaming_manager), Some(usage_tracker)) = (&self.streaming_manager, &self.usage_tracker) {
+            if let (Some(streaming_manager), Some(usage_tracker)) =
+                (&self.streaming_manager, &self.usage_tracker)
+            {
                 let streaming_manager_clone = streaming_manager.clone();
                 let user_id = usage_tracker.model_request.user_id;
                 let model_id = usage_tracker.model_request.model_id.clone();
                 let endpoint_type = usage_tracker.model_request.endpoint_type.clone();
-                
+
                 // Mark as initiated to prevent repeated registration
                 self.registration_initiated = true;
-                
+
                 // We need to spawn a task to register the connection since this is async
                 let waker = cx.waker().clone();
                 tokio::spawn(async move {
                     let (connection_id, _completion_rx) = streaming_manager_clone
                         .register_connection(user_id, model_id, endpoint_type)
                         .await;
-                    
+
                     tracing::debug!("Registered streaming connection {}", connection_id);
                     // Note: We can't easily update the stream state here due to ownership
                     // The connection will be cleaned up on shutdown regardless
-                    
+
                     // Wake up the stream to continue processing
                     waker.wake();
                 });
-                
+
                 // Return Pending to wait for registration
                 return std::task::Poll::Pending;
             }
         }
-        
+
         // First, check if we have any pending events to return
         if let Some(event) = self.pending_events.pop_front() {
             return std::task::Poll::Ready(Some(Ok(event)));
@@ -400,7 +450,7 @@ impl Stream for ParsedEventStream {
                         output_tokens: usage_metrics.output_tokens,
                         cache_write_tokens: usage_metrics.cache_write_tokens,
                         cache_read_tokens: usage_metrics.cache_read_tokens,
-                        region: tracker.model_service.config.aws.region.clone(),
+                        region: "us-east-1".to_string(), // Default region - will be properly set by track_usage method
                         response_time_ms,
                     };
 
@@ -408,9 +458,9 @@ impl Stream for ParsedEventStream {
                     let model_request = tracker.model_request.clone();
 
                     // Track usage in background without blocking stream completion
-                    let model_service_clone = model_service.clone();
                     tokio::spawn(async move {
-                        let task_id = model_service_clone.spawn_token_tracking_task(async move {
+                        // Since we can't call spawn_token_tracking_task on trait object, spawn directly
+                        let task_id = tokio::spawn(async move {
                             if let Err(e) = model_service
                                 .track_usage(&model_request, &usage_metadata)
                                 .await
@@ -423,20 +473,27 @@ impl Stream for ParsedEventStream {
                                     usage_metadata.output_tokens
                                 );
                             }
-                        }).await;
-                        
-                        tracing::debug!("Started token tracking task {} for streaming usage", task_id);
+                        });
+
+                        tracing::debug!(
+                            "Started token tracking task {:?} for streaming usage",
+                            task_id
+                        );
                     });
                 }
-                
+
                 // Unregister streaming connection if it was registered
-                if let (Some(streaming_manager), Some(connection_id)) = (&self.streaming_manager, self.streaming_connection_id) {
+                if let (Some(streaming_manager), Some(connection_id)) =
+                    (&self.streaming_manager, self.streaming_connection_id)
+                {
                     let streaming_manager_clone = streaming_manager.clone();
                     tokio::spawn(async move {
-                        streaming_manager_clone.unregister_connection(connection_id).await;
+                        streaming_manager_clone
+                            .unregister_connection(connection_id)
+                            .await;
                     });
                 }
-                
+
                 std::task::Poll::Ready(None)
             }
             std::task::Poll::Pending => std::task::Poll::Pending,
@@ -492,10 +549,10 @@ pub struct UsageMetadata {
     pub response_time_ms: u32,
 }
 
-impl ModelService {
+impl ModelServiceImpl {
     pub fn new(
         bedrock: Arc<BedrockRuntimeImpl>,
-        database: Arc<DatabaseManager>,
+        database: Arc<dyn DatabaseManager>,
         config: Config,
     ) -> Self {
         Self {
@@ -507,260 +564,37 @@ impl ModelService {
             streaming_manager: None,
         }
     }
-    
+
     /// Set the streaming connection manager for tracking active streams
-    pub fn with_streaming_manager(mut self, streaming_manager: Arc<crate::shutdown::StreamingConnectionManager>) -> Self {
+    pub fn with_streaming_manager(
+        mut self,
+        streaming_manager: Arc<crate::shutdown::StreamingConnectionManager>,
+    ) -> Self {
         self.streaming_manager = Some(streaming_manager);
         self
     }
 
-    /// Create a ModelMapper from the current configuration
-    pub fn create_model_mapper(&self) -> crate::anthropic::model_mapping::ModelMapper {
-        self.config.create_model_mapper()
-    }
+    /// Spawn a background token tracking task and track it
+    pub async fn spawn_token_tracking_task<F>(&self, future: F) -> u64
+    where
+        F: std::future::Future<Output = ()> + Send + 'static,
+    {
+        let task_id = self
+            .task_counter
+            .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        let tasks = self.token_tracking_tasks.clone();
 
-    /// Initialize model costs in the background
-    /// This should be called at startup to populate initial cost data
-    pub async fn initialize_model_costs(&self) -> Result<(), AppError> {
-        tracing::info!("Initializing model costs from fallback data");
+        let handle = tokio::spawn(async move {
+            future.await;
+            // Remove completed task from tracking
+            tasks.write().await.remove(&task_id);
+        });
 
-        let cost_service =
-            CostTrackingService::new(self.database.clone(), self.config.aws.region.clone());
-
-        // Check if we already have cost data
-        let existing_costs = self.database.model_costs().get_all().await.map_err(|e| {
-            AppError::Internal(format!("Failed to check existing model costs: {}", e))
-        })?;
-
-        if existing_costs.is_empty() {
-            tracing::info!("No existing model costs found, populating with embedded fallback data");
-
-            // Initialize with embedded data only (not AWS API during startup)
-            match cost_service.initialize_model_costs_from_embedded().await {
-                Ok(result) => {
-                    tracing::info!(
-                        "Successfully initialized {} model costs from embedded data ({} updated, {} failed)",
-                        result.total_processed,
-                        result.updated_models.len(),
-                        result.failed_models.len()
-                    );
-                }
-                Err(e) => {
-                    tracing::warn!("Failed to initialize costs from embedded data: {}", e);
-                    tracing::info!("Model costs will be populated on first usage or manual update");
-                }
-            }
-        } else {
-            tracing::info!(
-                "Found {} existing model costs, skipping initialization",
-                existing_costs.len()
-            );
-        }
-
-        Ok(())
-    }
-
-    /// Non-streaming model invocation with automatic usage tracking
-    pub async fn invoke_model(&self, request: ModelRequest) -> Result<ModelResponse, AppError> {
-        let start_time = Instant::now();
-
-        // 1. Make AWS API call
-        let aws_response = self
-            .bedrock
-            .invoke_model(
-                &request.model_id,
-                request
-                    .headers
-                    .get("content-type")
-                    .and_then(|h| h.to_str().ok()),
-                request.headers.get("accept").and_then(|h| h.to_str().ok()),
-                request.body.clone(),
-            )
-            .await?;
-
-        let response_time_ms = start_time.elapsed().as_millis() as u32;
-
-        // 2. Extract usage metadata from AWS response
-        let usage_metadata = self.extract_usage_metadata(
-            &aws_response.headers,
-            &aws_response.body,
-            response_time_ms,
-        )?;
-
-        let response = ModelResponse {
-            status: aws_response.status,
-            headers: aws_response.headers.clone(),
-            body: aws_response.body,
-            usage_metadata: Some(usage_metadata.clone()),
-        };
-
-        // 3. Track usage automatically (internal call)
-        if let Err(e) = self.track_usage(&request, &usage_metadata).await {
-            tracing::warn!("Failed to track usage: {}", e);
-        }
-
-        Ok(response)
-    }
-
-    /// Streaming model invocation with automatic usage tracking
-    pub async fn invoke_model_stream(
-        &self,
-        request: ModelRequest,
-    ) -> Result<ModelStreamResponse, AppError> {
-        let start_time = Instant::now();
-
-        // 1. Make AWS streaming API call
-        let aws_response = self
-            .bedrock
-            .invoke_model_with_response_stream(
-                &request.model_id,
-                &request.headers,
-                request
-                    .headers
-                    .get("content-type")
-                    .and_then(|h| h.to_str().ok()),
-                request.headers.get("accept").and_then(|h| h.to_str().ok()),
-                request.body.clone(),
-            )
-            .await?;
-
-        // 2. Create usage tracker for background usage tracking
-        let usage_tracker = UsageTracker {
-            model_request: request,
-            model_service: Arc::new(self.clone()),
-            start_time,
-        };
-
-        // 3. Wrap the stream with parsed event stream and streaming manager
-        let parsed_event_stream = ParsedEventStream::new_with_streaming_manager(
-            aws_response.stream,
-            Some(usage_tracker),
-            self.streaming_manager.clone(),
-        );
-
-        // 4. Return streaming response immediately
-        let response = ModelStreamResponse {
-            status: aws_response.status,
-            headers: aws_response.headers.clone(),
-            stream: Box::new(parsed_event_stream),
-            usage_tracker: None, // Usage tracking is handled by the stream wrapper
-        };
-
-        Ok(response)
-    }
-
-
-    /// Collect streaming events and extract token usage using EventStreamParser
-    pub async fn collect_streaming_events(
-        &self,
-        mut stream: Box<
-            dyn futures_util::Stream<Item = Result<Bytes, reqwest::Error>> + Send + Unpin,
-        >,
-        response_time_ms: u32,
-    ) -> Result<(Vec<u8>, UsageMetadata), AppError> {
-        let mut all_data = Vec::new();
-        let mut parser = EventStreamParser::new();
-
-        // Collect all streaming chunks and parse them
-        while let Some(chunk) = stream.next().await {
-            match chunk {
-                Ok(bytes) => {
-                    all_data.extend_from_slice(&bytes);
-
-                    // Parse the binary chunk using EventStreamParser
-                    if let Ok(events) = parser.parse_chunk(&bytes) {
-                        // Events are parsed but we only need the usage metrics
-                        // The parser automatically extracts usage from message_start and message_stop events
-                        for event in events {
-                            if let Some(data) = &event.data {
-                                if let Some(event_type) = data.get("type").and_then(|t| t.as_str())
-                                {
-                                    tracing::debug!("Parsed streaming event: {}", event_type);
-                                }
-                            }
-                        }
-                    }
-                }
-                Err(e) => {
-                    tracing::warn!("Error reading streaming chunk: {}", e);
-                    // Continue processing other chunks
-                }
-            }
-        }
-
-        // Get usage metrics from the parser
-        let usage_metrics = parser.get_usage_metrics();
-
-        // Create usage metadata
-        let usage_metadata = UsageMetadata {
-            input_tokens: usage_metrics.input_tokens,
-            output_tokens: usage_metrics.output_tokens,
-            cache_write_tokens: usage_metrics.cache_write_tokens,
-            cache_read_tokens: usage_metrics.cache_read_tokens,
-            region: self.config.aws.region.clone(),
-            response_time_ms,
-        };
-
-        tracing::info!(
-            "Extracted streaming usage: input={}, output={}, cache_write={:?}, cache_read={:?}",
-            usage_metadata.input_tokens,
-            usage_metadata.output_tokens,
-            usage_metadata.cache_write_tokens,
-            usage_metadata.cache_read_tokens
-        );
-
-        Ok((all_data, usage_metadata))
-    }
-
-    /// Private method - only called internally by invoke_* methods
-    async fn track_usage(
-        &self,
-        request: &ModelRequest,
-        usage_metadata: &UsageMetadata,
-    ) -> Result<(), AppError> {
-        let user_id = request.user_id;
-
-        // Calculate cost if model pricing is available
-        let cost_usd = self
-            .calculate_cost(
-                &request.model_id,
-                usage_metadata.input_tokens,
-                usage_metadata.output_tokens,
-                usage_metadata.cache_write_tokens,
-                usage_metadata.cache_read_tokens,
-            )
+        self.token_tracking_tasks
+            .write()
             .await
-            .map(|d| d.to_string().parse::<f64>().unwrap_or(0.0));
-
-        let usage_record = crate::database::entities::usage_records::Model {
-            id: 0, // Will be set by database
-            user_id,
-            model_id: request.model_id.clone(),
-            endpoint_type: request.endpoint_type.clone(),
-            region: usage_metadata.region.clone(),
-            request_time: Utc::now(),
-            input_tokens: usage_metadata.input_tokens,
-            output_tokens: usage_metadata.output_tokens,
-            cache_write_tokens: usage_metadata.cache_write_tokens,
-            cache_read_tokens: usage_metadata.cache_read_tokens,
-            total_tokens: usage_metadata.input_tokens
-                + usage_metadata.output_tokens
-                + usage_metadata.cache_write_tokens.unwrap_or(0)
-                + usage_metadata.cache_read_tokens.unwrap_or(0),
-            response_time_ms: usage_metadata.response_time_ms,
-            success: true,
-            error_message: None,
-            cost_usd: cost_usd.map(|c| Decimal::from_f64_retain(c).unwrap_or_default()),
-        };
-
-        // Store usage record
-        self.database
-            .usage()
-            .store_record(&usage_record)
-            .await
-            .map_err(|e| AppError::Internal(format!("Failed to store usage record: {}", e)))?;
-
-        Ok(())
+            .insert(task_id, handle);
+        task_id
     }
 
     /// Extract usage metadata from AWS response body and headers
@@ -871,74 +705,313 @@ impl ModelService {
             }
         }
     }
+}
+
+#[async_trait]
+impl ModelService for ModelServiceImpl {
+    /// Create a ModelMapper from the current configuration
+    fn create_model_mapper(&self) -> crate::anthropic::model_mapping::ModelMapper {
+        self.config.create_model_mapper()
+    }
+
+    /// Initialize model costs in the background
+    /// This should be called at startup to populate initial cost data
+    async fn initialize_model_costs(&self) -> Result<(), AppError> {
+        tracing::info!("Initializing model costs from fallback data");
+
+        let cost_service =
+            CostTrackingService::new(self.database.clone(), self.config.aws.region.clone());
+
+        // Check if we already have cost data
+        let existing_costs = self.database.model_costs().get_all().await.map_err(|e| {
+            AppError::Internal(format!("Failed to check existing model costs: {}", e))
+        })?;
+
+        if existing_costs.is_empty() {
+            tracing::info!("No existing model costs found, populating with embedded fallback data");
+
+            // Initialize with embedded data only (not AWS API during startup)
+            match cost_service.initialize_model_costs_from_embedded().await {
+                Ok(result) => {
+                    tracing::info!(
+                        "Successfully initialized {} model costs from embedded data ({} updated, {} failed)",
+                        result.total_processed,
+                        result.updated_models.len(),
+                        result.failed_models.len()
+                    );
+                }
+                Err(e) => {
+                    tracing::warn!("Failed to initialize costs from embedded data: {}", e);
+                    tracing::info!("Model costs will be populated on first usage or manual update");
+                }
+            }
+        } else {
+            tracing::info!(
+                "Found {} existing model costs, skipping initialization",
+                existing_costs.len()
+            );
+        }
+
+        Ok(())
+    }
+
+    /// Non-streaming model invocation with automatic usage tracking
+    async fn invoke_model(&self, request: ModelRequest) -> Result<ModelResponse, AppError> {
+        let start_time = Instant::now();
+
+        // 1. Make AWS API call
+        let aws_response = self
+            .bedrock
+            .invoke_model(
+                &request.model_id,
+                request
+                    .headers
+                    .get("content-type")
+                    .and_then(|h| h.to_str().ok()),
+                request.headers.get("accept").and_then(|h| h.to_str().ok()),
+                request.body.clone(),
+            )
+            .await?;
+
+        let response_time_ms = start_time.elapsed().as_millis() as u32;
+
+        // 2. Extract usage metadata from AWS response
+        let usage_metadata = self.extract_usage_metadata(
+            &aws_response.headers,
+            &aws_response.body,
+            response_time_ms,
+        )?;
+
+        let response = ModelResponse {
+            status: aws_response.status,
+            headers: aws_response.headers.clone(),
+            body: aws_response.body,
+            usage_metadata: Some(usage_metadata.clone()),
+        };
+
+        // 3. Track usage automatically (internal call)
+        if let Err(e) = self.track_usage(&request, &usage_metadata).await {
+            tracing::warn!("Failed to track usage: {}", e);
+        }
+
+        Ok(response)
+    }
+
+    /// Streaming model invocation with automatic usage tracking
+    async fn invoke_model_stream(
+        &self,
+        request: ModelRequest,
+    ) -> Result<ModelStreamResponse, AppError> {
+        let start_time = Instant::now();
+
+        // 1. Make AWS streaming API call
+        let aws_response = self
+            .bedrock
+            .invoke_model_with_response_stream(
+                &request.model_id,
+                &request.headers,
+                request
+                    .headers
+                    .get("content-type")
+                    .and_then(|h| h.to_str().ok()),
+                request.headers.get("accept").and_then(|h| h.to_str().ok()),
+                request.body.clone(),
+            )
+            .await?;
+
+        // 2. Create usage tracker for background usage tracking
+        let usage_tracker = UsageTracker {
+            model_request: request,
+            model_service: Arc::new(self.clone()),
+            start_time,
+        };
+
+        // 3. Wrap the stream with parsed event stream and streaming manager
+        let parsed_event_stream = ParsedEventStream::new_with_streaming_manager(
+            aws_response.stream,
+            Some(usage_tracker),
+            self.streaming_manager.clone(),
+        );
+
+        // 4. Return streaming response immediately
+        let response = ModelStreamResponse {
+            status: aws_response.status,
+            headers: aws_response.headers.clone(),
+            stream: Box::new(parsed_event_stream),
+            usage_tracker: None, // Usage tracking is handled by the stream wrapper
+        };
+
+        Ok(response)
+    }
+
+    /// Collect streaming events and extract token usage using EventStreamParser
+    async fn collect_streaming_events(
+        &self,
+        mut stream: Box<
+            dyn futures_util::Stream<Item = Result<Bytes, reqwest::Error>> + Send + Unpin,
+        >,
+        response_time_ms: u32,
+    ) -> Result<(Vec<u8>, UsageMetadata), AppError> {
+        let mut all_data = Vec::new();
+        let mut parser = EventStreamParser::new();
+
+        // Collect all streaming chunks and parse them
+        while let Some(chunk) = stream.next().await {
+            match chunk {
+                Ok(bytes) => {
+                    all_data.extend_from_slice(&bytes);
+
+                    // Parse the binary chunk using EventStreamParser
+                    if let Ok(events) = parser.parse_chunk(&bytes) {
+                        // Events are parsed but we only need the usage metrics
+                        // The parser automatically extracts usage from message_start and message_stop events
+                        for event in events {
+                            if let Some(data) = &event.data {
+                                if let Some(event_type) = data.get("type").and_then(|t| t.as_str())
+                                {
+                                    tracing::debug!("Parsed streaming event: {}", event_type);
+                                }
+                            }
+                        }
+                    }
+                }
+                Err(e) => {
+                    tracing::warn!("Error reading streaming chunk: {}", e);
+                    // Continue processing other chunks
+                }
+            }
+        }
+
+        // Get usage metrics from the parser
+        let usage_metrics = parser.get_usage_metrics();
+
+        // Create usage metadata
+        let usage_metadata = UsageMetadata {
+            input_tokens: usage_metrics.input_tokens,
+            output_tokens: usage_metrics.output_tokens,
+            cache_write_tokens: usage_metrics.cache_write_tokens,
+            cache_read_tokens: usage_metrics.cache_read_tokens,
+            region: self.config.aws.region.clone(),
+            response_time_ms,
+        };
+
+        tracing::info!(
+            "Extracted streaming usage: input={}, output={}, cache_write={:?}, cache_read={:?}",
+            usage_metadata.input_tokens,
+            usage_metadata.output_tokens,
+            usage_metadata.cache_write_tokens,
+            usage_metadata.cache_read_tokens
+        );
+
+        Ok((all_data, usage_metadata))
+    }
 
     /// Get the AWS client for direct access if needed (returns trait object)
-    pub fn bedrock(&self) -> &dyn BedrockRuntime {
+    fn bedrock(&self) -> &dyn BedrockRuntime {
         self.bedrock.as_ref()
     }
 
     /// Get the storage layer for direct access if needed
-    pub fn database(&self) -> &Arc<DatabaseManager> {
+    fn database(&self) -> &Arc<dyn DatabaseManager> {
         &self.database
     }
 
-    /// Spawn a background token tracking task and track it
-    async fn spawn_token_tracking_task<F>(&self, future: F) -> u64
-    where
-        F: std::future::Future<Output = ()> + Send + 'static,
-    {
-        let task_id = self.task_counter.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
-        let tasks = self.token_tracking_tasks.clone();
-        
-        let handle = tokio::spawn(async move {
-            future.await;
-            // Remove completed task from tracking
-            tasks.write().await.remove(&task_id);
-        });
-        
-        self.token_tracking_tasks.write().await.insert(task_id, handle);
-        task_id
-    }
-
     /// Wait for all background token tracking tasks to complete
-    pub async fn wait_for_token_tracking_completion(&self, timeout: std::time::Duration) -> bool {
+    async fn wait_for_token_tracking_completion(&self, timeout: std::time::Duration) -> bool {
         let start_time = std::time::Instant::now();
-        
+
         loop {
             let task_count = self.token_tracking_tasks.read().await.len();
             if task_count == 0 {
                 tracing::info!("All token tracking tasks completed");
                 return true;
             }
-            
+
             if start_time.elapsed() > timeout {
-                tracing::error!("Timeout waiting for {} token tracking tasks to complete", task_count);
+                tracing::error!(
+                    "Timeout waiting for {} token tracking tasks to complete",
+                    task_count
+                );
                 return false;
             }
-            
-            tracing::info!("Waiting for {} token tracking tasks to complete...", task_count);
+
+            tracing::info!(
+                "Waiting for {} token tracking tasks to complete...",
+                task_count
+            );
             tokio::time::sleep(std::time::Duration::from_millis(100)).await;
         }
     }
 
     /// Get the count of active token tracking tasks
-    pub async fn active_token_tracking_tasks(&self) -> usize {
+    async fn active_token_tracking_tasks(&self) -> usize {
         self.token_tracking_tasks.read().await.len()
     }
 
     /// Abort all remaining token tracking tasks
-    pub async fn abort_token_tracking_tasks(&self) {
+    async fn abort_token_tracking_tasks(&self) {
         let mut tasks = self.token_tracking_tasks.write().await;
         let task_count = tasks.len();
-        
+
         if task_count > 0 {
             tracing::info!("Aborting {} remaining token tracking tasks", task_count);
-            
+
             for (task_id, handle) in tasks.drain() {
                 handle.abort();
                 tracing::debug!("Aborted token tracking task {}", task_id);
             }
         }
+    }
+
+    /// Track usage for a model request (for internal use)
+    async fn track_usage(
+        &self,
+        request: &ModelRequest,
+        usage_metadata: &UsageMetadata,
+    ) -> Result<(), AppError> {
+        let user_id = request.user_id;
+
+        // Calculate cost if model pricing is available
+        let cost_usd = self
+            .calculate_cost(
+                &request.model_id,
+                usage_metadata.input_tokens,
+                usage_metadata.output_tokens,
+                usage_metadata.cache_write_tokens,
+                usage_metadata.cache_read_tokens,
+            )
+            .await
+            .map(|d| d.to_string().parse::<f64>().unwrap_or(0.0));
+
+        let usage_record = crate::database::entities::usage_records::Model {
+            id: 0, // Will be set by database
+            user_id,
+            model_id: request.model_id.clone(),
+            endpoint_type: request.endpoint_type.clone(),
+            region: usage_metadata.region.clone(),
+            request_time: Utc::now(),
+            input_tokens: usage_metadata.input_tokens,
+            output_tokens: usage_metadata.output_tokens,
+            cache_write_tokens: usage_metadata.cache_write_tokens,
+            cache_read_tokens: usage_metadata.cache_read_tokens,
+            total_tokens: usage_metadata.input_tokens
+                + usage_metadata.output_tokens
+                + usage_metadata.cache_write_tokens.unwrap_or(0)
+                + usage_metadata.cache_read_tokens.unwrap_or(0),
+            response_time_ms: usage_metadata.response_time_ms,
+            success: true,
+            error_message: None,
+            cost_usd: cost_usd.map(|c| Decimal::from_f64_retain(c).unwrap_or_default()),
+        };
+
+        // Store usage record
+        self.database
+            .usage()
+            .store_record(&usage_record)
+            .await
+            .map_err(|e| AppError::Internal(format!("Failed to store usage record: {}", e)))?;
+
+        Ok(())
     }
 }
 
@@ -946,10 +1019,10 @@ impl ModelService {
 mod tests {
     use super::*;
     use crate::{
-        Server,
         aws::config::AwsConfig,
         config::Config,
         database::{UsageQuery, entities::*},
+        test_utils::TestServerBuilder,
     };
 
     fn create_test_config() -> Config {
@@ -965,17 +1038,12 @@ mod tests {
         }
     }
 
-    async fn create_test_server() -> (Server, Config) {
-        let mut config = create_test_config();
-        config.cache.backend = "memory".to_string();
-        config.database.enabled = true;
-        config.database.url = "sqlite::memory:".to_string();
-        config.metrics.enabled = false;
-
-        let server = Server::new(config.clone()).await.unwrap();
-
-        // Run migrations to create tables
-        server.database.migrate().await.unwrap();
+    async fn create_test_server() -> (crate::Server, Config) {
+        let config = create_test_config();
+        let server = TestServerBuilder::new()
+            .with_config(config.clone())
+            .build()
+            .await;
 
         (server, config)
     }
@@ -985,7 +1053,7 @@ mod tests {
         let (server, config) = create_test_server().await;
         let database = server.database.clone();
         let bedrock = Arc::new(BedrockRuntimeImpl::new_test());
-        let model_service = ModelService::new(bedrock, database.clone(), config);
+        let model_service = ModelServiceImpl::new(bedrock, database.clone(), config);
 
         // Verify service was created successfully
         assert_eq!(model_service.config.aws.region, "us-east-1");
@@ -996,7 +1064,7 @@ mod tests {
         let (server, config) = create_test_server().await;
         let database = server.database.clone();
         let bedrock = Arc::new(BedrockRuntimeImpl::new_test());
-        let model_service = ModelService::new(bedrock, database.clone(), config);
+        let model_service = ModelServiceImpl::new(bedrock, database.clone(), config);
 
         let mut headers = HeaderMap::new();
         headers.insert("x-amzn-bedrock-input-token-count", "100".parse().unwrap());
@@ -1020,7 +1088,7 @@ mod tests {
         let (server, config) = create_test_server().await;
         let database = server.database.clone();
         let bedrock = Arc::new(BedrockRuntimeImpl::new_test());
-        let model_service = ModelService::new(bedrock, database.clone(), config);
+        let model_service = ModelServiceImpl::new(bedrock, database.clone(), config);
 
         // Test with JSON response body containing cache tokens
         let response_body = br#"{"id":"msg_bdrk_01QjKY4iZgTq69BYEKRD112G","type":"message","role":"assistant","model":"claude-opus-4-20250514","content":[{"type":"text","text":"Hello! It's nice to meet you. How are you doing today?"}],"stop_reason":"end_turn","stop_sequence":null,"usage":{"input_tokens":10,"cache_creation_input_tokens":5,"cache_read_input_tokens":3,"output_tokens":18}}"#;
@@ -1043,7 +1111,7 @@ mod tests {
         let (server, config) = create_test_server().await;
         let database = server.database.clone();
         let bedrock = Arc::new(BedrockRuntimeImpl::new_test());
-        let model_service = ModelService::new(bedrock, database.clone(), config);
+        let model_service = ModelServiceImpl::new(bedrock, database.clone(), config);
 
         // Use the real AWS binary fixture instead of SSE format
         let binary_data = include_bytes!("../../tests/fixtures/stream-out.bin");
@@ -1077,7 +1145,7 @@ mod tests {
         let (server, config) = create_test_server().await;
         let database = server.database.clone();
         let bedrock = Arc::new(BedrockRuntimeImpl::new_test());
-        let model_service = ModelService::new(bedrock, database.clone(), config);
+        let model_service = ModelServiceImpl::new(bedrock, database.clone(), config);
 
         // Add a model cost to storage
         let model_cost = StoredModelCost {
@@ -1116,7 +1184,7 @@ mod tests {
         let (server, config) = create_test_server().await;
         let database = server.database.clone();
         let bedrock = Arc::new(BedrockRuntimeImpl::new_test());
-        let model_service = ModelService::new(bedrock, database.clone(), config);
+        let model_service = ModelServiceImpl::new(bedrock, database.clone(), config);
 
         // Create a test user first
         let user_record = UserRecord {

@@ -29,7 +29,7 @@ fn build_frontend() {
         || std::env::var("PROFILE").unwrap_or_else(|_| "release".to_string()) == "debug";
 
     let build_mode = if is_debug { "debug" } else { "release" };
-    println!("cargo:warning=Building frontend in {} mode...", build_mode);
+    println!("cargo:info=Building frontend in {} mode...", build_mode);
 
     // Check if npm is available
     let npm_check = Command::new("npm").arg("--version").output();
@@ -58,7 +58,7 @@ fn build_frontend() {
 
     // Build the frontend with appropriate mode
     println!(
-        "cargo:warning=Building frontend assets in {} mode...",
+        "cargo:info=Building frontend assets in {} mode...",
         build_mode
     );
     let build_command = if is_debug { "build:debug" } else { "build" };
@@ -80,7 +80,7 @@ fn build_frontend() {
     match build_result {
         Ok(output) if output.status.success() => {
             println!(
-                "cargo:warning=Frontend build completed successfully in {} mode",
+                "cargo:info=Frontend build completed successfully in {} mode",
                 build_mode
             );
         }
@@ -112,10 +112,7 @@ fn embed_csv_modified_time() {
                 .as_secs();
 
             println!("cargo:rustc-env=BEDROCK_CSV_MODIFIED_TIME={}", timestamp);
-            println!(
-                "cargo:warning=Embedded CSV modification time: {}",
-                timestamp
-            );
+            println!("cargo:info=Embedded CSV modification time: {}", timestamp);
         } else {
             println!("cargo:warning=Could not get CSV modification time, using current time");
         }

@@ -5,7 +5,7 @@
 
 use std::sync::Arc;
 
-use crate::cache::{CacheManager, TypedCacheStats};
+use crate::cache::{CacheManager, CacheManagerImpl, TypedCacheStats};
 use crate::config::Config;
 use crate::health::HealthChecker;
 use async_trait::async_trait;
@@ -37,17 +37,51 @@ pub enum DatabaseError {
 
 pub type DatabaseResult<T> = Result<T, DatabaseError>;
 
-/// Database connection manager with optional caching
-pub struct DatabaseManager {
-    pub connection: DatabaseConnection,
-    cache_manager: Arc<CacheManager>,
+/// Database manager trait for dependency injection and testing
+#[async_trait]
+pub trait DatabaseManager: Send + Sync {
+    /// Run database migrations
+    async fn migrate(&self) -> DatabaseResult<()>;
+
+    /// Health check for database connection
+    async fn health_check(&self) -> DatabaseResult<()>;
+
+    /// Get cache manager reference
+    fn cache_manager(&self) -> Arc<dyn CacheManager>;
+
+    /// Get users DAO
+    fn users(&self) -> CachedUsersDao;
+
+    /// Get API keys DAO
+    fn api_keys(&self) -> CachedApiKeysDao;
+
+    /// Get usage DAO
+    fn usage(&self) -> UsageDao;
+
+    /// Get audit logs DAO
+    fn audit_logs(&self) -> AuditLogsDao;
+
+    /// Get refresh tokens DAO
+    fn refresh_tokens(&self) -> RefreshTokensDao;
+
+    /// Get model costs DAO
+    fn model_costs(&self) -> ModelCostsDao;
+
+    /// Get cache statistics for all cached DAOs
+    fn get_cache_stats(&self) -> Option<CacheStats>;
 }
 
-impl DatabaseManager {
+/// Database connection manager implementation with optional caching
+pub struct DatabaseManagerImpl {
+    pub connection: DatabaseConnection,
+    cache_manager: Arc<CacheManagerImpl>,
+}
+
+impl DatabaseManagerImpl {
     /// Create database manager from configuration with caching
     pub async fn new_from_config(
         config: &Config,
-        cache_manager: Arc<CacheManager>,
+        cache_manager: Arc<CacheManagerImpl>,
     ) -> Result<Self, DatabaseError> {
         let connection = sea_orm::Database::connect(&config.database.url)
             .await
@@ -58,9 +92,12 @@ impl DatabaseManager {
             cache_manager,
         })
     }
+}
 
+#[async_trait]
+impl DatabaseManager for DatabaseManagerImpl {
     /// Run database migrations
-    pub async fn migrate(&self) -> DatabaseResult<()> {
+    async fn migrate(&self) -> DatabaseResult<()> {
         use crate::database::migration::Migrator;
         use sea_orm_migration::MigratorTrait;
 
@@ -75,7 +112,7 @@ impl DatabaseManager {
     }
 
     /// Health check for database connection
-    pub async fn health_check(&self) -> DatabaseResult<()> {
+    async fn health_check(&self) -> DatabaseResult<()> {
         self.connection
             .ping()
             .await
@@ -83,17 +120,17 @@ impl DatabaseManager {
     }
 
     /// Get cache manager reference
-    pub fn cache_manager(&self) -> Arc<CacheManager> {
+    fn cache_manager(&self) -> Arc<dyn CacheManager> {
         self.cache_manager.clone()
     }
 
     /// Get users DAO
-    pub fn users(&self) -> CachedUsersDao {
+    fn users(&self) -> CachedUsersDao {
         CachedUsersDao::new(UsersDao::new(self.connection.clone()), &self.cache_manager)
     }
 
     /// Get API keys DAO
-    pub fn api_keys(&self) -> CachedApiKeysDao {
+    fn api_keys(&self) -> CachedApiKeysDao {
         CachedApiKeysDao::new(
             ApiKeysDao::new(self.connection.clone()),
             &self.cache_manager,
@@ -101,27 +138,27 @@ impl DatabaseManager {
     }
 
     /// Get usage DAO
-    pub fn usage(&self) -> UsageDao {
+    fn usage(&self) -> UsageDao {
         UsageDao::new(self.connection.clone())
     }
 
     /// Get audit logs DAO
-    pub fn audit_logs(&self) -> AuditLogsDao {
+    fn audit_logs(&self) -> AuditLogsDao {
         AuditLogsDao::new(self.connection.clone())
     }
 
     /// Get refresh tokens DAO
-    pub fn refresh_tokens(&self) -> RefreshTokensDao {
+    fn refresh_tokens(&self) -> RefreshTokensDao {
         RefreshTokensDao::new(self.connection.clone())
     }
 
     /// Get model costs DAO
-    pub fn model_costs(&self) -> ModelCostsDao {
+    fn model_costs(&self) -> ModelCostsDao {
         ModelCostsDao::new(self.connection.clone())
     }
 
     /// Get cache statistics for all cached DAOs
-    pub fn get_cache_stats(&self) -> Option<CacheStats> {
+    fn get_cache_stats(&self) -> Option<CacheStats> {
         // Create temporary DAOs to get stats
         let users = self.users().get_cache_stats();
         let api_keys = self.api_keys().get_cache_stats();
@@ -131,7 +168,7 @@ impl DatabaseManager {
 }
 
 #[async_trait]
-impl HealthChecker for DatabaseManager {
+impl HealthChecker for DatabaseManagerImpl {
     fn name(&self) -> &str {
         "database"
     }
