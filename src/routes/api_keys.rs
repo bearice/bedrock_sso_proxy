@@ -205,26 +205,9 @@ mod tests {
 
         // Create server state for middleware
         let config = Config::default();
-        let server = crate::server::Server {
-            config: Arc::new(config),
-            jwt_service: Arc::new(jwt_service.clone()),
-            model_service: Arc::new(crate::model_service::ModelService::new(
-                database.clone(),
-                Config::default(),
-            )),
-            oauth_service: Arc::new(
-                crate::auth::oauth::OAuthService::new(
-                    Config::default(),
-                    jwt_service.clone(),
-                    database.clone(),
-                    cache.clone(),
-                )
-                .unwrap(),
-            ),
-            health_service: Arc::new(crate::health::HealthService::new()),
-            database: database.clone(),
-            cache: cache.clone(),
-        };
+        let mut server = Server::new(config).await.unwrap();
+        server.cache = cache;
+        server.database = database;
 
         let app = create_api_key_routes()
             .with_state(server.clone())
@@ -268,26 +251,9 @@ mod tests {
 
         // Create server state for middleware
         let config = Config::default();
-        let server = crate::server::Server {
-            config: Arc::new(config),
-            jwt_service: Arc::new(jwt_service.clone()),
-            model_service: Arc::new(crate::model_service::ModelService::new(
-                database.clone(),
-                Config::default(),
-            )),
-            oauth_service: Arc::new(
-                crate::auth::oauth::OAuthService::new(
-                    Config::default(),
-                    jwt_service.clone(),
-                    database.clone(),
-                    cache.clone(),
-                )
-                .unwrap(),
-            ),
-            health_service: Arc::new(crate::health::HealthService::new()),
-            database: database.clone(),
-            cache: cache.clone(),
-        };
+        let mut server = Server::new(config).await.unwrap();
+        server.cache = cache;
+        server.database = database;
 
         let app = create_api_key_routes()
             .with_state(server.clone())
@@ -321,26 +287,9 @@ mod tests {
 
         // Create server state for middleware
         let config = Config::default();
-        let server = crate::server::Server {
-            config: Arc::new(config),
-            jwt_service: Arc::new(jwt_service.clone()),
-            model_service: Arc::new(crate::model_service::ModelService::new(
-                database.clone(),
-                Config::default(),
-            )),
-            oauth_service: Arc::new(
-                crate::auth::oauth::OAuthService::new(
-                    Config::default(),
-                    jwt_service.clone(),
-                    database.clone(),
-                    cache.clone(),
-                )
-                .unwrap(),
-            ),
-            health_service: Arc::new(crate::health::HealthService::new()),
-            database: database.clone(),
-            cache: cache.clone(),
-        };
+        let mut server = Server::new(config).await.unwrap();
+        server.cache = cache;
+        server.database = database;
 
         let app = create_api_key_routes()
             .with_state(server.clone())

@@ -6,6 +6,7 @@ use crate::{
         middleware::{admin_middleware, auth_middleware, jwt_auth_middleware},
         oauth::OAuthService,
     },
+    aws::bedrock::BedrockRuntimeImpl,
     cache::CacheManager,
     config::Config,
     database::{DatabaseManager, entities::UserRecord},
@@ -84,8 +85,9 @@ impl Server {
                 .map_err(AppError::Database)?,
         );
 
+        let bedrock = Arc::new(BedrockRuntimeImpl::new(config.aws.clone()));
         // Initialize model service
-        let model_service = Arc::new(ModelService::new(database.clone(), (*config).clone()));
+        let model_service = Arc::new(ModelService::new(bedrock, database.clone(), (*config).clone()));
 
         // Initialize OAuth service
         let oauth_service = Arc::new(OAuthService::new(

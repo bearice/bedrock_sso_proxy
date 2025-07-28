@@ -1,68 +1,14 @@
-use crate::aws::bedrock::{BedrockRuntime, BedrockResponse};
+use crate::aws::bedrock::{BedrockRuntime, BedrockRuntimeImpl};
 use crate::{
-    aws::bedrock::BedrockStreamResponse, config::Config, cost_tracking::CostTrackingService,
+    config::Config, cost_tracking::CostTrackingService,
     database::DatabaseManager, error::AppError,
 };
-use async_trait::async_trait;
 use axum::http::HeaderMap;
 use bytes::Bytes;
 use futures_util::StreamExt;
 use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 
-// Trait for AWS client operations to enable mocking
-#[async_trait]
-pub trait AwsClientTrait: Send + Sync {
-    async fn invoke_model(
-        &self,
-        model_id: &str,
-        content_type: Option<&str>,
-        accept: Option<&str>,
-        body: Vec<u8>,
-    ) -> Result<BedrockResponse, AppError>;
-
-    async fn invoke_model_with_response_stream(
-        &self,
-        model_id: &str,
-        headers: &HeaderMap,
-        content_type: Option<&str>,
-        accept: Option<&str>,
-        body: Vec<u8>,
-    ) -> Result<BedrockStreamResponse, AppError>;
-
-    fn health_checker(&self) -> Arc<dyn crate::health::HealthChecker>;
-}
-
-// Implement the trait for the real AWS client
-#[async_trait]
-impl AwsClientTrait for BedrockRuntime {
-    async fn invoke_model(
-        &self,
-        model_id: &str,
-        content_type: Option<&str>,
-        accept: Option<&str>,
-        body: Vec<u8>,
-    ) -> Result<BedrockResponse, AppError> {
-        self.invoke_model(model_id, content_type, accept, body)
-            .await
-    }
-
-    async fn invoke_model_with_response_stream(
-        &self,
-        model_id: &str,
-        headers: &HeaderMap,
-        content_type: Option<&str>,
-        accept: Option<&str>,
-        body: Vec<u8>,
-    ) -> Result<BedrockStreamResponse, AppError> {
-        self.invoke_model_with_response_stream(model_id, headers, content_type, accept, body)
-            .await
-    }
-
-    fn health_checker(&self) -> Arc<dyn crate::health::HealthChecker> {
-        Arc::new(BedrockRuntime::health_checker(self))
-    }
-}
 
 use axum::http::StatusCode;
 use chrono::Utc;
@@ -70,7 +16,7 @@ use std::{sync::Arc, time::Instant};
 
 /// Unified model service for AWS calls and usage tracking
 pub struct ModelService {
-    aws_client: Box<dyn AwsClientTrait>,
+    bedrock: Arc<dyn BedrockRuntime>,
     database: Arc<DatabaseManager>,
     config: Config,
 }
@@ -143,10 +89,9 @@ pub struct UsageMetadata {
 }
 
 impl ModelService {
-    pub fn new(database: Arc<DatabaseManager>, config: Config) -> Self {
-        let aws_client = BedrockRuntime::new(config.aws.clone());
+    pub fn new(bedrock: Arc<BedrockRuntimeImpl>, database: Arc<DatabaseManager>, config: Config) -> Self {
         Self {
-            aws_client: Box::new(aws_client),
+            bedrock,
             database,
             config,
         }
@@ -204,7 +149,7 @@ impl ModelService {
 
         // 1. Make AWS API call
         let aws_response = self
-            .aws_client
+            .bedrock
             .invoke_model(
                 &request.model_id,
                 request
@@ -249,7 +194,7 @@ impl ModelService {
 
         // 1. Make AWS streaming API call
         let aws_response = self
-            .aws_client
+            .bedrock
             .invoke_model_with_response_stream(
                 &request.model_id,
                 &request.headers,
@@ -556,8 +501,8 @@ impl ModelService {
     }
 
     /// Get the AWS client for direct access if needed (returns trait object)
-    pub fn aws_client(&self) -> &dyn AwsClientTrait {
-        self.aws_client.as_ref()
+    pub fn bedrock(&self) -> &dyn BedrockRuntime {
+        self.bedrock.as_ref()
     }
 
     /// Get the storage layer for direct access if needed
@@ -608,7 +553,8 @@ mod tests {
     async fn test_model_service_creation() {
         let (server, config) = create_test_server().await;
         let database = server.database.clone();
-        let model_service = ModelService::new(database.clone(), config);
+        let bedrock = Arc::new(BedrockRuntimeImpl::new_test());
+        let model_service = ModelService::new(bedrock, database.clone(), config);
 
         // Verify service was created successfully
         assert_eq!(model_service.config.aws.region, "us-east-1");
@@ -618,9 +564,10 @@ mod tests {
     async fn test_extract_usage_metadata() {
         let (server, config) = create_test_server().await;
         let database = server.database.clone();
-        let model_service = ModelService::new(database.clone(), config);
+        let bedrock = Arc::new(BedrockRuntimeImpl::new_test());
+        let model_service = ModelService::new(bedrock, database.clone(), config);
 
-        let mut headers = HeaderMap::new();
+                let mut headers = HeaderMap::new();
         headers.insert("x-amzn-bedrock-input-token-count", "100".parse().unwrap());
         headers.insert("x-amzn-bedrock-output-token-count", "50".parse().unwrap());
 
@@ -641,7 +588,8 @@ mod tests {
     async fn test_extract_usage_metadata_from_response_body() {
         let (server, config) = create_test_server().await;
         let database = server.database.clone();
-        let model_service = ModelService::new(database.clone(), config);
+        let bedrock = Arc::new(BedrockRuntimeImpl::new_test());
+        let model_service = ModelService::new(bedrock, database.clone(), config);
 
         // Test with JSON response body containing cache tokens
         let response_body = br#"{"id":"msg_bdrk_01QjKY4iZgTq69BYEKRD112G","type":"message","role":"assistant","model":"claude-opus-4-20250514","content":[{"type":"text","text":"Hello! It's nice to meet you. How are you doing today?"}],"stop_reason":"end_turn","stop_sequence":null,"usage":{"input_tokens":10,"cache_creation_input_tokens":5,"cache_read_input_tokens":3,"output_tokens":18}}"#;
@@ -663,7 +611,8 @@ mod tests {
     async fn test_collect_streaming_events_with_real_data() {
         let (server, config) = create_test_server().await;
         let database = server.database.clone();
-        let model_service = ModelService::new(database.clone(), config);
+        let bedrock = Arc::new(BedrockRuntimeImpl::new_test());
+        let model_service = ModelService::new(bedrock, database.clone(), config);
 
         // Create a test stream with real AWS Bedrock streaming data
         let test_events = vec![
@@ -719,8 +668,9 @@ mod tests {
     #[tokio::test]
     async fn test_calculate_cost() {
         let (server, config) = create_test_server().await;
-        let database = server.database;
-        let model_service = ModelService::new(database.clone(), config);
+        let database = server.database.clone();
+        let bedrock = Arc::new(BedrockRuntimeImpl::new_test());
+        let model_service = ModelService::new(bedrock, database.clone(), config);
 
         // Add a model cost to storage
         let model_cost = StoredModelCost {
@@ -758,7 +708,8 @@ mod tests {
     async fn test_track_usage() {
         let (server, config) = create_test_server().await;
         let database = server.database.clone();
-        let model_service = ModelService::new(database.clone(), config);
+        let bedrock = Arc::new(BedrockRuntimeImpl::new_test());
+        let model_service = ModelService::new(bedrock, database.clone(), config);
 
         // Create a test user first
         let user_record = UserRecord {

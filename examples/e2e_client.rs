@@ -1,5 +1,5 @@
 use base64::{Engine as _, engine::general_purpose};
-use bedrock_sso_proxy::{config::Config,aws::bedrock::BedrockRuntime};
+use bedrock_sso_proxy::{config::Config,aws::bedrock::BedrockRuntimeImpl};
 use chrono::{Duration, Utc};
 use clap::{Parser, Subcommand};
 use futures_util::stream::StreamExt;
@@ -86,6 +86,7 @@ struct ContentBlock {
     text: Option<String>,
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Deserialize)]
 struct AnthropicResponse {
     id: Option<String>,
@@ -99,6 +100,7 @@ struct AnthropicResponse {
     usage: Option<Value>,
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Deserialize)]
 struct AnthropicContentBlock {
     #[serde(rename = "type")]
@@ -110,7 +112,7 @@ struct E2EClient {
     client: Client,
     server_url: String,
     jwt_token: String,
-    aws_client: Option<BedrockRuntime>,
+    aws_client: Option<BedrockRuntimeImpl>,
     direct_mode: bool,
     anthropic_api_key: Option<String>,
 }
@@ -135,7 +137,7 @@ impl E2EClient {
         let client = Client::new();
 
         let aws_client = if direct_mode {
-            Some(BedrockRuntime::new(config.aws.clone()))
+            Some(BedrockRuntimeImpl::new(config.aws.clone()))
         } else {
             None
         };
@@ -327,13 +329,13 @@ impl E2EClient {
     fn parse_anthropic_streaming_chunk(&self, chunk_str: &str) -> Option<String> {
         // Handle Server-Sent Events format for Anthropic API
         for line in chunk_str.lines() {
-            if line.starts_with("data: ") {
-                let data = &line[6..]; // Remove "data: " prefix
-                
+            if let Some(data) = line.strip_prefix("data: ") {
+                // Remove "data: " prefix
+
                 if data == "[DONE]" {
                     return Some("__STREAM_END__".to_string());
                 }
-                
+
                 if let Ok(json) = serde_json::from_str::<Value>(data) {
                     // Check for content_block_delta
                     if json.get("type").and_then(|t| t.as_str()) == Some("content_block_delta") {
@@ -764,15 +766,15 @@ impl E2EClient {
         } else {
             "Anthropic API via Proxy"
         };
-        
+
         println!("🚀 Starting interactive chat with model: {} ({})", model, connection_type);
-        
+
         if self.direct_mode {
             let has_api_key = api_key.is_some() || self.anthropic_api_key.is_some();
             if !has_api_key {
                 return Err("API key is required for direct Anthropic connections. Use --api-key flag or set ANTHROPIC_API_KEY environment variable.".into());
             }
-            
+
             let auth_source = if api_key.is_some() {
                 "--api-key flag"
             } else {
@@ -787,7 +789,7 @@ impl E2EClient {
             };
             println!("🔐 Authentication: {}", auth_method);
         }
-        
+
         println!("💡 Type 'quit', 'exit', or press Ctrl-D to end the chat");
         println!(
             "💡 Streaming mode: {}",

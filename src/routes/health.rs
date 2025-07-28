@@ -42,7 +42,7 @@ async fn health_check(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{Server, config::Config, health::HealthService, model_service::ModelService};
+    use crate::{Server, config::Config, health::HealthService};
     use axum::{
         body::Body,
         http::{Request, StatusCode},
@@ -64,10 +64,10 @@ mod tests {
         // Run migrations to create tables
         server.database.migrate().await.unwrap();
 
-        let model_service = ModelService::new(server.database, config);
+        let model_service = server.model_service;
 
         health_service
-            .register(model_service.aws_client().health_checker())
+            .register(model_service.bedrock().health_checker())
             .await;
         health_service
     }
