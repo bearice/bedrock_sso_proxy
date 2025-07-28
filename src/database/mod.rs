@@ -5,15 +5,17 @@
 
 use std::sync::Arc;
 
+use async_trait::async_trait;
 use crate::cache::{CacheManager, TypedCacheStats};
 use crate::config::Config;
+use crate::health::HealthChecker;
 use sea_orm::DatabaseConnection;
 use thiserror::Error;
 
+pub mod config;
 pub mod dao;
 pub mod entities;
 pub mod migration;
-pub mod config;
 
 pub use dao::{
     ApiKeysDao, AuditLogsDao, CachedApiKeysDao, CachedUsersDao, ModelCostsDao, RefreshTokensDao,
@@ -74,14 +76,10 @@ impl DatabaseManager {
 
     /// Health check for database connection
     pub async fn health_check(&self) -> DatabaseResult<()> {
-        use crate::database::entities::users;
-        use sea_orm::{EntityTrait, PaginatorTrait};
-
-        let _count = users::Entity::find()
-            .count(&self.connection)
+        self.connection
+            .ping()
             .await
-            .map_err(|e| DatabaseError::Database(e.to_string()))?;
-        Ok(())
+            .map_err(|e| DatabaseError::Database(format!("db error: {}", e)))
     }
 
     /// Get cache manager reference
@@ -129,6 +127,28 @@ impl DatabaseManager {
         let api_keys = self.api_keys().get_cache_stats();
 
         Some(CacheStats { users, api_keys })
+    }
+}
+
+#[async_trait]
+impl HealthChecker for DatabaseManager {
+    fn name(&self) -> &str {
+        "database"
+    }
+    async fn check(&self) -> crate::health::HealthCheckResult {
+        match self.health_check().await {
+            Ok(_) => crate::health::HealthCheckResult::healthy_with_details(serde_json::json!({
+                "status": "healthy",
+                "connection": "ok"
+            })),
+            Err(err) => crate::health::HealthCheckResult::unhealthy_with_details(
+                "DB health check failed".to_string(),
+                serde_json::json!({
+                    "status": "unhealthy",
+                    "error": err.to_string()
+                }),
+            ),
+        }
     }
 }
 

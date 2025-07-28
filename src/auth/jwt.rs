@@ -5,6 +5,7 @@ use jsonwebtoken::{
     Algorithm, DecodingKey, EncodingKey, Header, Validation, decode, encode, jwk::Jwk,
 };
 use std::str::FromStr;
+use std::sync::Arc;
 
 use serde::{Deserialize, Serialize};
 
@@ -132,10 +133,10 @@ impl JwtService {
     }
 
     /// Create a health checker for this JWT service
-    pub fn health_checker(&self) -> JwtHealthChecker {
-        JwtHealthChecker {
+    pub fn health_checker(&self) -> Arc<JwtHealthChecker> {
+        Arc::new(JwtHealthChecker {
             service: self.clone(),
-        }
+        })
     }
 }
 

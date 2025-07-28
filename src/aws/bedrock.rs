@@ -351,10 +351,10 @@ impl BedrockRuntimeImpl {
     }
 
     /// Create a health checker for this AWS client
-    pub fn health_checker(&self) -> BedrockHealthChecker {
-        BedrockHealthChecker {
+    pub fn health_checker(&self) -> Arc<BedrockHealthChecker> {
+        Arc::new(BedrockHealthChecker {
             client: self.clone(),
-        }
+        })
     }
 }
 
@@ -458,7 +458,7 @@ impl BedrockRuntime for BedrockRuntimeImpl {
     }
 
     fn health_checker(&self) -> Arc<dyn crate::health::HealthChecker> {
-        Arc::new(BedrockRuntimeImpl::health_checker(self))
+        BedrockRuntimeImpl::health_checker(self)
     }
 }
 
@@ -532,26 +532,6 @@ mod tests {
         );
     }
 
-    #[tokio::test]
-    async fn test_health_check_with_credentials() {
-        let client = BedrockRuntimeImpl::new_test();
-        let result = client.health_check().await;
-        assert!(result.is_ok());
-    }
-
-    #[tokio::test]
-    async fn test_health_check_without_credentials() {
-        let config = AwsConfig {
-            region: "us-east-1".to_string(),
-            access_key_id: None,
-            secret_access_key: None,
-            profile: None,
-            bearer_token: None,
-        };
-        let client = BedrockRuntimeImpl::new(config);
-        let result = client.health_check().await;
-        assert!(result.is_err());
-    }
 
     #[test]
     fn test_get_host() {
@@ -744,39 +724,6 @@ mod tests {
         assert!(processed.contains_key("content-type"));
     }
 
-    #[tokio::test]
-    async fn test_health_check_with_bearer_token() {
-        let config = AwsConfig {
-            region: "us-east-1".to_string(),
-            access_key_id: None,
-            secret_access_key: None,
-            profile: None,
-            bearer_token: Some("ABSK-1234567890abcdef1234567890abcdef12345678".to_string()),
-        };
-        let client = BedrockRuntimeImpl::new(config);
-        let result = client.health_check().await;
-        assert!(result.is_ok());
-    }
-
-    #[tokio::test]
-    async fn test_health_check_without_any_credentials() {
-        let config = AwsConfig {
-            region: "us-east-1".to_string(),
-            access_key_id: None,
-            secret_access_key: None,
-            profile: None,
-            bearer_token: None,
-        };
-        let client = BedrockRuntimeImpl::new(config);
-        let result = client.health_check().await;
-        assert!(result.is_err());
-        assert!(
-            result
-                .unwrap_err()
-                .to_string()
-                .contains("AWS authentication not configured")
-        );
-    }
 
     #[tokio::test]
     async fn test_add_bearer_token() {

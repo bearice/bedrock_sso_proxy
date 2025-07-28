@@ -296,7 +296,7 @@ impl OAuthService {
                 .await
                 .map_err(|e| AppError::Internal(format!("Failed to find user: {}", e)))?
                 .ok_or_else(|| AppError::Internal("User not found after upsert".to_string()))?;
-            
+
             self.database
                 .users()
                 .update_last_login(user)
@@ -716,10 +716,10 @@ impl OAuthService {
     }
 
     /// Create a health checker for this OAuth service
-    pub fn health_checker(self: &std::sync::Arc<Self>) -> OAuthHealthChecker {
-        OAuthHealthChecker {
+    pub fn health_checker(self: &std::sync::Arc<Self>) -> Arc<OAuthHealthChecker> {
+        Arc::new(OAuthHealthChecker {
             service: self.clone(),
-        }
+        })
     }
 }
 

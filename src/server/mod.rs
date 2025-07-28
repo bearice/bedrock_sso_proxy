@@ -87,7 +87,11 @@ impl Server {
 
         let bedrock = Arc::new(BedrockRuntimeImpl::new(config.aws.clone()));
         // Initialize model service
-        let model_service = Arc::new(ModelService::new(bedrock, database.clone(), (*config).clone()));
+        let model_service = Arc::new(ModelService::new(
+            bedrock.clone(),
+            database.clone(),
+            (*config).clone(),
+        ));
 
         // Initialize OAuth service
         let oauth_service = Arc::new(OAuthService::new(
@@ -100,6 +104,10 @@ impl Server {
         // Initialize health service
         let health_service = Arc::new(HealthService::new());
         health_service.register(cache.clone()).await;
+        health_service.register(database.clone()).await;
+        health_service.register(bedrock.health_checker()).await;
+        health_service.register(jwt_service.health_checker()).await;
+        health_service.register(oauth_service.health_checker()).await;
 
         Ok(Self {
             config,
