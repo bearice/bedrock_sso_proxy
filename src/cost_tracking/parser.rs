@@ -5,7 +5,7 @@ use tracing::{debug};
 /// CSV record structure for pricing data
 #[derive(Debug, Deserialize)]
 pub struct PricingRecord {
-    pub region: String,
+    pub region_id: String,
     pub model_id: String,
     pub model_name: String,
     pub provider: String,

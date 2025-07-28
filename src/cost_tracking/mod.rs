@@ -56,7 +56,7 @@ impl CostTrackingService {
             .iter()
             .map(|pricing| {
                 // Create unique model identifier with region
-                let model_key = format!("{}:{}", pricing.region, pricing.model_id);
+                let model_key = format!("{}:{}", pricing.region_id, pricing.model_id);
 
                 StoredModelCost {
                     id: 0, // Will be set by database

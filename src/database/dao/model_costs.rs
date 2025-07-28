@@ -1,7 +1,10 @@
 use crate::database::entities::{StoredModelCost, model_costs};
 use crate::database::{DatabaseError, DatabaseResult};
-use sea_orm::{ActiveValue, ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter, Set};
+use sea_orm::{
+    ActiveValue, ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter, Set, TransactionTrait,
+};
 use sea_orm_migration::sea_query::OnConflict;
+use tracing::{debug, trace};
 
 /// Model costs DAO for database operations
 pub struct ModelCostsDao {
@@ -26,15 +29,24 @@ impl ModelCostsDao {
 
     /// Store or update model cost using native upsert
     pub async fn upsert_many(&self, costs: &[StoredModelCost]) -> DatabaseResult<()> {
-        let active_models:Vec<_> = costs.iter().map(|cost| model_costs::ActiveModel {
-            id: ActiveValue::NotSet,
-            model_id: Set(cost.model_id.clone()),
-            input_cost_per_1k_tokens: Set(cost.input_cost_per_1k_tokens),
-            output_cost_per_1k_tokens: Set(cost.output_cost_per_1k_tokens),
-            cache_write_cost_per_1k_tokens: Set(cost.cache_write_cost_per_1k_tokens),
-            cache_read_cost_per_1k_tokens: Set(cost.cache_read_cost_per_1k_tokens),
-            updated_at: Set(cost.updated_at),
-        }).collect();
+        debug!("Upserting {} model_costs", costs.len());
+        let tx = self
+            .db
+            .begin()
+            .await
+            .map_err(|e| DatabaseError::Database(e.to_string()))?;
+        let active_models: Vec<_> = costs
+            .iter()
+            .map(|cost| model_costs::ActiveModel {
+                id: ActiveValue::NotSet,
+                model_id: Set(cost.model_id.clone()),
+                input_cost_per_1k_tokens: Set(cost.input_cost_per_1k_tokens),
+                output_cost_per_1k_tokens: Set(cost.output_cost_per_1k_tokens),
+                cache_write_cost_per_1k_tokens: Set(cost.cache_write_cost_per_1k_tokens),
+                cache_read_cost_per_1k_tokens: Set(cost.cache_read_cost_per_1k_tokens),
+                updated_at: Set(cost.updated_at),
+            })
+            .collect();
 
         let on_conflict = OnConflict::column(model_costs::Column::ModelId)
             .update_columns([
@@ -46,9 +58,15 @@ impl ModelCostsDao {
             ])
             .to_owned();
 
-        model_costs::Entity::insert_many(active_models)
-            .on_conflict(on_conflict)
-            .exec(&self.db)
+        for model in active_models {
+            trace!("Processing {:?}", model.model_id);
+            model_costs::Entity::insert(model)
+                .on_conflict(on_conflict.clone())
+                .exec(&tx)
+                .await
+                .map_err(|e| DatabaseError::Database(e.to_string()))?;
+        }
+        tx.commit()
             .await
             .map_err(|e| DatabaseError::Database(e.to_string()))?;
 
