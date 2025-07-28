@@ -1,10 +1,9 @@
-pub mod aws_http;
-
+use crate::aws::bedrock::{BedrockRuntime, BedrockResponse};
 use crate::{
-    config::Config, cost_tracking::CostTrackingService, database::DatabaseManager, error::AppError,
+    aws::bedrock::BedrockStreamResponse, config::Config, cost_tracking::CostTrackingService,
+    database::DatabaseManager, error::AppError,
 };
 use async_trait::async_trait;
-use aws_http::{AwsHttpClient, AwsResponse};
 use axum::http::HeaderMap;
 use bytes::Bytes;
 use futures_util::StreamExt;
@@ -20,7 +19,7 @@ pub trait AwsClientTrait: Send + Sync {
         content_type: Option<&str>,
         accept: Option<&str>,
         body: Vec<u8>,
-    ) -> Result<AwsResponse, AppError>;
+    ) -> Result<BedrockResponse, AppError>;
 
     async fn invoke_model_with_response_stream(
         &self,
@@ -29,21 +28,21 @@ pub trait AwsClientTrait: Send + Sync {
         content_type: Option<&str>,
         accept: Option<&str>,
         body: Vec<u8>,
-    ) -> Result<aws_http::AwsStreamResponse, AppError>;
+    ) -> Result<BedrockStreamResponse, AppError>;
 
     fn health_checker(&self) -> Arc<dyn crate::health::HealthChecker>;
 }
 
 // Implement the trait for the real AWS client
 #[async_trait]
-impl AwsClientTrait for AwsHttpClient {
+impl AwsClientTrait for BedrockRuntime {
     async fn invoke_model(
         &self,
         model_id: &str,
         content_type: Option<&str>,
         accept: Option<&str>,
         body: Vec<u8>,
-    ) -> Result<AwsResponse, AppError> {
+    ) -> Result<BedrockResponse, AppError> {
         self.invoke_model(model_id, content_type, accept, body)
             .await
     }
@@ -55,18 +54,16 @@ impl AwsClientTrait for AwsHttpClient {
         content_type: Option<&str>,
         accept: Option<&str>,
         body: Vec<u8>,
-    ) -> Result<aws_http::AwsStreamResponse, AppError> {
+    ) -> Result<BedrockStreamResponse, AppError> {
         self.invoke_model_with_response_stream(model_id, headers, content_type, accept, body)
             .await
     }
 
     fn health_checker(&self) -> Arc<dyn crate::health::HealthChecker> {
-        Arc::new(AwsHttpClient::health_checker(self))
+        Arc::new(BedrockRuntime::health_checker(self))
     }
 }
 
-// Re-export AwsHttpClient for binaries (e2e client needs direct access)
-pub use aws_http::AwsHttpClient as BinaryAwsHttpClient;
 use axum::http::StatusCode;
 use chrono::Utc;
 use std::{sync::Arc, time::Instant};
@@ -147,7 +144,7 @@ pub struct UsageMetadata {
 
 impl ModelService {
     pub fn new(database: Arc<DatabaseManager>, config: Config) -> Self {
-        let aws_client = AwsHttpClient::new(config.aws.clone());
+        let aws_client = BedrockRuntime::new(config.aws.clone());
         Self {
             aws_client: Box::new(aws_client),
             database,
@@ -574,7 +571,8 @@ mod tests {
     use super::*;
     use crate::{
         Server,
-        config::{AwsConfig, Config},
+        aws::config::AwsConfig,
+        config::Config,
         database::{UsageQuery, entities::*},
     };
 
@@ -593,9 +591,9 @@ mod tests {
 
     async fn create_test_server() -> (Server, Config) {
         let mut config = create_test_config();
-        config.storage.redis.enabled = false;
-        config.storage.database.enabled = true;
-        config.storage.database.url = "sqlite::memory:".to_string();
+        config.cache.backend = "memory".to_string();
+        config.database.enabled = true;
+        config.database.url = "sqlite::memory:".to_string();
         config.metrics.enabled = false;
 
         let server = Server::new(config.clone()).await.unwrap();

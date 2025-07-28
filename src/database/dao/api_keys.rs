@@ -73,38 +73,35 @@ impl ApiKeysDao {
     }
 
     /// Update last used timestamp for an API key
-    pub async fn update_last_used(&self, key_hash: &str) -> DatabaseResult<()> {
-        let key = api_keys::Entity::find()
-            .filter(api_keys::Column::KeyHash.eq(key_hash))
-            .one(&self.db)
-            .await
-            .map_err(|e| DatabaseError::Database(e.to_string()))?
-            .ok_or(DatabaseError::NotFound)?;
+    pub async fn update_last_used(&self, key: ApiKeyRecord) -> DatabaseResult<ApiKeyRecord> {
+        let active_model = api_keys::ActiveModel {
+            id: Set(key.id),
+            last_used: Set(Some(Utc::now())),
+            ..Default::default()
+        };
 
-        let mut active_model = api_keys::ActiveModel::from(key);
-        active_model.last_used = Set(Some(Utc::now()));
-
-        active_model
+        let updated_key = active_model
             .update(&self.db)
             .await
             .map_err(|e| DatabaseError::Database(e.to_string()))?;
 
-        Ok(())
+        Ok(updated_key)
     }
 
     /// Revoke an API key
-    pub async fn revoke(&self, key_hash: &str) -> DatabaseResult<()> {
-        let key = self.find_by_hash(key_hash).await?.ok_or(DatabaseError::NotFound)?;
+    pub async fn revoke(&self, key: ApiKeyRecord) -> DatabaseResult<ApiKeyRecord> {
+        let active_model = api_keys::ActiveModel {
+            id: Set(key.id),
+            revoked_at: Set(Some(Utc::now())),
+            ..Default::default()
+        };
 
-        let mut active_model = api_keys::ActiveModel::from(key);
-        active_model.revoked_at = Set(Some(Utc::now()));
-
-        active_model
+        let ret = active_model
             .update(&self.db)
             .await
             .map_err(|e| DatabaseError::Database(e.to_string()))?;
 
-        Ok(())
+        Ok(ret)
     }
 
     /// Clean up expired or revoked API keys

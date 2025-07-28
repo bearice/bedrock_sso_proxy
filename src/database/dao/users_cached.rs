@@ -87,13 +87,13 @@ impl CachedUsersDao {
     }
 
     /// Update last login timestamp with cache invalidation
-    pub async fn update_last_login(&self, user_id: i32) -> DatabaseResult<()> {
+    pub async fn update_last_login(&self, user: UserRecord) -> DatabaseResult<UserRecord> {
         // Generate cache keys that might be affected
-        let cache_keys = vec![self.key_builder.id_key(user_id)];
+        let cache_keys = vec![self.key_builder.id_key(user.id)];
 
         self.cached_dao
             .update_and_invalidate(
-                || async { self.cached_dao.inner().update_last_login(user_id).await },
+                || async { self.cached_dao.inner().update_last_login(user).await },
                 &cache_keys,
             )
             .await

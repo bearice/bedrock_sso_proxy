@@ -1,6 +1,7 @@
 use crate::{
     auth::{
         api_key::{ApiKey, ApiKeyInfo, CreateApiKeyRequest, CreateApiKeyResponse},
+        hash_api_key,
         middleware::UserExtractor,
     },
     error::AppError,
@@ -19,7 +20,7 @@ pub fn create_api_key_routes() -> Router<Server> {
     Router::new()
         .route("/", post(create_api_key))
         .route("/", get(list_api_keys))
-        .route("/{key_id}", delete(revoke_api_key))
+        .route("/{key}", delete(revoke_api_key))
 }
 
 /// Create a new API key for the authenticated user
@@ -105,33 +106,31 @@ pub async fn list_api_keys(
 pub async fn revoke_api_key(
     State(server): State<Server>,
     UserExtractor(user): UserExtractor,
-    Path(key_id): Path<i32>,
+    Path(key_str): Path<String>,
 ) -> Result<Json<serde_json::Value>, AppError> {
-    // Verify the API key belongs to the user
-    let api_keys = server
+    let key_hash = hash_api_key(&key_str);
+    let key = server
         .database
         .api_keys()
-        .find_by_user(user.id)
+        .find_by_hash(&key_hash)
         .await
-        .map_err(|e| AppError::Internal(format!("Failed to get API keys: {}", e)))?;
+        .map_err(AppError::Database)?
+        .ok_or_else(|| AppError::NotFound("Key not found".to_string()))?;
 
-    let key = api_keys.iter().find(|key| key.id == key_id);
-    if key.is_none() {
-        return Err(AppError::NotFound("API key not found".to_string()));
+    if key.user_id != user.id {
+        return Err(AppError::Forbidden("Owner mismatch".to_string()));
     }
-    let key = key.unwrap();
-
     // Revoke the API key
     server
         .database
         .api_keys()
-        .revoke(&key.key_hash)
+        .revoke(key)
         .await
         .map_err(|e| AppError::Internal(format!("Failed to revoke API key: {}", e)))?;
 
     Ok(Json(serde_json::json!({
         "message": "API key revoked successfully",
-        "key_id": key_id
+        "key": key_str
     })))
 }
 
@@ -157,9 +156,9 @@ mod tests {
 
     async fn create_test_components() -> (Arc<DatabaseManager>, Arc<CacheManager>) {
         let mut config = Config::default();
-        config.storage.redis.enabled = false;
-        config.storage.database.enabled = true;
-        config.storage.database.url = "sqlite::memory:".to_string();
+        config.cache.backend = "memory".to_string();
+        config.database.enabled = true;
+        config.database.url = "sqlite::memory:".to_string();
 
         let cache = Arc::new(CacheManager::new_memory());
         let database = Arc::new(

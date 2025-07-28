@@ -101,21 +101,18 @@ impl UsersDao {
     }
 
     /// Update last login timestamp
-    pub async fn update_last_login(&self, user_id: i32) -> DatabaseResult<()> {
-        let user = users::Entity::find_by_id(user_id)
-            .one(&self.db)
-            .await
-            .map_err(|e| DatabaseError::Database(e.to_string()))?
-            .ok_or(DatabaseError::NotFound)?;
+    pub async fn update_last_login(&self, user: UserRecord) -> DatabaseResult<UserRecord> {
+        let active_model = users::ActiveModel {
+            id: Set(user.id),
+            last_login: Set(Some(Utc::now())),
+            ..Default::default()
+        };
 
-        let mut active_model = users::ActiveModel::from(user);
-        active_model.last_login = Set(Some(Utc::now()));
-
-        active_model
+        let updated_user = active_model
             .update(&self.db)
             .await
             .map_err(|e| DatabaseError::Database(e.to_string()))?;
 
-        Ok(())
+        Ok(updated_user)
     }
 }

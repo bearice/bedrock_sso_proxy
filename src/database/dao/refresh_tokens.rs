@@ -76,23 +76,19 @@ impl RefreshTokensDao {
     }
 
     /// Revoke refresh token
-    pub async fn revoke(&self, token_hash: &str) -> DatabaseResult<()> {
-        let token = refresh_tokens::Entity::find()
-            .filter(refresh_tokens::Column::TokenHash.eq(token_hash))
-            .one(&self.db)
-            .await
-            .map_err(|e| DatabaseError::Database(e.to_string()))?
-            .ok_or(DatabaseError::NotFound)?;
+    pub async fn revoke(&self, token: RefreshTokenData) -> DatabaseResult<RefreshTokenData> {
+        let active_model = refresh_tokens::ActiveModel {
+            id: Set(token.id),
+            revoked_at: Set(Some(Utc::now())),
+            ..Default::default()
+        };
 
-        let mut active_model = refresh_tokens::ActiveModel::from(token);
-        active_model.revoked_at = Set(Some(Utc::now()));
-
-        active_model
+        let updated_token = active_model
             .update(&self.db)
             .await
             .map_err(|e| DatabaseError::Database(e.to_string()))?;
 
-        Ok(())
+        Ok(updated_token)
     }
 
     /// Clean up expired tokens

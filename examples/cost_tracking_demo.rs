@@ -1,4 +1,3 @@
-use axum::http::HeaderMap;
 /// Cost Tracking Demonstration
 ///
 /// This example shows how the cost tracking system works:
@@ -6,12 +5,19 @@ use axum::http::HeaderMap;
 /// 2. Simulate model usage and automatic cost calculation
 /// 3. Demonstrate cost update from AWS Price List API
 /// 4. Show cost summary and management
+use std::sync::Arc;
+
+use axum::http::HeaderMap;
 use bedrock_sso_proxy::{
-    cache::CacheManager, config::{AwsConfig, Config}, cost_tracking::CostTrackingService, database::{entities::StoredModelCost, DatabaseManager}, model_service::{ModelRequest, ModelService, UsageMetadata}
+    cache::CacheManager,
+    config::Config,
+    aws::config::AwsConfig,
+    cost_tracking::CostTrackingService,
+    database::{DatabaseManager, entities::StoredModelCost},
+    model_service::{ModelRequest, ModelService, UsageMetadata},
 };
 use chrono::Utc;
 use rust_decimal::Decimal;
-use std::sync::Arc;
 use tracing::{Level, info};
 
 #[tokio::main]
@@ -32,10 +38,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         },
         ..Default::default()
     };
-    config.storage.database.enabled = true;
-    config.storage.database.url = "sqlite::memory:".to_string();
+    config.database.enabled = true;
+    config.database.url = "sqlite::memory:".to_string();
     let cache = Arc::new(CacheManager::new_memory());
-    let database = Arc::new(DatabaseManager::new_from_config(&config,cache).await.unwrap());
+    let database = Arc::new(
+        DatabaseManager::new_from_config(&config, cache)
+            .await
+            .unwrap(),
+    );
 
     // Run database migrations
     database.migrate().await?;

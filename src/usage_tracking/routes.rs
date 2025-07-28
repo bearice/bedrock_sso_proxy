@@ -390,9 +390,9 @@ mod tests {
     async fn test_create_user_usage_routes() {
         async fn create_test_server() -> crate::server::Server {
             let mut config = crate::config::Config::default();
-            config.storage.redis.enabled = false;
-            config.storage.database.enabled = true;
-            config.storage.database.url = "sqlite::memory:".to_string();
+            config.cache.backend = "memory".to_string();
+            config.database.enabled = true;
+            config.database.url = "sqlite::memory:".to_string();
             config.metrics.enabled = false;
 
             let server = crate::server::Server::new(config).await.unwrap();

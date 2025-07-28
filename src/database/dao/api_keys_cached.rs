@@ -61,27 +61,27 @@ impl CachedApiKeysDao {
     }
 
     /// Update last used timestamp with cache invalidation
-    pub async fn update_last_used(&self, key_hash: &str) -> DatabaseResult<()> {
+    pub async fn update_last_used(&self, key: ApiKeyRecord) -> DatabaseResult<ApiKeyRecord> {
         // Generate cache keys that might be affected
-        let cache_keys = vec![self.key_builder.hash_key(key_hash)];
+        let cache_keys = vec![self.key_builder.hash_key(&key.key_hash)];
 
         self.cached_dao
             .update_and_invalidate(
-                || async { self.cached_dao.inner().update_last_used(key_hash).await },
+                || async { self.cached_dao.inner().update_last_used(key).await },
                 &cache_keys,
             )
             .await
     }
 
     /// Revoke an API key with cache invalidation
-    pub async fn revoke(&self, key_hash: &str) -> DatabaseResult<()> {
+    pub async fn revoke(&self, key: ApiKeyRecord) -> DatabaseResult<ApiKeyRecord> {
         // Generate cache keys that need to be invalidated
-        let cache_keys = vec![self.key_builder.hash_key(key_hash)];
+        let cache_keys = vec![self.key_builder.hash_key(&key.key_hash)];
 
         // Perform the revocation with proper cache invalidation
         self.cached_dao
             .update_and_invalidate(
-                || async { self.cached_dao.inner().revoke(key_hash).await },
+                || async { self.cached_dao.inner().revoke(key).await },
                 &cache_keys,
             )
             .await

@@ -1,4 +1,4 @@
-use crate::config::AwsConfig;
+use crate::aws::config::AwsConfig;
 use crate::error::AppError;
 use crate::health::{HealthCheckResult, HealthChecker};
 use aws_credential_types::Credentials;
@@ -13,14 +13,14 @@ use std::time::SystemTime;
 use url::Url;
 
 #[derive(Clone)]
-pub struct AwsHttpClient {
+pub struct BedrockRuntime {
     client: Client,
     config: AwsConfig,
     base_url: String,
 }
 
 #[derive(Debug)]
-pub struct AwsRequest {
+pub struct BedrockRequest {
     pub method: String,
     pub url: String,
     pub headers: HeaderMap,
@@ -28,19 +28,19 @@ pub struct AwsRequest {
 }
 
 #[derive(Debug)]
-pub struct AwsResponse {
+pub struct BedrockResponse {
     pub status: StatusCode,
     pub headers: HeaderMap,
     pub body: Vec<u8>,
 }
 
-pub struct AwsStreamResponse {
+pub struct BedrockStreamResponse {
     pub status: StatusCode,
     pub headers: HeaderMap,
     pub stream: Box<dyn Stream<Item = Result<Bytes, reqwest::Error>> + Send + Unpin>,
 }
 
-impl AwsHttpClient {
+impl BedrockRuntime {
     pub fn new(config: AwsConfig) -> Self {
         let client = Client::new();
         let base_url = format!("https://bedrock-runtime.{}.amazonaws.com", config.region);
@@ -71,7 +71,7 @@ impl AwsHttpClient {
         content_type: Option<&str>,
         accept: Option<&str>,
         body: Vec<u8>,
-    ) -> Result<AwsResponse, AppError> {
+    ) -> Result<BedrockResponse, AppError> {
         let path = format!("/model/{}/invoke", model_id);
         let url = format!("{}{}", self.base_url, path);
 
@@ -91,7 +91,7 @@ impl AwsHttpClient {
         }
 
         // Create AWS request structure
-        let aws_request = AwsRequest {
+        let aws_request = BedrockRequest {
             method: "POST".to_string(),
             url: url.clone(),
             headers: headers.clone(),
@@ -116,7 +116,7 @@ impl AwsHttpClient {
         let response_headers = self.convert_reqwest_headers(response.headers());
         let response_body = response.bytes().await?.to_vec();
 
-        Ok(AwsResponse {
+        Ok(BedrockResponse {
             status,
             headers: response_headers,
             body: response_body,
@@ -131,7 +131,7 @@ impl AwsHttpClient {
         content_type: Option<&str>,
         accept: Option<&str>,
         body: Vec<u8>,
-    ) -> Result<AwsStreamResponse, AppError> {
+    ) -> Result<BedrockStreamResponse, AppError> {
         let path = format!("/model/{}/invoke-with-response-stream", model_id);
         let url = format!("{}{}", self.base_url, path);
 
@@ -168,7 +168,7 @@ impl AwsHttpClient {
                 HeaderValue::from_static("text/event-stream"),
             );
 
-            return Ok(AwsStreamResponse {
+            return Ok(BedrockStreamResponse {
                 status: StatusCode::OK,
                 headers: response_headers,
                 stream: Box::new(mock_stream),
@@ -176,7 +176,7 @@ impl AwsHttpClient {
         }
 
         // Create AWS request
-        let aws_request = AwsRequest {
+        let aws_request = BedrockRequest {
             method: "POST".to_string(),
             url: url.clone(),
             headers: processed_headers.clone(),
@@ -206,7 +206,7 @@ impl AwsHttpClient {
         let response_headers = self.convert_reqwest_headers(response.headers());
         let stream = Box::new(response.bytes_stream());
 
-        Ok(AwsStreamResponse {
+        Ok(BedrockStreamResponse {
             status,
             headers: response_headers,
             stream,
@@ -214,7 +214,7 @@ impl AwsHttpClient {
     }
 
     /// Authenticate AWS request using Bearer token or SigV4
-    async fn authenticate_request(&self, request: &AwsRequest) -> Result<HeaderMap, AppError> {
+    async fn authenticate_request(&self, request: &BedrockRequest) -> Result<HeaderMap, AppError> {
         if let Some(bearer_token) = &self.config.bearer_token {
             self.add_bearer_token(request, bearer_token).await
         } else {
@@ -225,7 +225,7 @@ impl AwsHttpClient {
     /// Add Bearer token authentication to request
     async fn add_bearer_token(
         &self,
-        request: &AwsRequest,
+        request: &BedrockRequest,
         bearer_token: &str,
     ) -> Result<HeaderMap, AppError> {
         let mut headers = request.headers.clone();
@@ -237,7 +237,7 @@ impl AwsHttpClient {
     }
 
     /// Sign AWS request using aws-sigv4 library
-    async fn sign_request(&self, request: &AwsRequest) -> Result<HeaderMap, AppError> {
+    async fn sign_request(&self, request: &BedrockRequest) -> Result<HeaderMap, AppError> {
         let access_key = self
             .config
             .access_key_id
@@ -349,20 +349,20 @@ impl AwsHttpClient {
     }
 
     /// Create a health checker for this AWS client
-    pub fn health_checker(&self) -> AwsHealthChecker {
-        AwsHealthChecker {
+    pub fn health_checker(&self) -> BedrockHealthChecker {
+        BedrockHealthChecker {
             client: self.clone(),
         }
     }
 }
 
 /// Health checker implementation for AWS Bedrock connection
-pub struct AwsHealthChecker {
-    client: AwsHttpClient,
+pub struct BedrockHealthChecker {
+    client: BedrockRuntime,
 }
 
 #[async_trait::async_trait]
-impl HealthChecker for AwsHealthChecker {
+impl HealthChecker for BedrockHealthChecker {
     fn name(&self) -> &str {
         "aws_bedrock"
     }
@@ -406,7 +406,7 @@ impl HealthChecker for AwsHealthChecker {
     }
 }
 
-impl AwsHttpClient {
+impl BedrockRuntime {
     /// Process headers for forwarding to AWS, removing sensitive headers
     pub fn process_headers_for_aws(headers: &HeaderMap) -> HeaderMap {
         let mut forwarded_headers = HeaderMap::new();
@@ -459,7 +459,7 @@ mod tests {
             profile: None,
             bearer_token: None,
         };
-        let client = AwsHttpClient::new(config);
+        let client = BedrockRuntime::new(config);
         assert_eq!(
             client.base_url,
             "https://bedrock-runtime.us-east-1.amazonaws.com"
@@ -468,7 +468,7 @@ mod tests {
 
     #[test]
     fn test_aws_http_client_test_creation() {
-        let client = AwsHttpClient::new_test();
+        let client = BedrockRuntime::new_test();
         assert_eq!(
             client.base_url,
             "https://bedrock-runtime.us-east-1.amazonaws.com"
@@ -477,7 +477,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_health_check_with_credentials() {
-        let client = AwsHttpClient::new_test();
+        let client = BedrockRuntime::new_test();
         let result = client.health_check().await;
         assert!(result.is_ok());
     }
@@ -491,14 +491,14 @@ mod tests {
             profile: None,
             bearer_token: None,
         };
-        let client = AwsHttpClient::new(config);
+        let client = BedrockRuntime::new(config);
         let result = client.health_check().await;
         assert!(result.is_err());
     }
 
     #[test]
     fn test_get_host() {
-        let client = AwsHttpClient::new_test();
+        let client = BedrockRuntime::new_test();
         assert_eq!(client.get_host(), "bedrock-runtime.us-east-1.amazonaws.com");
     }
 
@@ -510,7 +510,7 @@ mod tests {
         headers.insert("x-custom-header", HeaderValue::from_static("custom-value"));
         headers.insert("host", HeaderValue::from_static("example.com"));
 
-        let processed = AwsHttpClient::process_headers_for_aws(&headers);
+        let processed = BedrockRuntime::process_headers_for_aws(&headers);
 
         assert!(!processed.contains_key("authorization"));
         assert!(!processed.contains_key("host"));
@@ -526,7 +526,7 @@ mod tests {
         headers.insert("x-custom-header", HeaderValue::from_static("custom-value"));
         headers.insert("server", HeaderValue::from_static("nginx"));
 
-        let processed = AwsHttpClient::process_headers_from_aws(&headers);
+        let processed = BedrockRuntime::process_headers_from_aws(&headers);
 
         assert!(!processed.contains_key("x-amz-request-id"));
         assert!(!processed.contains_key("server"));
@@ -536,7 +536,7 @@ mod tests {
 
     #[test]
     fn test_convert_reqwest_headers() {
-        let client = AwsHttpClient::new_test();
+        let client = BedrockRuntime::new_test();
         let mut reqwest_headers = reqwest::header::HeaderMap::new();
         reqwest_headers.insert("content-type", "application/json".parse().unwrap());
         reqwest_headers.insert("x-custom", "value".parse().unwrap());
@@ -550,7 +550,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_invoke_model_with_test_client() {
-        let client = AwsHttpClient::new_test();
+        let client = BedrockRuntime::new_test();
 
         // Test that we can create the client and make a call
         // With test credentials, we expect to get a proper HTTP response (likely 403 Forbidden)
@@ -577,7 +577,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_invoke_model_with_response_stream_mock() {
-        let client = AwsHttpClient::new_test();
+        let client = BedrockRuntime::new_test();
         let headers = HeaderMap::new();
 
         let result = client
@@ -609,9 +609,9 @@ mod tests {
             profile: None,
             bearer_token: None,
         };
-        let client = AwsHttpClient::new(config);
+        let client = BedrockRuntime::new(config);
 
-        let request = AwsRequest {
+        let request = BedrockRequest {
             method: "POST".to_string(),
             url: "https://bedrock-runtime.us-east-1.amazonaws.com/model/test/invoke".to_string(),
             headers: HeaderMap::new(),
@@ -637,9 +637,9 @@ mod tests {
             profile: None,
             bearer_token: None,
         };
-        let client = AwsHttpClient::new(config);
+        let client = BedrockRuntime::new(config);
 
-        let request = AwsRequest {
+        let request = BedrockRequest {
             method: "POST".to_string(),
             url: "https://bedrock-runtime.us-east-1.amazonaws.com/model/test/invoke".to_string(),
             headers: HeaderMap::new(),
@@ -663,7 +663,7 @@ mod tests {
         headers.insert("content-length", HeaderValue::from_static("100"));
         headers.insert("content-type", HeaderValue::from_static("application/json"));
 
-        let processed = AwsHttpClient::process_headers_for_aws(&headers);
+        let processed = BedrockRuntime::process_headers_for_aws(&headers);
 
         assert!(!processed.contains_key("authorization"));
         assert!(!processed.contains_key("content-length"));
@@ -680,7 +680,7 @@ mod tests {
         );
         headers.insert("x-amz-id-2", HeaderValue::from_static("some-id"));
 
-        let processed = AwsHttpClient::process_headers_from_aws(&headers);
+        let processed = BedrockRuntime::process_headers_from_aws(&headers);
 
         assert!(!processed.contains_key("date"));
         assert!(!processed.contains_key("x-amz-id-2"));
@@ -696,7 +696,7 @@ mod tests {
             profile: None,
             bearer_token: Some("ABSK-1234567890abcdef1234567890abcdef12345678".to_string()),
         };
-        let client = AwsHttpClient::new(config);
+        let client = BedrockRuntime::new(config);
         let result = client.health_check().await;
         assert!(result.is_ok());
     }
@@ -710,7 +710,7 @@ mod tests {
             profile: None,
             bearer_token: None,
         };
-        let client = AwsHttpClient::new(config);
+        let client = BedrockRuntime::new(config);
         let result = client.health_check().await;
         assert!(result.is_err());
         assert!(
@@ -730,12 +730,12 @@ mod tests {
             profile: None,
             bearer_token: Some("ABSK-1234567890abcdef1234567890abcdef12345678".to_string()),
         };
-        let client = AwsHttpClient::new(config);
+        let client = BedrockRuntime::new(config);
 
         let mut headers = HeaderMap::new();
         headers.insert("content-type", HeaderValue::from_static("application/json"));
 
-        let request = AwsRequest {
+        let request = BedrockRequest {
             method: "POST".to_string(),
             url: "https://bedrock-runtime.us-east-1.amazonaws.com/model/test/invoke".to_string(),
             headers,

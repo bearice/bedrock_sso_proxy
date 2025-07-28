@@ -13,6 +13,7 @@ use thiserror::Error;
 pub mod dao;
 pub mod entities;
 pub mod migration;
+pub mod config;
 
 pub use dao::{
     ApiKeysDao, AuditLogsDao, CachedApiKeysDao, CachedUsersDao, ModelCostsDao, RefreshTokensDao,
@@ -46,7 +47,7 @@ impl DatabaseManager {
         config: &Config,
         cache_manager: Arc<CacheManager>,
     ) -> Result<Self, DatabaseError> {
-        let connection = sea_orm::Database::connect(&config.storage.database.url)
+        let connection = sea_orm::Database::connect(&config.database.url)
             .await
             .map_err(|e| DatabaseError::Database(e.to_string()))?;
 
@@ -127,9 +128,7 @@ impl DatabaseManager {
         let users = self.users().get_cache_stats();
         let api_keys = self.api_keys().get_cache_stats();
 
-        Some(CacheStats {
-            users, api_keys,
-        })
+        Some(CacheStats { users, api_keys })
     }
 }
 

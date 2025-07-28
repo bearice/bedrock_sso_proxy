@@ -8,10 +8,12 @@ use thiserror::Error;
 mod memory;
 mod redis;
 pub mod typed;
+pub mod config;
 
 pub use typed::{CachedObject, TypedCache, TypedCacheStats, typed_cache};
 
-use crate::{config::CacheConfig, health::HealthChecker};
+use crate::health::HealthChecker;
+use crate::cache::config::CacheConfig;
 
 /// Cache error types
 #[derive(Error, Debug)]
@@ -80,11 +82,11 @@ impl CacheManager {
     pub async fn new_from_config(config: &CacheConfig) -> CacheResult<Self> {
         match config.backend.as_str() {
             "redis" => {
-                let redis = redis::RedisCache::new(
-                    &config.redis_url,
-                    config.redis_key_prefix.clone(),
-                )?;
-                Ok(Self{backend:CacheBackend::Redis(redis)})
+                let redis =
+                    redis::RedisCache::new(&config.redis_url, config.redis_key_prefix.clone())?;
+                Ok(Self {
+                    backend: CacheBackend::Redis(redis),
+                })
             }
             _ => Ok(Self::new_memory()),
         }
@@ -163,30 +165,28 @@ impl HealthChecker for CacheManager {
         match &self.backend {
             CacheBackend::Memory(_) => {
                 // Memory cache always passes health check
-                crate::health::HealthCheckResult::healthy_with_details(
-                    serde_json::json!({
-                        "backend": "memory",
-                        "status": "healthy"
-                    })
-                )
+                crate::health::HealthCheckResult::healthy_with_details(serde_json::json!({
+                    "backend": "memory",
+                    "status": "healthy"
+                }))
             }
             CacheBackend::Redis(redis_cache) => {
                 // Use the Redis health check function
                 match redis_cache.health_check().await {
-                    Ok(_) => crate::health::HealthCheckResult::healthy_with_details(
-                        serde_json::json!({
+                    Ok(_) => {
+                        crate::health::HealthCheckResult::healthy_with_details(serde_json::json!({
                             "backend": "redis",
                             "status": "healthy",
                             "connection": "ok"
-                        })
-                    ),
+                        }))
+                    }
                     Err(err) => crate::health::HealthCheckResult::unhealthy_with_details(
                         "Redis health check failed".to_string(),
                         serde_json::json!({
                             "backend": "redis",
                             "status": "unhealthy",
                             "error": err.to_string()
-                        })
+                        }),
                     ),
                 }
             }

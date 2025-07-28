@@ -327,7 +327,9 @@ mod tests {
     use super::*;
     use crate::{
         auth::{jwt::JwtService, oauth::OAuthService},
-        config::{CacheConfig, Config, JwtConfig, OAuthConfig, OAuthProvider},
+        config::Config,
+        cache::config::CacheConfig,
+        auth::config::{JwtConfig, OAuthConfig, OAuthProvider},
     };
     use axum::{
         body::Body,
@@ -377,9 +379,9 @@ mod tests {
         };
 
         let mut db_config = crate::config::Config::default();
-        db_config.storage.redis.enabled = false;
-        db_config.storage.database.enabled = true;
-        db_config.storage.database.url = "sqlite::memory:".to_string();
+        db_config.cache.backend = "memory".to_string();
+        db_config.database.enabled = true;
+        db_config.database.url = "sqlite::memory:".to_string();
 
         let cache = Arc::new(crate::cache::CacheManager::new_memory());
         let database = Arc::new(

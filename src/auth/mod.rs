@@ -3,6 +3,7 @@ pub mod jwt;
 pub mod middleware;
 pub mod oauth;
 pub mod request_context;
+pub mod config;
 
 pub use api_key::*;
 pub use jwt::*;

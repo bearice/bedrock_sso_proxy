@@ -396,21 +396,21 @@ mod tests {
         let models = source.get_all_models().await.unwrap();
 
         // Should return models from CSV data for us-east-1
-        println!("Loaded {} models from CSV for us-east-1", models.len());
+        debug!("Loaded {} models from CSV for us-east-1", models.len());
         assert!(!models.is_empty());
     }
 
     #[tokio::test]
     async fn test_batch_update_data() {
         let batch_data = CsvPricingSource::get_batch_update_data().await.unwrap();
-        println!("Loaded {} models for batch update", batch_data.len());
+        debug!("Loaded {} models for batch update", batch_data.len());
         assert!(!batch_data.is_empty());
     }
 
     #[test]
     fn test_available_regions() {
         let regions = CsvPricingSource::get_available_regions();
-        println!("Available regions: {:?}", regions);
+        debug!("Available regions: {:?}", regions);
         assert!(!regions.is_empty());
         assert!(regions.contains(&"us-east-1".to_string()));
     }

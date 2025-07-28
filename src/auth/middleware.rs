@@ -1,8 +1,7 @@
 use crate::auth::jwt::JwtService;
-use crate::config::Config;
 use crate::database::DatabaseManager;
 use crate::database::entities::UserRecord;
-use crate::database::entities::api_keys::{hash_api_key, validate_api_key_format};
+use crate::database::entities::api_keys::{hash_api_key, validate_api_key_format, API_KEY_PREFIX};
 use crate::error::AppError;
 use crate::server::Server;
 use axum::{
@@ -27,14 +26,14 @@ pub async fn auth_middleware(
     let user = if let Some(auth_header) = request.headers().get(AUTHORIZATION) {
         if let Ok(auth_str) = auth_header.to_str() {
             if let Some(token) = auth_str.strip_prefix("Bearer ") {
-                // Check if it's an API key (has the configured prefix)
-                if token.starts_with(&server.config.api_keys.prefix) {
+                // Check if it's an API key (has the SSOK_ prefix)
+                if token.starts_with(API_KEY_PREFIX) {
                     if !server.config.api_keys.enabled {
                         return Err(AppError::Unauthorized(
                             "API key authentication is disabled".to_string(),
                         ));
                     }
-                    authenticate_with_api_key(token, &server.database, &server.config).await?
+                    authenticate_with_api_key(token, &server.database).await?
                 } else {
                     // Try JWT authentication
                     authenticate_with_jwt(token, &server.database, &server.jwt_service).await?
@@ -57,7 +56,7 @@ pub async fn auth_middleware(
             ));
         }
         if let Ok(api_key) = api_key_header.to_str() {
-            authenticate_with_api_key(api_key, &server.database, &server.config).await?
+            authenticate_with_api_key(api_key, &server.database).await?
         } else {
             return Err(AppError::Unauthorized("Invalid API key header".to_string()));
         }
@@ -95,10 +94,9 @@ async fn authenticate_with_jwt(
 async fn authenticate_with_api_key(
     api_key: &str,
     database: &Arc<DatabaseManager>,
-    config: &Arc<Config>,
 ) -> Result<UserRecord, AppError> {
     // Validate API key format
-    validate_api_key_format(api_key, &config.api_keys.prefix)?;
+    validate_api_key_format(api_key, API_KEY_PREFIX)?;
 
     // Hash the API key for database lookup
     let key_hash = hash_api_key(api_key);
@@ -279,9 +277,9 @@ mod tests {
 
     async fn create_test_server() -> crate::server::Server {
         let mut config = crate::config::Config::default();
-        config.storage.redis.enabled = false;
-        config.storage.database.enabled = true;
-        config.storage.database.url = "sqlite::memory:".to_string(); // Use in-memory database
+        config.cache.backend = "memory".to_string();
+        config.database.enabled = true;
+        config.database.url = "sqlite::memory:".to_string(); // Use in-memory database
         config.metrics.enabled = false;
 
         let server = crate::server::Server::new(config).await.unwrap();
@@ -535,9 +533,9 @@ mod tests {
         ) -> crate::server::Server {
             let mut config = Config::default();
             config.admin.emails = admin_emails;
-            config.storage.redis.enabled = false;
-            config.storage.database.enabled = true;
-            config.storage.database.url = "sqlite::memory:".to_string(); // Use in-memory database
+            config.cache.backend = "memory".to_string();
+            config.database.enabled = true;
+            config.database.url = "sqlite::memory:".to_string(); // Use in-memory database
             config.metrics.enabled = false;
 
             let server = crate::server::Server::new(config).await.unwrap();

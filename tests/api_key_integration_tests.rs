@@ -13,9 +13,9 @@ use tower::ServiceExt;
 
 async fn create_test_server() -> Server {
     let mut config = Config::default();
-    config.storage.redis.enabled = false;
-    config.storage.database.enabled = true;
-    config.storage.database.url = "sqlite::memory:".to_string();
+    config.cache.backend = "memory".to_string();
+    config.database.enabled = true;
+    config.database.url = "sqlite::memory:".to_string();
     config.metrics.enabled = false;
     config.api_keys.enabled = true;
 
@@ -161,9 +161,9 @@ async fn test_invalid_api_key_authentication() {
 #[tokio::test]
 async fn test_api_key_disabled() {
     let mut config = Config::default();
-    config.storage.redis.enabled = false;
-    config.storage.database.enabled = true;
-    config.storage.database.url = "sqlite::memory:".to_string();
+    config.cache.backend = "memory".to_string();
+    config.database.enabled = true;
+    config.database.url = "sqlite::memory:".to_string();
     config.metrics.enabled = false;
     config.api_keys.enabled = false; // Disable API keys
 
@@ -216,11 +216,10 @@ async fn test_revoked_api_key_authentication() {
         serde_json::from_slice(&body).unwrap();
 
     let api_key = create_response.key;
-    let key_id = create_response.id;
 
     // Revoke the API key
     let revoke_request = Request::builder()
-        .uri(format!("/api/keys/{}", key_id))
+        .uri(format!("/api/keys/{}", api_key))
         .method("DELETE")
         .header("Authorization", format!("Bearer {}", jwt_token))
         .body(Body::empty())

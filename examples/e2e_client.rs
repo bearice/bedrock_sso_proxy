@@ -1,5 +1,5 @@
 use base64::{Engine as _, engine::general_purpose};
-use bedrock_sso_proxy::{config::Config, model_service::BinaryAwsHttpClient as AwsHttpClient};
+use bedrock_sso_proxy::{config::Config,aws::bedrock::BedrockRuntime};
 use chrono::{Duration, Utc};
 use clap::{Parser, Subcommand};
 use futures_util::stream::StreamExt;
@@ -90,7 +90,7 @@ struct E2EClient {
     client: Client,
     server_url: String,
     jwt_token: String,
-    aws_client: Option<AwsHttpClient>,
+    aws_client: Option<BedrockRuntime>,
     direct_mode: bool,
 }
 
@@ -105,7 +105,7 @@ impl E2EClient {
         let client = Client::new();
 
         let aws_client = if direct_mode {
-            Some(AwsHttpClient::new(config.aws.clone()))
+            Some(BedrockRuntime::new(config.aws.clone()))
         } else {
             None
         };

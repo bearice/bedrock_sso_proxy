@@ -55,9 +55,9 @@ mod tests {
         // Create ModelService for testing and register its AWS health checker
         let mut config = Config::default();
         config.metrics.enabled = false; // Disable metrics for tests
-        config.storage.redis.enabled = false;
-        config.storage.database.enabled = true;
-        config.storage.database.url = "sqlite::memory:".to_string();
+        config.cache.backend = "memory".to_string();
+        config.database.enabled = true;
+        config.database.url = "sqlite::memory:".to_string();
 
         let server = Server::new(config.clone()).await.unwrap();
 

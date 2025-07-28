@@ -201,6 +201,14 @@ cache:
   validation_ttl: 3600
   max_entries: 10000
   cleanup_interval: 3600
+database:
+  enabled: true
+  url: "sqlite://./data/bedrock_sso.db"
+  max_connections: 5
+  migration_on_startup: true
+metrics:
+  enabled: true
+  port: 9090
 ```
 
 ### Environment Variables
@@ -211,6 +219,9 @@ Use `BEDROCK_` prefix with double underscores for nesting:
 - `BEDROCK_CACHE__BACKEND=redis`
 - `BEDROCK_CACHE__REDIS_URL=redis://localhost:6379`
 - `BEDROCK_CACHE__REDIS_KEY_PREFIX=bedrock_sso:`
+- `BEDROCK_DATABASE__URL=sqlite://./data/bedrock_sso.db`
+- `BEDROCK_METRICS__ENABLED=true`
+- `BEDROCK_METRICS__PORT=9090`
 
 ### Cache Configuration
 

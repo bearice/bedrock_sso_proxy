@@ -20,9 +20,9 @@ mod tests {
 
     async fn create_test_server() -> crate::server::Server {
         let mut config = crate::config::Config::default();
-        config.storage.redis.enabled = false;
-        config.storage.database.enabled = true;
-        config.storage.database.url = "sqlite::memory:".to_string(); // Use in-memory database
+        config.cache.backend = "memory".to_string();
+        config.database.enabled = true;
+        config.database.url = "sqlite::memory:".to_string(); // Use in-memory database
         config.metrics.enabled = false;
         // Add admin email for tests
         config.admin.emails = vec!["admin@admin.example.com".to_string()];

@@ -1,5 +1,6 @@
 pub mod anthropic;
 pub mod auth;
+pub mod aws;
 pub mod cache;
 pub mod config;
 pub mod cost_tracking;

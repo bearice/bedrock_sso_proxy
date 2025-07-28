@@ -1,6 +1,13 @@
 use config::{Config as ConfigBuilder, ConfigError, Environment, File};
 use serde::{Deserialize, Serialize};
-use std::{collections::HashMap, path::Path};
+use std::path::Path;
+
+// Import domain-specific config modules
+use crate::auth::config::{AdminConfig, ApiKeyConfig, JwtConfig, OAuthConfig, OAuthProvider};
+use crate::aws::config::AwsConfig;
+use crate::cache::config::CacheConfig;
+use crate::database::config::DatabaseConfig;
+use crate::server::config::{FrontendConfig, LoggingConfig, MetricsConfig, ServerConfig};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Config {
@@ -18,432 +25,21 @@ pub struct Config {
     #[serde(default)]
     pub admin: AdminConfig,
     #[serde(default)]
-    pub storage: StorageConfig,
+    pub api_keys: ApiKeyConfig,
+    #[serde(default)]
+    pub database: DatabaseConfig,
     #[serde(default)]
     pub metrics: MetricsConfig,
-    #[serde(default)]
-    pub model_mapping: ModelMappingConfig,
-    #[serde(default)]
-    pub usage_tracking: UsageTrackingConfig,
-    #[serde(default)]
-    pub api_keys: ApiKeyConfig,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ServerConfig {
-    pub host: String,
-    pub port: u16,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct JwtConfig {
-    pub secret: String,
-    #[serde(default = "default_jwt_algorithm")]
-    pub algorithm: String,
-    #[serde(default = "default_access_token_ttl")]
-    pub access_token_ttl: u64,
-    #[serde(default = "default_refresh_token_ttl")]
-    pub refresh_token_ttl: u64,
-}
-
-fn default_jwt_algorithm() -> String {
-    "HS256".to_string()
-}
-
-fn default_access_token_ttl() -> u64 {
-    3600 // 1 hour
-}
-
-fn default_refresh_token_ttl() -> u64 {
-    7776000 // 90 days
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct AwsConfig {
-    pub region: String,
-    pub access_key_id: Option<String>,
-    pub secret_access_key: Option<String>,
-    pub profile: Option<String>,
-    pub bearer_token: Option<String>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct LoggingConfig {
-    #[serde(default = "default_log_level")]
-    pub level: String,
-    #[serde(default = "default_log_request")]
-    pub log_request: bool,
-}
-
-impl Default for LoggingConfig {
-    fn default() -> Self {
-        Self {
-            level: default_log_level(),
-            log_request: default_log_request(),
-        }
-    }
-}
-
-fn default_log_level() -> String {
-    "info".to_string()
-}
-
-fn default_log_request() -> bool {
-    true
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
-pub struct OAuthConfig {
-    #[serde(default)]
-    pub providers: HashMap<String, OAuthProvider>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct OAuthProvider {
-    pub client_id: String,
-    pub client_secret: String,
-    #[serde(default)]
-    pub redirect_uri: Option<String>,
-    #[serde(default)]
-    pub scopes: Vec<String>,
-    #[serde(default)]
-    pub authorization_url: Option<String>,
-    #[serde(default)]
-    pub token_url: Option<String>,
-    #[serde(default)]
-    pub user_info_url: Option<String>,
-    #[serde(default = "default_user_id_field")]
-    pub user_id_field: String,
-    #[serde(default = "default_email_field")]
-    pub email_field: String,
-    // For providers like Microsoft with tenant support
-    #[serde(default)]
-    pub tenant_id: Option<String>,
-    // For providers like GitLab with instance support
-    #[serde(default)]
-    pub instance_url: Option<String>,
-    // For providers like Auth0 with domain support
-    #[serde(default)]
-    pub domain: Option<String>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct CacheConfig {
-    #[serde(default = "default_validation_ttl")]
-    pub validation_ttl: u64,
-    #[serde(default = "default_max_entries")]
-    pub max_entries: usize,
-    #[serde(default = "default_cleanup_interval")]
-    pub cleanup_interval: u64,
-    #[serde(default = "default_cache_backend")]
-    pub backend: String,
-    #[serde(default = "default_redis_url")]
-    pub redis_url: String,
-    #[serde(default = "default_redis_key_prefix")]
-    pub redis_key_prefix: String,
-}
-
-fn default_user_id_field() -> String {
-    "id".to_string()
-}
-
-fn default_email_field() -> String {
-    "email".to_string()
-}
-
-fn default_validation_ttl() -> u64 {
-    86400 // 24 hours
-}
-
-fn default_max_entries() -> usize {
-    10000
-}
-
-fn default_cleanup_interval() -> u64 {
-    3600 // 1 hour
-}
-
-fn default_cache_backend() -> String {
-    "memory".to_string()
-}
-
-fn default_redis_url() -> String {
-    "redis://localhost:6379".to_string()
-}
-
-fn default_redis_key_prefix() -> String {
-    "bedrock_sso:".to_string()
-}
-
-impl Default for CacheConfig {
-    fn default() -> Self {
-        Self {
-            validation_ttl: default_validation_ttl(),
-            max_entries: default_max_entries(),
-            cleanup_interval: default_cleanup_interval(),
-            backend: default_cache_backend(),
-            redis_url: default_redis_url(),
-            redis_key_prefix: default_redis_key_prefix(),
-        }
-    }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
-pub struct FrontendConfig {
-    /// Path to serve frontend files from filesystem
-    /// If not specified, uses embedded assets
-    pub path: Option<String>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
-pub struct AdminConfig {
-    /// List of admin email addresses
-    /// Users with these emails will have admin privileges
-    #[serde(default)]
-    pub emails: Vec<String>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
-pub struct StorageConfig {
-    #[serde(default)]
-    pub redis: RedisStorageConfig,
-    #[serde(default)]
-    pub database: DatabaseStorageConfig,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct RedisStorageConfig {
-    #[serde(default)]
-    pub enabled: bool,
-    #[serde(default = "default_redis_url")]
-    pub url: String,
-    #[serde(default = "default_redis_key_prefix")]
-    pub key_prefix: String,
-    #[serde(default = "default_redis_command_timeout")]
-    pub command_timeout_seconds: u64,
-    #[serde(default = "default_redis_max_connections")]
-    pub max_connections: u32,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct DatabaseStorageConfig {
-    #[serde(default)]
-    pub enabled: bool,
-    #[serde(default = "default_database_url")]
-    pub url: String,
-    #[serde(default = "default_database_max_connections")]
-    pub max_connections: u32,
-    #[serde(default = "default_database_migration_on_startup")]
-    pub migration_on_startup: bool,
-}
-
-fn default_redis_command_timeout() -> u64 {
-    5
-}
-
-fn default_redis_max_connections() -> u32 {
-    10
-}
-
-fn default_database_url() -> String {
-    "sqlite://./data/bedrock_sso.db".to_string()
-}
-
-fn default_database_max_connections() -> u32 {
-    5
-}
-
-fn default_database_migration_on_startup() -> bool {
-    true
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct MetricsConfig {
-    #[serde(default = "default_metrics_enabled")]
-    pub enabled: bool,
-    #[serde(default = "default_metrics_port")]
-    pub port: u16,
-    #[serde(default = "default_metrics_endpoint")]
-    pub endpoint: String,
-}
-
-fn default_metrics_enabled() -> bool {
-    true
-}
-
-fn default_metrics_port() -> u16 {
-    9090
-}
-
-fn default_metrics_endpoint() -> String {
-    "/metrics".to_string()
-}
-
-impl Default for MetricsConfig {
-    fn default() -> Self {
-        Self {
-            enabled: default_metrics_enabled(),
-            port: default_metrics_port(),
-            endpoint: default_metrics_endpoint(),
-        }
-    }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
-pub struct ModelMappingConfig {
-    /// Custom model mappings that override default mappings
-    /// Maps Anthropic API model names to AWS Bedrock model IDs
-    /// Example: "claude-custom-model" -> "anthropic.claude-custom-model-v1:0"
-    #[serde(default)]
-    pub custom_mappings: HashMap<String, String>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct UsageTrackingConfig {
-    #[serde(default = "default_usage_tracking_enabled")]
-    pub enabled: bool,
-    #[serde(default = "default_batch_size")]
-    pub batch_size: u32,
-    #[serde(default = "default_flush_interval")]
-    pub flush_interval: u64,
-    #[serde(default = "default_retention_days")]
-    pub retention_days: u32,
-    #[serde(default = "default_detailed_logging")]
-    pub enable_detailed_logging: bool,
-    #[serde(default)]
-    pub cost_tracking: CostTrackingConfig,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct CostTrackingConfig {
-    #[serde(default = "default_cost_tracking_enabled")]
-    pub enabled: bool,
-    /// Default model costs (can be overridden via admin API)
-    #[serde(default)]
-    pub default_costs: HashMap<String, ModelCost>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ModelCost {
-    pub input_cost_per_1k_tokens: f64,
-    pub output_cost_per_1k_tokens: f64,
-}
-
-fn default_usage_tracking_enabled() -> bool {
-    true
-}
-
-fn default_batch_size() -> u32 {
-    100
-}
-
-fn default_flush_interval() -> u64 {
-    60 // seconds
-}
-
-fn default_retention_days() -> u32 {
-    365
-}
-
-fn default_detailed_logging() -> bool {
-    true
-}
-
-fn default_cost_tracking_enabled() -> bool {
-    true
-}
-
-impl Default for UsageTrackingConfig {
-    fn default() -> Self {
-        Self {
-            enabled: default_usage_tracking_enabled(),
-            batch_size: default_batch_size(),
-            flush_interval: default_flush_interval(),
-            retention_days: default_retention_days(),
-            enable_detailed_logging: default_detailed_logging(),
-            cost_tracking: CostTrackingConfig::default(),
-        }
-    }
-}
-
-impl Default for CostTrackingConfig {
-    fn default() -> Self {
-        Self {
-            enabled: default_cost_tracking_enabled(),
-            default_costs: HashMap::new(),
-        }
-    }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ApiKeyConfig {
-    #[serde(default = "default_api_key_enabled")]
-    pub enabled: bool,
-    #[serde(default = "default_api_key_prefix")]
-    pub prefix: String,
-    #[serde(default = "default_api_key_length")]
-    pub key_length: usize,
-    #[serde(default = "default_api_key_default_expiry_days")]
-    pub default_expiry_days: Option<u32>,
-    #[serde(default = "default_api_key_max_keys_per_user")]
-    pub max_keys_per_user: u32,
-}
-
-fn default_api_key_enabled() -> bool {
-    true
-}
-
-fn default_api_key_prefix() -> String {
-    "SSOK_".to_string()
-}
-
-fn default_api_key_length() -> usize {
-    32
-}
-
-fn default_api_key_default_expiry_days() -> Option<u32> {
-    None // No expiry by default
-}
-
-fn default_api_key_max_keys_per_user() -> u32 {
-    10
-}
-
-impl Default for ApiKeyConfig {
-    fn default() -> Self {
-        Self {
-            enabled: default_api_key_enabled(),
-            prefix: default_api_key_prefix(),
-            key_length: default_api_key_length(),
-            default_expiry_days: default_api_key_default_expiry_days(),
-            max_keys_per_user: default_api_key_max_keys_per_user(),
-        }
-    }
-}
-
-impl Default for RedisStorageConfig {
-    fn default() -> Self {
-        Self {
-            enabled: false,
-            url: default_redis_url(),
-            key_prefix: default_redis_key_prefix(),
-            command_timeout_seconds: default_redis_command_timeout(),
-            max_connections: default_redis_max_connections(),
-        }
-    }
-}
-
-impl Default for DatabaseStorageConfig {
-    fn default() -> Self {
-        Self {
-            enabled: true,
-            url: default_database_url(),
-            max_connections: default_database_max_connections(),
-            migration_on_startup: default_database_migration_on_startup(),
-        }
-    }
-}
-
+/// Configuration structures are now modularized by domain:
+///
+/// - `auth::config` - JWT, OAuth, Admin, and API key configurations
+/// - `aws::config` - AWS-specific configurations
+/// - `cache::config` - Cache backend configurations
+/// - `database::config` - Database connection configurations
+/// - `server::config` - Server, logging, frontend, and metrics configurations
+///
 impl Default for Config {
     fn default() -> Self {
         Self {
@@ -454,8 +50,8 @@ impl Default for Config {
             jwt: JwtConfig {
                 secret: "your-jwt-secret".to_string(),
                 algorithm: "HS256".to_string(),
-                access_token_ttl: default_access_token_ttl(),
-                refresh_token_ttl: default_refresh_token_ttl(),
+                access_token_ttl: 3600, // 1 hour
+                refresh_token_ttl: 7776000, // 90 days
             },
             aws: AwsConfig {
                 region: "us-east-1".to_string(),
@@ -469,11 +65,9 @@ impl Default for Config {
             cache: CacheConfig::default(),
             frontend: FrontendConfig::default(),
             admin: AdminConfig::default(),
-            storage: StorageConfig::default(),
-            metrics: MetricsConfig::default(),
-            model_mapping: ModelMappingConfig::default(),
-            usage_tracking: UsageTrackingConfig::default(),
             api_keys: ApiKeyConfig::default(),
+            database: DatabaseConfig::default(),
+            metrics: MetricsConfig::default(),
         }
     }
 }
@@ -517,7 +111,7 @@ impl Config {
         self.oauth.providers.get(provider_name).map(|provider| {
             let mut provider = provider.clone();
             // Apply predefined provider defaults if URLs are not specified
-            apply_predefined_provider_defaults(provider_name, &mut provider);
+            crate::auth::config::apply_predefined_provider_defaults(provider_name, &mut provider);
             provider
         })
     }
@@ -537,168 +131,16 @@ impl Config {
     }
 
     /// Create a ModelMapper instance from the configuration
+    /// Uses empty custom mappings since we removed the model_mapping config
     pub fn create_model_mapper(&self) -> crate::anthropic::model_mapping::ModelMapper {
         crate::anthropic::model_mapping::ModelMapper::new(
-            self.model_mapping.custom_mappings.clone(),
+            std::collections::HashMap::new(), // No custom mappings
             self.aws.region.clone(),
         )
     }
+
 }
 
-fn apply_predefined_provider_defaults(provider_name: &str, provider: &mut OAuthProvider) {
-    match provider_name {
-        "google" => apply_google_defaults(provider),
-        "github" => apply_github_defaults(provider),
-        "microsoft" => apply_microsoft_defaults(provider),
-        "gitlab" => apply_gitlab_defaults(provider),
-        "auth0" => apply_auth0_defaults(provider),
-        "okta" => apply_okta_defaults(provider),
-        _ => {} // Custom provider, no defaults to apply
-    }
-}
-
-fn apply_google_defaults(provider: &mut OAuthProvider) {
-    if provider.authorization_url.is_none() {
-        provider.authorization_url =
-            Some("https://accounts.google.com/o/oauth2/v2/auth".to_string());
-    }
-    if provider.token_url.is_none() {
-        provider.token_url = Some("https://oauth2.googleapis.com/token".to_string());
-    }
-    if provider.user_info_url.is_none() {
-        provider.user_info_url = Some("https://www.googleapis.com/oauth2/v2/userinfo".to_string());
-    }
-    if provider.scopes.is_empty() {
-        provider.scopes = vec![
-            "openid".to_string(),
-            "email".to_string(),
-            "profile".to_string(),
-        ];
-    }
-    if provider.user_id_field == "id" {
-        // default wasn't overridden
-        provider.user_id_field = "id".to_string();
-    }
-    if provider.email_field == "email" {
-        // default wasn't overridden
-        provider.email_field = "email".to_string();
-    }
-}
-
-fn apply_github_defaults(provider: &mut OAuthProvider) {
-    if provider.authorization_url.is_none() {
-        provider.authorization_url = Some("https://github.com/login/oauth/authorize".to_string());
-    }
-    if provider.token_url.is_none() {
-        provider.token_url = Some("https://github.com/login/oauth/access_token".to_string());
-    }
-    if provider.user_info_url.is_none() {
-        provider.user_info_url = Some("https://api.github.com/user".to_string());
-    }
-    if provider.scopes.is_empty() {
-        provider.scopes = vec!["user:email".to_string()];
-    }
-}
-
-fn apply_microsoft_defaults(provider: &mut OAuthProvider) {
-    let tenant = provider.tenant_id.as_deref().unwrap_or("common");
-    if provider.authorization_url.is_none() {
-        provider.authorization_url = Some(format!(
-            "https://login.microsoftonline.com/{}/oauth2/v2.0/authorize",
-            tenant
-        ));
-    }
-    if provider.token_url.is_none() {
-        provider.token_url = Some(format!(
-            "https://login.microsoftonline.com/{}/oauth2/v2.0/token",
-            tenant
-        ));
-    }
-    if provider.user_info_url.is_none() {
-        provider.user_info_url = Some("https://graph.microsoft.com/v1.0/me".to_string());
-    }
-    if provider.scopes.is_empty() {
-        provider.scopes = vec![
-            "openid".to_string(),
-            "profile".to_string(),
-            "email".to_string(),
-        ];
-    }
-    if provider.email_field == "email" {
-        // default wasn't overridden
-        provider.email_field = "mail".to_string();
-    }
-}
-
-fn apply_gitlab_defaults(provider: &mut OAuthProvider) {
-    let instance = provider
-        .instance_url
-        .as_deref()
-        .unwrap_or("https://gitlab.com");
-    if provider.authorization_url.is_none() {
-        provider.authorization_url = Some(format!("{}/oauth/authorize", instance));
-    }
-    if provider.token_url.is_none() {
-        provider.token_url = Some(format!("{}/oauth/token", instance));
-    }
-    if provider.user_info_url.is_none() {
-        provider.user_info_url = Some(format!("{}/api/v4/user", instance));
-    }
-    if provider.scopes.is_empty() {
-        provider.scopes = vec!["read_user".to_string()];
-    }
-}
-
-fn apply_auth0_defaults(provider: &mut OAuthProvider) {
-    if let Some(domain) = &provider.domain {
-        if provider.authorization_url.is_none() {
-            provider.authorization_url = Some(format!("https://{}/authorize", domain));
-        }
-        if provider.token_url.is_none() {
-            provider.token_url = Some(format!("https://{}/oauth/token", domain));
-        }
-        if provider.user_info_url.is_none() {
-            provider.user_info_url = Some(format!("https://{}/userinfo", domain));
-        }
-    }
-    if provider.scopes.is_empty() {
-        provider.scopes = vec![
-            "openid".to_string(),
-            "profile".to_string(),
-            "email".to_string(),
-        ];
-    }
-    if provider.user_id_field == "id" {
-        // default wasn't overridden
-        provider.user_id_field = "sub".to_string();
-    }
-}
-
-fn apply_okta_defaults(provider: &mut OAuthProvider) {
-    if let Some(domain) = &provider.domain {
-        if provider.authorization_url.is_none() {
-            provider.authorization_url =
-                Some(format!("https://{}/oauth2/default/v1/authorize", domain));
-        }
-        if provider.token_url.is_none() {
-            provider.token_url = Some(format!("https://{}/oauth2/default/v1/token", domain));
-        }
-        if provider.user_info_url.is_none() {
-            provider.user_info_url = Some(format!("https://{}/oauth2/default/v1/userinfo", domain));
-        }
-    }
-    if provider.scopes.is_empty() {
-        provider.scopes = vec![
-            "openid".to_string(),
-            "profile".to_string(),
-            "email".to_string(),
-        ];
-    }
-    if provider.user_id_field == "id" {
-        // default wasn't overridden
-        provider.user_id_field = "sub".to_string();
-    }
-}
 
 #[cfg(test)]
 mod tests {

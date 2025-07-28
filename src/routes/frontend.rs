@@ -23,7 +23,7 @@ struct Assets;
 struct Assets;
 
 /// Create frontend router with static file serving
-pub fn create_frontend_router(frontend_config: crate::config::FrontendConfig) -> Router {
+pub fn create_frontend_router(frontend_config: crate::server::config::FrontendConfig) -> Router {
     let handler_config = frontend_config.clone();
     Router::new()
         .route("/", get(move || serve_index(handler_config.clone())))
@@ -34,14 +34,14 @@ pub fn create_frontend_router(frontend_config: crate::config::FrontendConfig) ->
 }
 
 /// Serve the main index.html file
-async fn serve_index(config: crate::config::FrontendConfig) -> impl IntoResponse {
+async fn serve_index(config: crate::server::config::FrontendConfig) -> impl IntoResponse {
     serve_static_file(Path("index.html".to_string()), config).await
 }
 
 /// Serve static files - either from filesystem or embedded
 async fn serve_static_file(
     Path(path): Path<String>,
-    config: crate::config::FrontendConfig,
+    config: crate::server::config::FrontendConfig,
 ) -> impl IntoResponse {
     debug!("Serving static file: {}", path);
 
@@ -148,7 +148,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_serve_embedded_index() {
-        use crate::config::FrontendConfig;
+        use crate::server::config::FrontendConfig;
 
         let config = FrontendConfig::default(); // Use embedded assets
         let app = create_frontend_router(config);
@@ -161,7 +161,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_filesystem_serving() {
-        use crate::config::FrontendConfig;
+        use crate::server::config::FrontendConfig;
 
         // Use the existing test fixtures directory
         let fixtures_dir = std::path::Path::new("tests/fixtures/frontend");
@@ -201,7 +201,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_path_traversal_protection() {
-        use crate::config::FrontendConfig;
+        use crate::server::config::FrontendConfig;
 
         // Test the serve_static_file function directly to bypass Axum's URI normalization
         let config = FrontendConfig::default(); // Use embedded assets
@@ -242,7 +242,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_embedded_assets() {
-        use crate::config::FrontendConfig;
+        use crate::server::config::FrontendConfig;
 
         let config = FrontendConfig::default(); // Use embedded test assets
         let app = create_frontend_router(config);
@@ -272,7 +272,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_content_types() {
-        use crate::config::FrontendConfig;
+        use crate::server::config::FrontendConfig;
 
         // Use the existing test fixtures directory
         let fixtures_dir = std::path::Path::new("tests/fixtures/frontend");

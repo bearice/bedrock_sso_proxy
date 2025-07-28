@@ -5,6 +5,12 @@ use sea_orm::entity::prelude::*;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
+/// API key prefix for all generated keys
+pub const API_KEY_PREFIX: &str = "SSOK_";
+
+/// API key length after prefix (32 alphanumeric characters)
+pub const API_KEY_LENGTH: usize = 32;
+
 #[derive(Clone, Debug, PartialEq, DeriveEntityModel, Eq, Serialize, Deserialize)]
 #[sea_orm(table_name = "api_keys")]
 #[typed_cache(ttl = 300)] // 5 minutes
@@ -31,10 +37,26 @@ impl ActiveModelBehavior for ActiveModel {}
 pub struct ApiKeyInfo {
     pub id: i32,
     pub name: String,
+    pub hint: String,
     pub created_at: DateTime<Utc>,
     pub last_used: Option<DateTime<Utc>>,
     pub expires_at: Option<DateTime<Utc>>,
     pub revoked_at: Option<DateTime<Utc>>,
+}
+
+impl ApiKeyInfo {
+    /// Create ApiKeyInfo from Model with original API key for hint generation
+    pub fn from_model_with_hint(key: Model, original_key: &str) -> Self {
+        Self {
+            id: key.id,
+            name: key.name,
+            hint: create_key_hint(original_key),
+            created_at: key.created_at,
+            last_used: key.last_used,
+            expires_at: key.expires_at,
+            revoked_at: key.revoked_at,
+        }
+    }
 }
 
 impl From<Model> for ApiKeyInfo {
@@ -42,6 +64,7 @@ impl From<Model> for ApiKeyInfo {
         Self {
             id: key.id,
             name: key.name,
+            hint: "****".to_string(), // Fallback when original key not available
             created_at: key.created_at,
             last_used: key.last_used,
             expires_at: key.expires_at,
@@ -53,9 +76,8 @@ impl From<Model> for ApiKeyInfo {
 impl Model {
     /// Create a new API key
     pub fn new(user_id: i32, name: String, expires_at: Option<DateTime<Utc>>) -> (Self, String) {
-        let raw_key = generate_api_key("SSOK_", 32);
+        let raw_key = generate_api_key(API_KEY_PREFIX, API_KEY_LENGTH);
         let key_hash = hash_api_key(&raw_key);
-        eprintln!("key_hash={}",key_hash);
         let api_key = Self {
             id: 0, // Will be set by database
             key_hash,
@@ -86,16 +108,6 @@ impl Model {
 
         true
     }
-
-    /// Mark as revoked
-    pub fn revoke(&mut self) {
-        self.revoked_at = Some(Utc::now());
-    }
-
-    /// Update last used timestamp
-    pub fn update_last_used(&mut self) {
-        self.last_used = Some(Utc::now());
-    }
 }
 
 /// Generate a random API key with the given prefix and length
@@ -116,6 +128,21 @@ pub fn hash_api_key(api_key: &str) -> String {
     format!("{:x}", hasher.finalize())
 }
 
+/// Create a hint for an API key showing first 4 and last 4 characters (excluding prefix)
+pub fn create_key_hint(api_key: &str) -> String {
+    if api_key.starts_with(API_KEY_PREFIX) && api_key.len() == API_KEY_PREFIX.len() + API_KEY_LENGTH {
+        let key_part = &api_key[API_KEY_PREFIX.len()..];
+        format!("{}{}****{}", 
+            API_KEY_PREFIX,
+            &key_part[..4],                    // First 4 chars after prefix
+            &key_part[API_KEY_LENGTH-4..]      // Last 4 chars
+        )
+    } else {
+        // Fallback for invalid format
+        format!("{}****", API_KEY_PREFIX)
+    }
+}
+
 /// Validate API key format
 pub fn validate_api_key_format(
     api_key: &str,
@@ -127,8 +154,9 @@ pub fn validate_api_key_format(
         ));
     }
 
-    // Check minimum length (prefix + at least 16 characters)
-    if api_key.len() < expected_prefix.len() + 16 {
+    // Check exact length (prefix + exactly API_KEY_LENGTH characters)
+    let expected_total_length = expected_prefix.len() + API_KEY_LENGTH;
+    if api_key.len() != expected_total_length {
         return Err(crate::error::AppError::Unauthorized(
             "Invalid API key format".to_string(),
         ));
@@ -143,4 +171,57 @@ pub fn validate_api_key_format(
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_create_key_hint() {
+        // Test with valid key (SSOK_ + 32 chars)
+        let key = "SSOK_abcd1234efgh5678ijkl9012mnop3456";
+        let hint = create_key_hint(key);
+        assert_eq!(hint, "SSOK_abcd****3456");
+
+        // Test with another valid key
+        let key = "SSOK_1234567890abcdefghijklmnop123456";
+        let hint = create_key_hint(key);
+        assert_eq!(hint, "SSOK_1234****3456");
+
+        // Test with invalid length (too short)
+        let key = "SSOK_12345678";
+        let hint = create_key_hint(key);
+        assert_eq!(hint, "SSOK_****");
+
+        // Test with invalid prefix
+        let key = "INVALID_abcd1234efgh5678ijkl9012mnop3456";
+        let hint = create_key_hint(key);
+        assert_eq!(hint, "SSOK_****");
+
+        // Test with wrong total length
+        let key = "SSOK_abcd1234efgh5678ijkl9012mnop3456extra";
+        let hint = create_key_hint(key);
+        assert_eq!(hint, "SSOK_****");
+    }
+
+    #[test]
+    fn test_api_key_info_with_hint() {
+        let key = Model {
+            id: 1,
+            key_hash: "hash123".to_string(),
+            user_id: 1,
+            name: "Test Key".to_string(),
+            created_at: Utc::now(),
+            last_used: None,
+            expires_at: None,
+            revoked_at: None,
+        };
+
+        let original_key = "SSOK_abcd1234efgh5678ijkl9012mnop3456";
+        let info = ApiKeyInfo::from_model_with_hint(key, original_key);
+        
+        assert_eq!(info.hint, "SSOK_abcd****3456");
+        assert_eq!(info.name, "Test Key");
+    }
 }

@@ -1,7 +1,8 @@
 use crate::{
     auth::{OAuthClaims, jwt::JwtService, request_context::RequestContext},
     cache::{CacheManager, typed::typed_cache},
-    config::{Config, OAuthProvider},
+    config::Config,
+    auth::config::OAuthProvider,
     database::{DatabaseManager, entities::UserRecord},
     error::AppError,
     health::{HealthCheckResult, HealthChecker},
@@ -289,9 +290,16 @@ impl OAuthService {
                 .map_err(|e| AppError::Internal(format!("Failed to store user: {}", e)))?;
 
             // Update last login time
+            let user = self.database
+                .users()
+                .find_by_id(db_user_id)
+                .await
+                .map_err(|e| AppError::Internal(format!("Failed to find user: {}", e)))?
+                .ok_or_else(|| AppError::Internal("User not found after upsert".to_string()))?;
+            
             self.database
                 .users()
-                .update_last_login(db_user_id)
+                .update_last_login(user)
                 .await
                 .map_err(|e| AppError::Internal(format!("Failed to update last login: {}", e)))?;
 
@@ -423,7 +431,7 @@ impl OAuthService {
             // Revoke old token
             self.database
                 .refresh_tokens()
-                .revoke(&token_hash)
+                .revoke(token_data.clone())
                 .await
                 .map_err(|e| AppError::Internal(format!("Failed to revoke token: {}", e)))?;
 
@@ -850,7 +858,8 @@ impl OAuthService {
 mod tests {
     use super::*;
     use crate::auth::jwt::JwtService;
-    use crate::config::{CacheConfig, JwtConfig, OAuthConfig, OAuthProvider};
+    use crate::cache::config::CacheConfig;
+    use crate::auth::config::{JwtConfig, OAuthConfig, OAuthProvider};
     use jsonwebtoken::Algorithm;
     use std::collections::HashMap;
 
@@ -896,11 +905,15 @@ mod tests {
 
     async fn create_test_components() -> (Arc<DatabaseManager>, Arc<CacheManager>) {
         let mut config = Config::default();
-        config.storage.redis.enabled = false;
-        config.storage.database.enabled = true;
-        config.storage.database.url = "sqlite::memory:".to_string();
+        config.cache.backend = "memory".to_string();
+        config.database.enabled = true;
+        config.database.url = "sqlite::memory:".to_string();
         let cache = Arc::new(CacheManager::new_memory());
-        let database = Arc::new(DatabaseManager::new_from_config(&config,cache.clone()).await.unwrap());
+        let database = Arc::new(
+            DatabaseManager::new_from_config(&config, cache.clone())
+                .await
+                .unwrap(),
+        );
 
         (database, cache)
     }

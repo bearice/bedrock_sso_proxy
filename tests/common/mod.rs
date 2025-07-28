@@ -28,8 +28,8 @@ impl TestHarness {
     pub async fn with_secret(secret: &str) -> Self {
         let mut config = Config::default();
         config.jwt.secret = secret.to_string();
-        config.storage.redis.enabled = false;
-        config.storage.database.enabled = false;
+        config.cache.backend = "memory".to_string();
+        config.database.enabled = false;
         config.metrics.enabled = false;
 
         // Add test AWS credentials for integration tests

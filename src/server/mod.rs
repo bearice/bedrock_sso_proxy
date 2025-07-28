@@ -1,3 +1,5 @@
+pub mod config;
+
 use crate::{
     auth::{
         jwt::{JwtService, parse_algorithm},
@@ -72,13 +74,12 @@ impl Server {
         let jwt_algorithm = parse_algorithm(&config.jwt.algorithm)?;
         let jwt_service = Arc::new(JwtService::new(config.jwt.secret.clone(), jwt_algorithm)?);
 
-
         // Initialize cache
         let cache = Arc::new(CacheManager::new_from_config(&config.cache).await?);
 
         // Initialize database
         let database = Arc::new(
-            DatabaseManager::new_from_config(&config,cache.clone())
+            DatabaseManager::new_from_config(&config, cache.clone())
                 .await
                 .map_err(AppError::Database)?,
         );
@@ -340,9 +341,9 @@ mod tests {
     // Common test setup function
     async fn create_test_server() -> (Server, Config) {
         let mut config = Config::default();
-        config.storage.redis.enabled = false;
-        config.storage.database.enabled = true;
-        config.storage.database.url = "sqlite::memory:".to_string();
+        config.cache.backend = "memory".to_string();
+        config.database.enabled = true;
+        config.database.url = "sqlite::memory:".to_string();
         config.metrics.enabled = false;
 
         let server = Server::new(config.clone()).await.unwrap();
