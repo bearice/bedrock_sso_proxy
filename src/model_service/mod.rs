@@ -565,6 +565,22 @@ impl ModelServiceImpl {
         }
     }
 
+    /// Create a new ModelService with a trait object (for testing with mocks)
+    pub fn new_with_trait(
+        bedrock: Arc<dyn BedrockRuntime>,
+        database: Arc<dyn DatabaseManager>,
+        config: Config,
+    ) -> Self {
+        Self {
+            bedrock,
+            database,
+            config,
+            token_tracking_tasks: Arc::new(RwLock::new(HashMap::new())),
+            task_counter: Arc::new(std::sync::atomic::AtomicU64::new(0)),
+            streaming_manager: None,
+        }
+    }
+
     /// Set the streaming connection manager for tracking active streams
     pub fn with_streaming_manager(
         mut self,

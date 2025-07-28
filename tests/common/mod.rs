@@ -27,6 +27,11 @@ impl TestHarness {
         Self::with_secret("test-secret-123").await
     }
 
+    /// Create test harness for security tests with mock AWS
+    pub async fn new_for_security_tests() -> Self {
+        Self::with_secret_and_mock_aws("test-secret-123").await
+    }
+
     /// Create test harness with custom secret
     pub async fn with_secret(secret: &str) -> Self {
         let mut config = Config::default();
@@ -50,6 +55,36 @@ impl TestHarness {
 
         Self {
             jwt_secret: secret.to_string(), // Use the actual secret, not the config one
+            config,
+            app,
+            server,
+        }
+    }
+
+    /// Create test harness with custom secret and mock AWS for security testing
+    pub async fn with_secret_and_mock_aws(secret: &str) -> Self {
+        let mut config = Config::default();
+        config.jwt.secret = secret.to_string();
+        config.database.enabled = true; // Enable database for testing
+
+        // Enable both JWT and API key authentication for comprehensive security testing
+        config.api_keys.enabled = true;
+
+        // Add test AWS credentials for integration tests (not used with mock)
+        config.aws.access_key_id = Some("test-access-key".to_string());
+        config.aws.secret_access_key = Some("test-secret-key".to_string());
+
+        let server = TestServerBuilder::new()
+            .with_config(config.clone())
+            .with_jwt_secret(secret.to_string())
+            .with_mock_aws() // Use mock AWS client for security tests
+            .build()
+            .await;
+
+        let app = server.create_app();
+
+        Self {
+            jwt_secret: secret.to_string(),
             config,
             app,
             server,
@@ -127,6 +162,16 @@ impl TestHarness {
         )?;
 
         Ok(token_data.claims)
+    }
+
+    /// Create API key for testing (if API keys are enabled)
+    #[allow(dead_code)]
+    pub async fn create_test_api_key(&self, user_id: i32, name: &str) -> String {
+        use bedrock_sso_proxy::auth::api_key::ApiKey;
+        
+        let (api_key, key_string) = ApiKey::new(user_id, name.to_string(), None);
+        let _key_id = self.server.database.api_keys().store(&api_key).await.unwrap();
+        key_string
     }
 }
 
@@ -216,6 +261,30 @@ impl RequestBuilder {
             .header("Authorization", format!("Bearer {}", token))
             .header("Content-Type", content_type)
             .body(Body::from(body.to_string()))?)
+    }
+
+    /// Model invoke with API key via X-API-Key header
+    #[allow(dead_code)]
+    pub fn invoke_model_with_api_key_header(model_id: &str, api_key: &str, body: &str) -> Request<Body> {
+        Request::builder()
+            .uri(format!("/bedrock/model/{}/invoke", model_id))
+            .method("POST")
+            .header("X-API-Key", api_key)
+            .header("Content-Type", "application/json")
+            .body(Body::from(body.to_string()))
+            .unwrap()
+    }
+
+    /// Model invoke with API key via Authorization Bearer header
+    #[allow(dead_code)]
+    pub fn invoke_model_with_api_key_bearer(model_id: &str, api_key: &str, body: &str) -> Request<Body> {
+        Request::builder()
+            .uri(format!("/bedrock/model/{}/invoke", model_id))
+            .method("POST")
+            .header("Authorization", format!("Bearer {}", api_key))
+            .header("Content-Type", "application/json")
+            .body(Body::from(body.to_string()))
+            .unwrap()
     }
 }
 

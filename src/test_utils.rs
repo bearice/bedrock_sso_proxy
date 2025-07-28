@@ -14,6 +14,7 @@ pub struct TestServerBuilder {
     use_memory_db: bool,
     use_memory_cache: bool,
     jwt_secret: Option<String>,
+    use_mock_aws: bool,
 }
 
 impl TestServerBuilder {
@@ -23,6 +24,7 @@ impl TestServerBuilder {
             use_memory_db: true,    // Default to memory for tests
             use_memory_cache: true, // Default to memory for tests
             jwt_secret: Some("test-secret".to_string()),
+            use_mock_aws: false,    // Default to real AWS client for backward compatibility
         }
     }
 
@@ -50,6 +52,12 @@ impl TestServerBuilder {
         self
     }
 
+    /// Use mock AWS client instead of real AWS client
+    pub fn with_mock_aws(mut self) -> Self {
+        self.use_mock_aws = true;
+        self
+    }
+
     /// Build the test server with configured settings
     pub async fn build(self) -> Server {
         let mut config = self.config;
@@ -66,8 +74,8 @@ impl TestServerBuilder {
         }
 
         // Configure JWT secret
-        if let Some(secret) = self.jwt_secret {
-            config.jwt.secret = secret;
+        if let Some(secret) = &self.jwt_secret {
+            config.jwt.secret = secret.clone();
             config.jwt.algorithm = "HS256".to_string();
         }
 
@@ -75,10 +83,90 @@ impl TestServerBuilder {
         config.metrics.enabled = false;
 
         // Use the regular Server::new method with in-memory backends
-        let server = Server::new(config).await.unwrap();
+        let server = if self.use_mock_aws {
+            Self::build_with_mock_aws_static(config).await.unwrap()
+        } else {
+            Server::new(config).await.unwrap()
+        };
+        
         server.database.migrate().await.unwrap();
-
         server
+    }
+
+    /// Build server with mock AWS client for security testing
+    async fn build_with_mock_aws_static(config: Config) -> Result<Server, crate::error::AppError> {
+        use crate::{
+            auth::{jwt::{parse_algorithm, JwtServiceImpl}, oauth::OAuthService},
+            aws::mock::MockBedrockRuntime,
+            cache::CacheManagerImpl,
+            database::DatabaseManagerImpl,
+            health::HealthService,
+            model_service::ModelServiceImpl,
+        };
+        use std::sync::Arc;
+
+        let config = Arc::new(config);
+
+        // Initialize JWT service
+        let jwt_algorithm = parse_algorithm(&config.jwt.algorithm)?;
+        let jwt_service: Arc<dyn JwtService> = Arc::new(JwtServiceImpl::new(
+            config.jwt.secret.clone(),
+            jwt_algorithm,
+        )?);
+
+        // Initialize cache
+        let cache_impl = Arc::new(CacheManagerImpl::new_from_config(&config.cache).await?);
+        let cache: Arc<dyn crate::cache::CacheManager> = cache_impl.clone();
+
+        // Initialize database
+        let database_impl = Arc::new(
+            DatabaseManagerImpl::new_from_config(&config, cache_impl.clone())
+                .await
+                .map_err(crate::error::AppError::Database)?,
+        );
+        let database: Arc<dyn DatabaseManager> = database_impl.clone();
+
+        // Use mock AWS client for security tests
+        let bedrock: Arc<dyn crate::aws::bedrock::BedrockRuntime> = Arc::new(MockBedrockRuntime::for_security_tests());
+
+        // Initialize model service with mock AWS client
+        let model_service: Arc<dyn crate::model_service::ModelService> = Arc::new(ModelServiceImpl::new_with_trait(
+            bedrock.clone(),
+            database.clone(),
+            (*config).clone(),
+        ));
+
+        // Initialize OAuth service
+        let oauth_service = Arc::new(OAuthService::new(
+            (*config).clone(),
+            jwt_service.clone(),
+            database.clone(),
+            cache_impl.clone(),
+        )?);
+
+        // Initialize health service
+        let health_service = Arc::new(HealthService::new());
+
+        // Register health checkers
+        health_service.register(cache_impl).await;
+        health_service.register(database_impl).await;
+        health_service.register(bedrock.health_checker()).await;
+        
+        // Create concrete JWT service for health registration
+        let jwt_service_impl = JwtServiceImpl::new(config.jwt.secret.clone(), jwt_algorithm)?;
+        health_service.register(jwt_service_impl.health_checker()).await;
+        
+        health_service.register(oauth_service.health_checker()).await;
+
+        Ok(Server::new_with_dependencies(
+            config,
+            jwt_service,
+            model_service,
+            oauth_service,
+            health_service,
+            database,
+            cache,
+        ))
     }
 }
 

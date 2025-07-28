@@ -11,7 +11,7 @@ use common::{RequestBuilder, TestHarness, helpers};
 
 #[tokio::test]
 async fn test_security_sql_injection_attempts() {
-    let harness = TestHarness::new().await;
+    let harness = TestHarness::new_for_security_tests().await;
     let created_user_id = harness.create_test_user("test1@example.com").await;
     let token = harness.create_integration_token(created_user_id);
 
@@ -35,8 +35,8 @@ async fn test_security_sql_injection_attempts() {
             .unwrap();
 
         let response = harness.make_request(request).await;
-        // The key security test: SQL injection attempts should NOT cause authentication bypass
-        // Authentication should succeed, then AWS processes the request (may succeed or fail)
+        
+        // With mock AWS: Authentication must succeed first
         assert_ne!(
             response.status(),
             StatusCode::UNAUTHORIZED,
@@ -44,26 +44,21 @@ async fn test_security_sql_injection_attempts() {
             model_id
         );
 
-        // AWS may process malicious model IDs normally (200) or reject them (400/500)
-        // The important thing is that authentication wasn't bypassed
-        let acceptable_statuses = [
-            StatusCode::OK,                    // AWS processes normally
-            StatusCode::BAD_REQUEST,           // AWS rejects malicious input
-            StatusCode::FORBIDDEN,             // AWS access denied
-            StatusCode::INTERNAL_SERVER_ERROR, // AWS service error
-        ];
-
-        helpers::assert_status_in(
-            &response,
-            &acceptable_statuses,
-            &format!("SQL injection model ID: {}", model_id),
+        // Mock AWS should detect and reject malicious model IDs
+        // This tests that our proxy correctly forwards the malicious input to AWS
+        // AWS (mock) should reject SQL injection patterns in model IDs
+        assert_eq!(
+            response.status(),
+            StatusCode::BAD_REQUEST,
+            "Mock AWS should reject SQL injection in model ID: {}",
+            model_id
         );
     }
 }
 
 #[tokio::test]
 async fn test_security_xss_attempts() {
-    let harness = TestHarness::new().await;
+    let harness = TestHarness::new_for_security_tests().await;
     let created_user_id = harness.create_test_user("test2@example.com").await;
     let token = harness.create_security_token(created_user_id, 3600);
 
@@ -78,8 +73,8 @@ async fn test_security_xss_attempts() {
         let request = RequestBuilder::invoke_model_with_auth("test-model", &token, payload);
 
         let response = harness.make_request(request).await;
-        // The key security test: XSS payloads should NOT cause authentication bypass
-        // Authentication should succeed, then AWS processes the request
+        
+        // Authentication must succeed first
         assert_ne!(
             response.status(),
             StatusCode::UNAUTHORIZED,
@@ -87,25 +82,19 @@ async fn test_security_xss_attempts() {
             payload
         );
 
-        // AWS may process XSS payloads normally or reject them
-        let acceptable_statuses = [
-            StatusCode::OK,                    // AWS processes normally
-            StatusCode::BAD_REQUEST,           // AWS rejects malicious input
-            StatusCode::FORBIDDEN,             // AWS access denied
-            StatusCode::INTERNAL_SERVER_ERROR, // AWS service error
-        ];
-
-        helpers::assert_status_in(
-            &response,
-            &acceptable_statuses,
-            &format!("XSS payload: {}", payload),
+        // Mock AWS should detect and reject XSS patterns in request body
+        assert_eq!(
+            response.status(),
+            StatusCode::BAD_REQUEST,
+            "Mock AWS should reject XSS payload: {}",
+            payload
         );
     }
 }
 
 #[tokio::test]
 async fn test_security_oversized_requests() {
-    let harness = TestHarness::new().await;
+    let harness = TestHarness::new_for_security_tests().await;
     let created_user_id = harness.create_test_user("test3@example.com").await;
     let token = harness.create_security_token(created_user_id, 3600);
 
@@ -141,7 +130,7 @@ async fn test_security_oversized_requests() {
 
 #[tokio::test]
 async fn test_security_header_injection() {
-    let harness = TestHarness::new().await;
+    let harness = TestHarness::new_for_security_tests().await;
     let created_user_id = harness.create_test_user("test4@example.com").await;
     let token = harness.create_security_token(created_user_id, 3600);
 
@@ -193,7 +182,7 @@ async fn test_security_header_injection() {
 
 #[tokio::test]
 async fn test_security_invalid_content_types() {
-    let harness = TestHarness::new().await;
+    let harness = TestHarness::new_for_security_tests().await;
     let created_user_id = harness.create_test_user("test5@example.com").await;
     let token = harness.create_security_token(created_user_id, 3600);
 
@@ -252,7 +241,7 @@ async fn test_security_invalid_content_types() {
 
 #[tokio::test]
 async fn test_security_path_traversal() {
-    let harness = TestHarness::new().await;
+    let harness = TestHarness::new_for_security_tests().await;
     let created_user_id = harness.create_test_user("test6@example.com").await;
     let token = harness.create_security_token(created_user_id, 3600);
 
@@ -290,7 +279,7 @@ async fn test_security_path_traversal() {
 
 #[tokio::test]
 async fn test_security_malformed_json_bodies() {
-    let harness = TestHarness::new().await;
+    let harness = TestHarness::new_for_security_tests().await;
     let created_user_id = harness.create_test_user("test7@example.com").await;
     let token = harness.create_security_token(created_user_id, 3600);
 
@@ -330,7 +319,7 @@ async fn test_security_malformed_json_bodies() {
 
 #[tokio::test]
 async fn test_security_http_method_tampering() {
-    let harness = TestHarness::new().await;
+    let harness = TestHarness::new_for_security_tests().await;
     let created_user_id = harness.create_test_user("test8@example.com").await;
     let token = harness.create_security_token(created_user_id, 3600);
 
@@ -373,7 +362,7 @@ async fn test_security_http_method_tampering() {
 
 #[tokio::test]
 async fn test_security_jwt_algorithm_confusion() {
-    let harness = TestHarness::new().await;
+    let harness = TestHarness::new_for_security_tests().await;
     let created_user_id = harness.create_test_user("test9@example.com").await;
 
     let claims = OAuthClaims::new(created_user_id, 3600);
@@ -453,7 +442,7 @@ async fn test_security_jwt_algorithm_confusion() {
 
 #[tokio::test]
 async fn test_security_rate_limiting_simulation() {
-    let harness = Arc::new(TestHarness::new().await);
+    let harness = Arc::new(TestHarness::new_for_security_tests().await);
     let created_user_id = harness.create_test_user("test10@example.com").await;
     let token = harness.create_security_token(created_user_id, 3600);
 
@@ -487,6 +476,120 @@ async fn test_security_rate_limiting_simulation() {
             "Request {} failed with status {}: rate limiting simulation should not cause failures",
             i,
             status
+        );
+    }
+}
+
+#[tokio::test]
+async fn test_security_api_key_sql_injection() {
+    let harness = TestHarness::new_for_security_tests().await;
+    let created_user_id = harness.create_test_user("apikey@example.com").await;
+    let api_key = harness.create_test_api_key(created_user_id, "Security Test Key").await;
+
+    // Test SQL injection attempts in model ID with API key authentication
+    let malicious_model_ids = vec![
+        "'; DROP TABLE api_keys; --",
+        "1' OR '1'='1",
+        "'; SELECT * FROM users; --",
+    ];
+
+    for model_id in malicious_model_ids {
+        let encoded_model_id = urlencoding::encode(model_id);
+        
+        // Test with X-API-Key header
+        let request = RequestBuilder::invoke_model_with_api_key_header(
+            &encoded_model_id, 
+            &api_key, 
+            r#"{"messages": []}"#
+        );
+
+        let response = harness.make_request(request).await;
+        
+        // API key authentication must succeed first
+        assert_ne!(
+            response.status(),
+            StatusCode::UNAUTHORIZED,
+            "SQL injection should not bypass API key authentication for model ID: {}",
+            model_id
+        );
+
+        // Mock AWS should reject malicious model IDs
+        assert_eq!(
+            response.status(),
+            StatusCode::BAD_REQUEST,
+            "Mock AWS should reject SQL injection in model ID with API key: {}",
+            model_id
+        );
+    }
+}
+
+#[tokio::test]
+async fn test_security_api_key_bearer_auth() {
+    let harness = TestHarness::new_for_security_tests().await;
+    let created_user_id = harness.create_test_user("bearer@example.com").await;
+    let api_key = harness.create_test_api_key(created_user_id, "Bearer Test Key").await;
+
+    // Test malicious payloads with Bearer token format for API keys
+    let xss_payloads = vec![
+        r#"{"messages": [{"role": "user", "content": "<script>alert('xss')</script>"}]}"#,
+        r#"{"messages": [{"role": "user", "content": "javascript:alert('xss')"}]}"#,
+    ];
+
+    for payload in xss_payloads {
+        // Test with Authorization Bearer header (API key in Bearer format)
+        let request = RequestBuilder::invoke_model_with_api_key_bearer(
+            "test-model",
+            &api_key,
+            payload
+        );
+
+        let response = harness.make_request(request).await;
+        
+        // API key authentication must succeed first
+        assert_ne!(
+            response.status(),
+            StatusCode::UNAUTHORIZED,
+            "XSS payload should not bypass API key bearer authentication: {}",
+            payload
+        );
+
+        // Mock AWS should reject XSS payloads
+        assert_eq!(
+            response.status(),
+            StatusCode::BAD_REQUEST,
+            "Mock AWS should reject XSS payload with API key bearer: {}",
+            payload
+        );
+    }
+}
+
+#[tokio::test]
+async fn test_security_invalid_api_key() {
+    let harness = TestHarness::new_for_security_tests().await;
+
+    let malicious_api_keys = vec![
+        "SSOK_'; DROP TABLE api_keys; --",
+        "SSOK_<script>alert('xss')</script>",
+        "SSOK_../../etc/passwd",
+        "not_an_api_key",
+        "Bearer invalid_jwt_token",
+    ];
+
+    for fake_key in malicious_api_keys {
+        let request = RequestBuilder::invoke_model_with_api_key_header(
+            "test-model",
+            fake_key,
+            r#"{"messages": []}"#
+        );
+
+        let response = harness.make_request(request).await;
+        
+        // Invalid API keys should be rejected at authentication layer
+        assert_eq!(
+            response.status(),
+            StatusCode::UNAUTHORIZED,
+            "Invalid API key should be rejected: {}",
+            fake_key
         );
     }
 }
