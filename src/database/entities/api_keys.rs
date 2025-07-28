@@ -130,12 +130,14 @@ pub fn hash_api_key(api_key: &str) -> String {
 
 /// Create a hint for an API key showing first 4 and last 4 characters (excluding prefix)
 pub fn create_key_hint(api_key: &str) -> String {
-    if api_key.starts_with(API_KEY_PREFIX) && api_key.len() == API_KEY_PREFIX.len() + API_KEY_LENGTH {
+    if api_key.starts_with(API_KEY_PREFIX) && api_key.len() == API_KEY_PREFIX.len() + API_KEY_LENGTH
+    {
         let key_part = &api_key[API_KEY_PREFIX.len()..];
-        format!("{}{}****{}", 
+        format!(
+            "{}{}****{}",
             API_KEY_PREFIX,
-            &key_part[..4],                    // First 4 chars after prefix
-            &key_part[API_KEY_LENGTH-4..]      // Last 4 chars
+            &key_part[..4],                  // First 4 chars after prefix
+            &key_part[API_KEY_LENGTH - 4..]  // Last 4 chars
         )
     } else {
         // Fallback for invalid format
@@ -220,7 +222,7 @@ mod tests {
 
         let original_key = "SSOK_abcd1234efgh5678ijkl9012mnop3456";
         let info = ApiKeyInfo::from_model_with_hint(key, original_key);
-        
+
         assert_eq!(info.hint, "SSOK_abcd****3456");
         assert_eq!(info.name, "Test Key");
     }

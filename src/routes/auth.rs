@@ -326,10 +326,10 @@ fn build_callback_url(params: &[(&str, &str)]) -> Result<String, AppError> {
 mod tests {
     use super::*;
     use crate::{
-        auth::{jwt::JwtService, oauth::OAuthService},
-        config::Config,
-        cache::config::CacheConfig,
         auth::config::{JwtConfig, OAuthConfig, OAuthProvider},
+        auth::{jwt::JwtService, oauth::OAuthService},
+        cache::config::CacheConfig,
+        config::Config,
     };
     use axum::{
         body::Body,

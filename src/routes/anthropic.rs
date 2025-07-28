@@ -3,8 +3,8 @@ use crate::{
         AnthropicRequest,
         model_mapping::ModelMapper,
         transform::{
-            transform_anthropic_to_bedrock, transform_bedrock_to_anthropic,
-            transform_streaming_event, validate_anthropic_request,
+            transform_anthropic_to_bedrock, transform_bedrock_event_to_anthropic,
+            transform_bedrock_to_anthropic, validate_anthropic_request,
         },
     },
     auth::jwt::OAuthClaims,
@@ -19,9 +19,10 @@ use axum::{
     response::Response,
     routing::post,
 };
+use futures_util::StreamExt;
 use serde_json::json;
 use std::sync::Arc;
-use tracing::{error, info, warn};
+use tracing::{error, info};
 
 /// Create routes for Anthropic API endpoints
 pub fn create_anthropic_routes() -> Router<Arc<ModelService>> {
@@ -250,7 +251,7 @@ async fn handle_streaming_message(
     bedrock_model_id: String,
     bedrock_body: Vec<u8>,
     original_model: String,
-    model_mapper: ModelMapper,
+    _model_mapper: ModelMapper,
     user_id: i32,
 ) -> Result<Response, AppError> {
     info!(
@@ -275,24 +276,42 @@ async fn handle_streaming_message(
                 bedrock_model_id
             );
 
-            // For streaming, we need to transform the response body
-            // Since ModelService returns the full response body, we need to process it for streaming
-            let chunk = Bytes::from(model_response.body);
-            let transformed_chunk =
-                match transform_streaming_event(&chunk, &model_mapper, &original_model) {
-                    Ok(Some(transformed)) => Bytes::from(transformed),
-                    Ok(None) => {
-                        warn!("Skipped chunk during streaming transformation");
-                        Bytes::new()
+            // For streaming, we transform each parsed event
+            let transformed_stream = model_response.stream.map(move |event_result| {
+                match event_result {
+                    Ok(sse_event) => {
+                        if let Some(data) = sse_event.data {
+                            let data_clone = data.clone();
+                            match transform_bedrock_event_to_anthropic(data, &original_model) {
+                                Ok(transformed) => {
+                                    // Format as SSE event
+                                    let sse_output = format!(
+                                        "data: {}\n\n",
+                                        serde_json::to_string(&transformed).unwrap_or_default()
+                                    );
+                                    Ok(Bytes::from(sse_output))
+                                }
+                                Err(e) => {
+                                    error!("Failed to transform streaming event: {}", e);
+                                    // For transformation errors, create SSE format from original JSON
+                                    let sse_output = format!(
+                                        "data: {}\n\n",
+                                        serde_json::to_string(&data_clone).unwrap_or_default()
+                                    );
+                                    Ok(Bytes::from(sse_output))
+                                }
+                            }
+                        } else {
+                            // No data to transform, create empty SSE event
+                            Ok(Bytes::from("data: {}\n\n"))
+                        }
                     }
-                    Err(e) => {
-                        error!("Failed to transform streaming chunk: {}", e);
-                        chunk // Pass through the original chunk on transformation error
-                    }
-                };
+                    Err(e) => Err(e),
+                }
+            });
 
-            // Create body from the transformed chunk
-            let body = Body::from(transformed_chunk);
+            // Create body from the transformed stream
+            let body = Body::from_stream(transformed_stream);
 
             // Build response with proper SSE headers
             let mut response = Response::builder()

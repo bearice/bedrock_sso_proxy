@@ -48,13 +48,17 @@ mod tests {
         assert!(validate_api_key_format("SSOK_ABC123DEF456789AABC123DEF456789A", "SSOK_").is_ok());
 
         // Invalid prefix
-        assert!(validate_api_key_format("INVALID_abcdef1234567890abcdef1234567890", "SSOK_").is_err());
+        assert!(
+            validate_api_key_format("INVALID_abcdef1234567890abcdef1234567890", "SSOK_").is_err()
+        );
 
         // Too short
         assert!(validate_api_key_format("SSOK_short", "SSOK_").is_err());
 
         // Too long
-        assert!(validate_api_key_format("SSOK_abcdef1234567890abcdef1234567890extra", "SSOK_").is_err());
+        assert!(
+            validate_api_key_format("SSOK_abcdef1234567890abcdef1234567890extra", "SSOK_").is_err()
+        );
 
         // Invalid characters
         assert!(validate_api_key_format("SSOK_abcdef1234567890abcdef123456789!", "SSOK_").is_err());

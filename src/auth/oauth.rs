@@ -1,8 +1,8 @@
 use crate::{
+    auth::config::OAuthProvider,
     auth::{OAuthClaims, jwt::JwtService, request_context::RequestContext},
     cache::{CacheManager, typed::typed_cache},
     config::Config,
-    auth::config::OAuthProvider,
     database::{DatabaseManager, entities::UserRecord},
     error::AppError,
     health::{HealthCheckResult, HealthChecker},
@@ -290,7 +290,8 @@ impl OAuthService {
                 .map_err(|e| AppError::Internal(format!("Failed to store user: {}", e)))?;
 
             // Update last login time
-            let user = self.database
+            let user = self
+                .database
                 .users()
                 .find_by_id(db_user_id)
                 .await
@@ -857,9 +858,9 @@ impl OAuthService {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::auth::config::{JwtConfig, OAuthConfig, OAuthProvider};
     use crate::auth::jwt::JwtService;
     use crate::cache::config::CacheConfig;
-    use crate::auth::config::{JwtConfig, OAuthConfig, OAuthProvider};
     use jsonwebtoken::Algorithm;
     use std::collections::HashMap;
 

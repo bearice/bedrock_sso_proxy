@@ -47,7 +47,7 @@ pub struct MetricsConfig {
 }
 
 fn default_metrics_enabled() -> bool {
-    true
+    false
 }
 
 fn default_metrics_port() -> u16 {

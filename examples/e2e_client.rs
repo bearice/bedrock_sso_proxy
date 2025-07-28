@@ -1,5 +1,5 @@
 use base64::{Engine as _, engine::general_purpose};
-use bedrock_sso_proxy::{config::Config,aws::bedrock::BedrockRuntimeImpl};
+use bedrock_sso_proxy::{aws::bedrock::BedrockRuntimeImpl, config::Config};
 use chrono::{Duration, Utc};
 use clap::{Parser, Subcommand};
 use futures_util::stream::StreamExt;
@@ -606,11 +606,14 @@ impl E2EClient {
         api_key: &Option<String>,
     ) -> Result<(), Box<dyn std::error::Error>> {
         if self.direct_mode {
-            self.send_direct_anthropic_message(model, message, streaming, api_key).await
+            self.send_direct_anthropic_message(model, message, streaming, api_key)
+                .await
         } else if streaming {
-            self.send_anthropic_streaming_message(model, message, api_key).await
+            self.send_anthropic_streaming_message(model, message, api_key)
+                .await
         } else {
-            self.send_anthropic_standard_message(model, message, api_key).await
+            self.send_anthropic_standard_message(model, message, api_key)
+                .await
         }
     }
 
@@ -767,7 +770,10 @@ impl E2EClient {
             "Anthropic API via Proxy"
         };
 
-        println!("🚀 Starting interactive chat with model: {} ({})", model, connection_type);
+        println!(
+            "🚀 Starting interactive chat with model: {} ({})",
+            model, connection_type
+        );
 
         if self.direct_mode {
             let has_api_key = api_key.is_some() || self.anthropic_api_key.is_some();
@@ -821,7 +827,10 @@ impl E2EClient {
                 break;
             }
 
-            if let Err(e) = self.send_anthropic_message(model, input, streaming, api_key).await {
+            if let Err(e) = self
+                .send_anthropic_message(model, input, streaming, api_key)
+                .await
+            {
                 println!("❌ Error sending message: {}", e);
             }
         }
@@ -894,7 +903,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Create E2E client
     let client = E2EClient::new(cli.server_url, &config.jwt.secret, &config, cli.direct)?;
 
-    let model = cli.model.unwrap_or_else(|| E2EClient::get_default_model(cli.anthropic).to_string());
+    let model = cli
+        .model
+        .unwrap_or_else(|| E2EClient::get_default_model(cli.anthropic).to_string());
 
     match cli.command {
         Commands::Health => {
@@ -902,14 +913,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
         Commands::Message { text } => {
             if cli.anthropic {
-                client.send_anthropic_message(&model, &text, cli.streaming, &cli.api_key).await?;
+                client
+                    .send_anthropic_message(&model, &text, cli.streaming, &cli.api_key)
+                    .await?;
             } else {
                 client.send_message(&model, &text, cli.streaming).await?;
             }
         }
         Commands::Chat => {
             if cli.anthropic {
-                client.anthropic_interactive_chat(&model, cli.streaming, &cli.api_key).await?;
+                client
+                    .anthropic_interactive_chat(&model, cli.streaming, &cli.api_key)
+                    .await?;
             } else {
                 client.interactive_chat(&model, cli.streaming).await?;
             }

@@ -1,12 +1,18 @@
 use std::{
+    collections::HashMap,
     sync::{
         Arc,
-        atomic::{AtomicBool, Ordering},
+        atomic::{AtomicBool, AtomicU64, Ordering},
     },
     time::Duration,
 };
-use tokio::{signal, sync::watch, time::timeout};
+use tokio::{
+    signal,
+    sync::{RwLock, watch},
+    time::timeout,
+};
 use tracing::{error, info};
+use crate::model_service::ModelService;
 
 /// Graceful shutdown coordinator
 #[derive(Clone)]
@@ -152,12 +158,14 @@ impl ShutdownManager {
 /// Database component that implements graceful shutdown
 pub struct DatabaseShutdown {
     name: String,
+    database: Arc<crate::database::DatabaseManager>,
 }
 
 impl DatabaseShutdown {
-    pub fn new<T>(_database: Arc<T>) -> Self {
+    pub fn new(database: Arc<crate::database::DatabaseManager>) -> Self {
         Self {
             name: "Database".to_string(),
+            database,
         }
     }
 }
@@ -170,9 +178,53 @@ impl GracefulShutdown for DatabaseShutdown {
 
     async fn shutdown(&self) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         info!("Shutting down database connections...");
-        // Database cleanup would go here
-        // For now, just a brief delay to simulate cleanup
-        tokio::time::sleep(Duration::from_millis(100)).await;
+
+        // Clean up any expired records before shutdown
+        let _ = self.database.api_keys().cleanup_expired().await;
+        let _ = self.database.refresh_tokens().cleanup_expired().await;
+
+        // Clear cache to free memory
+        let _ = self.database.cache_manager().clear().await;
+
+        // The database connection itself is automatically closed when dropped
+        // by the underlying SeaORM connection pool
+        info!("Database shutdown completed");
+        Ok(())
+    }
+}
+
+/// Cache component that implements graceful shutdown
+pub struct CacheShutdown {
+    name: String,
+    cache: Arc<crate::cache::CacheManager>,
+}
+
+impl CacheShutdown {
+    pub fn new(cache: Arc<crate::cache::CacheManager>) -> Self {
+        Self {
+            name: "Cache".to_string(),
+            cache,
+        }
+    }
+}
+
+#[async_trait::async_trait]
+impl GracefulShutdown for CacheShutdown {
+    fn name(&self) -> &str {
+        &self.name
+    }
+
+    async fn shutdown(&self) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        info!("Shutting down cache...");
+
+        // Clear all cache entries to free memory
+        if let Err(e) = self.cache.clear().await {
+            error!("Failed to clear cache during shutdown: {}", e);
+            return Err(e.into());
+        }
+
+        // Cache connections (Redis) are automatically closed when dropped
+        info!("Cache shutdown completed");
         Ok(())
     }
 }
@@ -205,14 +257,14 @@ impl GracefulShutdown for HttpServerShutdown {
 /// Background task shutdown
 pub struct BackgroundTaskShutdown {
     name: String,
-    task_handle: Option<tokio::task::JoinHandle<()>>,
+    task_handle: RwLock<Option<tokio::task::JoinHandle<()>>>,
 }
 
 impl BackgroundTaskShutdown {
     pub fn new(name: String, task_handle: tokio::task::JoinHandle<()>) -> Self {
         Self {
             name,
-            task_handle: Some(task_handle),
+            task_handle: RwLock::new(Some(task_handle)),
         }
     }
 }
@@ -224,15 +276,233 @@ impl GracefulShutdown for BackgroundTaskShutdown {
     }
 
     async fn shutdown(&self) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-        if let Some(handle) = self.task_handle.as_ref() {
+        if let Some(handle) = self.task_handle.write().await.take() {
             if !handle.is_finished() {
-                info!("Cancelling background task: {}", self.name);
+                info!("Shutting down background task: {}", self.name);
                 handle.abort();
 
-                // Wait a bit for graceful cancellation
-                tokio::time::sleep(Duration::from_millis(100)).await;
+                // Wait for task to complete or timeout
+                match timeout(Duration::from_secs(5), handle).await {
+                    Ok(_) => {
+                        info!("Background task '{}' shut down gracefully", self.name);
+                    }
+                    Err(_) => {
+                        error!("Background task '{}' shutdown timed out", self.name);
+                    }
+                }
+            } else {
+                info!("Background task '{}' already finished", self.name);
             }
         }
+        Ok(())
+    }
+}
+
+/// Connection tracking for active streaming requests
+#[derive(Clone)]
+pub struct StreamingConnectionManager {
+    /// Active streaming connections
+    active_connections: Arc<RwLock<HashMap<u64, StreamingConnection>>>,
+    /// Connection counter for unique IDs
+    connection_counter: Arc<AtomicU64>,
+    /// Shutdown coordinator for listening to shutdown signals
+    #[allow(dead_code)]
+    shutdown_coordinator: Arc<ShutdownCoordinator>,
+}
+
+/// Information about an active streaming connection
+pub struct StreamingConnection {
+    pub id: u64,
+    pub user_id: i32,
+    pub model_id: String,
+    pub endpoint_type: String,
+    pub started_at: std::time::Instant,
+    /// Channel to signal the connection to complete gracefully
+    pub completion_tx: tokio::sync::oneshot::Sender<()>,
+}
+
+impl StreamingConnectionManager {
+    /// Create a new streaming connection manager
+    pub fn new(shutdown_coordinator: Arc<ShutdownCoordinator>) -> Self {
+        Self {
+            active_connections: Arc::new(RwLock::new(HashMap::new())),
+            connection_counter: Arc::new(AtomicU64::new(0)),
+            shutdown_coordinator,
+        }
+    }
+
+    /// Register a new streaming connection
+    pub async fn register_connection(
+        &self,
+        user_id: i32,
+        model_id: String,
+        endpoint_type: String,
+    ) -> (u64, tokio::sync::oneshot::Receiver<()>) {
+        let id = self.connection_counter.fetch_add(1, Ordering::SeqCst);
+        let (completion_tx, completion_rx) = tokio::sync::oneshot::channel();
+
+        info!(
+            "Registered streaming connection {} for user {} on model {}",
+            id, user_id, model_id
+        );
+
+        let connection = StreamingConnection {
+            id,
+            user_id,
+            model_id,
+            endpoint_type,
+            started_at: std::time::Instant::now(),
+            completion_tx,
+        };
+
+        self.active_connections.write().await.insert(id, connection);
+
+        (id, completion_rx)
+    }
+
+    /// Unregister a streaming connection
+    pub async fn unregister_connection(&self, connection_id: u64) {
+        if let Some(connection) = self.active_connections.write().await.remove(&connection_id) {
+            let duration = connection.started_at.elapsed();
+            info!(
+                "Unregistered streaming connection {} after {:?}",
+                connection_id, duration
+            );
+        }
+    }
+
+    /// Get the number of active connections
+    pub async fn active_connection_count(&self) -> usize {
+        self.active_connections.read().await.len()
+    }
+
+    /// Wait for all streaming connections to complete with timeout
+    pub async fn wait_for_all_connections(&self, timeout_duration: Duration) -> bool {
+        let start_time = std::time::Instant::now();
+
+        loop {
+            let count = self.active_connection_count().await;
+            if count == 0 {
+                info!("All streaming connections completed");
+                return true;
+            }
+
+            if start_time.elapsed() > timeout_duration {
+                error!(
+                    "Timeout waiting for {} streaming connections to complete",
+                    count
+                );
+                return false;
+            }
+
+            info!("Waiting for {} streaming connections to complete...", count);
+            tokio::time::sleep(Duration::from_millis(100)).await;
+        }
+    }
+
+    /// Signal all active connections to complete gracefully
+    pub async fn signal_all_connections_to_complete(&self) {
+        let mut connections = self.active_connections.write().await;
+        let count = connections.len();
+
+        if count > 0 {
+            info!(
+                "Signaling {} streaming connections to complete gracefully",
+                count
+            );
+
+            // Signal all connections to complete
+            for (_, connection) in connections.drain() {
+                // Send completion signal (ignore errors if receiver is dropped)
+                let _ = connection.completion_tx.send(());
+            }
+        }
+    }
+}
+
+/// Streaming connection shutdown component
+pub struct StreamingShutdown {
+    name: String,
+    connection_manager: Arc<StreamingConnectionManager>,
+}
+
+impl StreamingShutdown {
+    pub fn new(connection_manager: Arc<StreamingConnectionManager>) -> Self {
+        Self {
+            name: "Streaming Connections".to_string(),
+            connection_manager,
+        }
+    }
+}
+
+#[async_trait::async_trait]
+impl GracefulShutdown for StreamingShutdown {
+    fn name(&self) -> &str {
+        &self.name
+    }
+
+    async fn shutdown(&self) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        info!("Shutting down streaming connections...");
+
+        // First, signal all active connections to complete gracefully
+        self.connection_manager
+            .signal_all_connections_to_complete()
+            .await;
+
+        // Wait for all connections to complete (with timeout)
+        let completed = self
+            .connection_manager
+            .wait_for_all_connections(Duration::from_secs(30))
+            .await;
+
+        if completed {
+            info!("All streaming connections completed successfully");
+        } else {
+            error!("Some streaming connections did not complete within timeout");
+        }
+
+        Ok(())
+    }
+}
+
+/// Token tracking shutdown component for ModelService
+pub struct TokenTrackingShutdown {
+    name: String,
+    model_service: Arc<ModelService>,
+}
+
+impl TokenTrackingShutdown {
+    pub fn new(model_service: Arc<ModelService>) -> Self {
+        Self {
+            name: "Token Tracking".to_string(),
+            model_service,
+        }
+    }
+}
+
+#[async_trait::async_trait]
+impl GracefulShutdown for TokenTrackingShutdown {
+    fn name(&self) -> &str {
+        &self.name
+    }
+
+    async fn shutdown(&self) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        info!("Shutting down token tracking tasks...");
+
+        // First, wait for token tracking tasks to complete
+        let completed = self
+            .model_service
+            .wait_for_token_tracking_completion(Duration::from_secs(30))
+            .await;
+
+        if completed {
+            info!("All token tracking tasks completed successfully");
+        } else {
+            error!("Some token tracking tasks did not complete within timeout");
+            // Abort remaining tasks
+            self.model_service.abort_token_tracking_tasks().await;
+        }
+
         Ok(())
     }
 }

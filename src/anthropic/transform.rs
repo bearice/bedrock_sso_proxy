@@ -213,7 +213,7 @@ pub fn transform_streaming_event(
 }
 
 /// Transforms a Bedrock streaming event to Anthropic streaming format
-fn transform_bedrock_event_to_anthropic(
+pub fn transform_bedrock_event_to_anthropic(
     bedrock_event: Value,
     original_model: &str,
 ) -> Result<Value, AnthropicError> {

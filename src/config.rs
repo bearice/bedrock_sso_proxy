@@ -50,7 +50,7 @@ impl Default for Config {
             jwt: JwtConfig {
                 secret: "your-jwt-secret".to_string(),
                 algorithm: "HS256".to_string(),
-                access_token_ttl: 3600, // 1 hour
+                access_token_ttl: 3600,     // 1 hour
                 refresh_token_ttl: 7776000, // 90 days
             },
             aws: AwsConfig {
@@ -138,9 +138,7 @@ impl Config {
             self.aws.region.clone(),
         )
     }
-
 }
-
 
 #[cfg(test)]
 mod tests {

@@ -5,15 +5,15 @@
 
 use thiserror::Error;
 
+pub mod config;
 mod memory;
 mod redis;
 pub mod typed;
-pub mod config;
 
 pub use typed::{CachedObject, TypedCache, TypedCacheStats, typed_cache};
 
-use crate::health::HealthChecker;
 use crate::cache::config::CacheConfig;
+use crate::health::HealthChecker;
 
 /// Cache error types
 #[derive(Error, Debug)]

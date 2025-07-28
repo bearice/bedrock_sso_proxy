@@ -462,7 +462,6 @@ impl BedrockRuntime for BedrockRuntimeImpl {
     }
 }
 
-
 impl BedrockRuntimeImpl {
     /// Process headers for forwarding to AWS, removing sensitive headers
     pub fn process_headers_for_aws(headers: &HeaderMap) -> HeaderMap {
@@ -531,7 +530,6 @@ mod tests {
             "https://bedrock-runtime.us-east-1.amazonaws.com"
         );
     }
-
 
     #[test]
     fn test_get_host() {
@@ -723,7 +721,6 @@ mod tests {
         assert!(!processed.contains_key("x-amz-id-2"));
         assert!(processed.contains_key("content-type"));
     }
-
 
     #[tokio::test]
     async fn test_add_bearer_token() {

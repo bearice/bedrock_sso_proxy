@@ -5,10 +5,10 @@
 
 use std::sync::Arc;
 
-use async_trait::async_trait;
 use crate::cache::{CacheManager, TypedCacheStats};
 use crate::config::Config;
 use crate::health::HealthChecker;
+use async_trait::async_trait;
 use sea_orm::DatabaseConnection;
 use thiserror::Error;
 

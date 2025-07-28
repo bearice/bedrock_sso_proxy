@@ -11,6 +11,7 @@ use axum::{
     response::Response,
     routing::post,
 };
+use futures_util::StreamExt;
 use std::sync::Arc;
 
 pub fn create_bedrock_routes() -> Router<Arc<ModelService>> {
@@ -104,11 +105,14 @@ async fn invoke_model_with_response_stream(
                 model_response.status
             );
 
-            // For streaming, we need to return the body as a stream
-            // Since ModelService returns the full response body, we need to convert it to a stream
-            // This is a simplified implementation - in a real streaming scenario,
-            // ModelService would return a stream directly
-            let body = Body::from(model_response.body);
+            // For streaming, we return the raw binary stream for AWS compatibility
+            let raw_stream = model_response
+                .stream
+                .map(|event_result| match event_result {
+                    Ok(sse_event) => Ok(Bytes::from(sse_event.raw)),
+                    Err(e) => Err(e),
+                });
+            let body = Body::from_stream(raw_stream);
 
             // Build response with headers from ModelService
             let mut response = Response::builder()
@@ -123,13 +127,15 @@ async fn invoke_model_with_response_stream(
                 }
             }
 
-            // Ensure correct content type for SSE
+            // Set content type to match AWS Bedrock response format
             response
                 .headers_mut()
-                .insert("content-type", "text/event-stream".parse().unwrap());
+                .insert("content-type", "application/vnd.amazon.eventstream".parse().unwrap());
             response
                 .headers_mut()
                 .insert("cache-control", "no-cache".parse().unwrap());
+
+            // Usage tracking is handled by the stream wrapper automatically
 
             Ok(response)
         }
