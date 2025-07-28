@@ -5,12 +5,13 @@
 
 use thiserror::Error;
 
-pub mod memory;
-pub mod redis;
+mod memory;
+mod redis;
 pub mod typed;
 
-pub use memory::MemoryCache;
 pub use typed::{CachedObject, TypedCache, TypedCacheStats, typed_cache};
+
+use crate::{config::CacheConfig, health::HealthChecker};
 
 /// Cache error types
 #[derive(Error, Debug)]
@@ -57,8 +58,8 @@ pub trait Cache: Send + Sync {
 
 /// Cache backend enum - either Redis or memory cache
 #[derive(Clone)]
-pub enum CacheBackend {
-    Memory(MemoryCache),
+enum CacheBackend {
+    Memory(memory::MemoryCache),
     Redis(redis::RedisCache),
 }
 
@@ -71,26 +72,19 @@ impl CacheManager {
     /// Create new cache manager with memory cache (for testing/single instance)
     pub fn new_memory() -> Self {
         Self {
-            backend: CacheBackend::Memory(MemoryCache::new()),
-        }
-    }
-
-    /// Create cache manager with Redis cache (for production/distributed)
-    pub fn new_redis(redis_cache: redis::RedisCache) -> Self {
-        Self {
-            backend: CacheBackend::Redis(redis_cache),
+            backend: CacheBackend::Memory(memory::MemoryCache::new()),
         }
     }
 
     /// Create cache manager from configuration
-    pub async fn new_from_config(config: &crate::config::Config) -> CacheResult<Self> {
-        match config.cache.backend.as_str() {
+    pub async fn new_from_config(config: &CacheConfig) -> CacheResult<Self> {
+        match config.backend.as_str() {
             "redis" => {
-                let redis_cache = redis::RedisCache::new(
-                    &config.cache.redis_url,
-                    config.cache.redis_key_prefix.clone(),
+                let redis = redis::RedisCache::new(
+                    &config.redis_url,
+                    config.redis_key_prefix.clone(),
                 )?;
-                Ok(Self::new_redis(redis_cache))
+                Ok(Self{backend:CacheBackend::Redis(redis)})
             }
             _ => Ok(Self::new_memory()),
         }
@@ -156,5 +150,56 @@ impl CacheManager {
 impl Default for CacheManager {
     fn default() -> Self {
         Self::new_memory()
+    }
+}
+
+#[async_trait::async_trait]
+impl HealthChecker for CacheManager {
+    fn name(&self) -> &str {
+        "cache"
+    }
+
+    async fn check(&self) -> crate::health::HealthCheckResult {
+        match &self.backend {
+            CacheBackend::Memory(_) => {
+                // Memory cache always passes health check
+                crate::health::HealthCheckResult::healthy_with_details(
+                    serde_json::json!({
+                        "backend": "memory",
+                        "status": "healthy"
+                    })
+                )
+            }
+            CacheBackend::Redis(redis_cache) => {
+                // Use the Redis health check function
+                match redis_cache.health_check().await {
+                    Ok(_) => crate::health::HealthCheckResult::healthy_with_details(
+                        serde_json::json!({
+                            "backend": "redis",
+                            "status": "healthy",
+                            "connection": "ok"
+                        })
+                    ),
+                    Err(err) => crate::health::HealthCheckResult::unhealthy_with_details(
+                        "Redis health check failed".to_string(),
+                        serde_json::json!({
+                            "backend": "redis",
+                            "status": "unhealthy",
+                            "error": err.to_string()
+                        })
+                    ),
+                }
+            }
+        }
+    }
+
+    fn info(&self) -> Option<serde_json::Value> {
+        Some(serde_json::json!({
+            "service": "Cache Manager",
+            "backend": match &self.backend {
+                CacheBackend::Memory(_) => "memory",
+                CacheBackend::Redis(_) => "redis",
+            }
+        }))
     }
 }

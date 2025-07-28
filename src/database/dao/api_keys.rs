@@ -7,6 +7,7 @@ use sea_orm::{
 };
 
 /// API Keys DAO for database operations
+#[derive(Clone)]
 pub struct ApiKeysDao {
     db: DatabaseConnection,
 }
@@ -48,6 +49,16 @@ impl ApiKeysDao {
         Ok(key)
     }
 
+    /// Find API key by ID
+    pub async fn find_by_id(&self, key_id: i32) -> DatabaseResult<Option<ApiKeyRecord>> {
+        let key = api_keys::Entity::find_by_id(key_id)
+            .one(&self.db)
+            .await
+            .map_err(|e| DatabaseError::Database(e.to_string()))?;
+
+        Ok(key)
+    }
+
     /// Get all API keys for a user (only non-revoked ones)
     pub async fn find_by_user(&self, user_id: i32) -> DatabaseResult<Vec<ApiKeyRecord>> {
         let keys = api_keys::Entity::find()
@@ -82,12 +93,8 @@ impl ApiKeysDao {
     }
 
     /// Revoke an API key
-    pub async fn revoke(&self, key_id: i32) -> DatabaseResult<()> {
-        let key = api_keys::Entity::find_by_id(key_id)
-            .one(&self.db)
-            .await
-            .map_err(|e| DatabaseError::Database(e.to_string()))?
-            .ok_or(DatabaseError::NotFound)?;
+    pub async fn revoke(&self, key_hash: &str) -> DatabaseResult<()> {
+        let key = self.find_by_hash(key_hash).await?.ok_or(DatabaseError::NotFound)?;
 
         let mut active_model = api_keys::ActiveModel::from(key);
         active_model.revoked_at = Set(Some(Utc::now()));

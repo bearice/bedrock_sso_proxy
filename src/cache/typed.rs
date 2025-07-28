@@ -37,6 +37,7 @@ pub trait CachedObject:
 }
 
 /// Typed cache instance for a specific type T
+#[derive(Clone)]
 pub struct TypedCache<T: CachedObject> {
     backend: CacheBackend,
     prefix: String,
@@ -47,7 +48,7 @@ pub struct TypedCache<T: CachedObject> {
 
 impl<T: CachedObject> TypedCache<T> {
     /// Create a new typed cache for type T
-    pub fn new(backend: CacheBackend) -> Self {
+    pub(super) fn new(backend: CacheBackend) -> Self {
         let prefix = T::cache_prefix();
         let type_hash = T::cache_type_hash();
 

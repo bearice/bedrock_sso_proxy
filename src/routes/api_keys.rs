@@ -115,16 +115,17 @@ pub async fn revoke_api_key(
         .await
         .map_err(|e| AppError::Internal(format!("Failed to get API keys: {}", e)))?;
 
-    let key_exists = api_keys.iter().any(|key| key.id == key_id);
-    if !key_exists {
+    let key = api_keys.iter().find(|key| key.id == key_id);
+    if key.is_none() {
         return Err(AppError::NotFound("API key not found".to_string()));
     }
+    let key = key.unwrap();
 
     // Revoke the API key
     server
         .database
         .api_keys()
-        .revoke(key_id)
+        .revoke(&key.key_hash)
         .await
         .map_err(|e| AppError::Internal(format!("Failed to revoke API key: {}", e)))?;
 
@@ -160,8 +161,12 @@ mod tests {
         config.storage.database.enabled = true;
         config.storage.database.url = "sqlite::memory:".to_string();
 
-        let database = Arc::new(DatabaseManager::new_from_config(&config).await.unwrap());
         let cache = Arc::new(CacheManager::new_memory());
+        let database = Arc::new(
+            DatabaseManager::new_from_config(&config, cache.clone())
+                .await
+                .unwrap(),
+        );
 
         // Run migrations to create tables
         database.migrate().await.unwrap();

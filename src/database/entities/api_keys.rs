@@ -55,7 +55,7 @@ impl Model {
     pub fn new(user_id: i32, name: String, expires_at: Option<DateTime<Utc>>) -> (Self, String) {
         let raw_key = generate_api_key("SSOK_", 32);
         let key_hash = hash_api_key(&raw_key);
-
+        eprintln!("key_hash={}",key_hash);
         let api_key = Self {
             id: 0, // Will be set by database
             key_hash,

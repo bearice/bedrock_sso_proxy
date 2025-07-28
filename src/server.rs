@@ -72,25 +72,16 @@ impl Server {
         let jwt_algorithm = parse_algorithm(&config.jwt.algorithm)?;
         let jwt_service = Arc::new(JwtService::new(config.jwt.secret.clone(), jwt_algorithm)?);
 
+
+        // Initialize cache
+        let cache = Arc::new(CacheManager::new_from_config(&config.cache).await?);
+
         // Initialize database
         let database = Arc::new(
-            DatabaseManager::new_from_config(&config)
+            DatabaseManager::new_from_config(&config,cache.clone())
                 .await
                 .map_err(AppError::Database)?,
         );
-
-        // Initialize cache
-        let cache = Arc::new(if config.storage.redis.enabled {
-            CacheManager::new_redis(
-                crate::cache::redis::RedisCache::new(
-                    &config.storage.redis.url,
-                    config.storage.redis.key_prefix.clone(),
-                )
-                .map_err(AppError::Cache)?,
-            )
-        } else {
-            CacheManager::new_memory()
-        });
 
         // Initialize model service
         let model_service = Arc::new(ModelService::new(database.clone(), (*config).clone()));
@@ -105,6 +96,7 @@ impl Server {
 
         // Initialize health service
         let health_service = Arc::new(HealthService::new());
+        health_service.register(cache.clone()).await;
 
         Ok(Self {
             config,

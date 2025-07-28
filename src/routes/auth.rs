@@ -381,12 +381,12 @@ mod tests {
         db_config.storage.database.enabled = true;
         db_config.storage.database.url = "sqlite::memory:".to_string();
 
+        let cache = Arc::new(crate::cache::CacheManager::new_memory());
         let database = Arc::new(
-            crate::database::DatabaseManager::new_from_config(&db_config)
+            crate::database::DatabaseManager::new_from_config(&db_config, cache.clone())
                 .await
                 .unwrap(),
         );
-        let cache = Arc::new(crate::cache::CacheManager::new_memory());
         let jwt_service = JwtService::new("test-secret".to_string(), Algorithm::HS256).unwrap();
         Arc::new(OAuthService::new(config, jwt_service, database, cache).unwrap())
     }

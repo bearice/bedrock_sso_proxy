@@ -3,6 +3,10 @@
 //! This module provides direct database access without abstraction layers.
 //! Each domain (users, api_keys, usage, etc.) has its own DAO for focused operations.
 
+use std::sync::Arc;
+
+use crate::cache::{CacheManager, TypedCacheStats};
+use crate::config::Config;
 use sea_orm::DatabaseConnection;
 use thiserror::Error;
 
@@ -11,8 +15,8 @@ pub mod entities;
 pub mod migration;
 
 pub use dao::{
-    ApiKeysDao, AuditLogsDao, ModelCostsDao, RefreshTokensDao, UsageDao, UsageQuery, UsageStats,
-    UsersDao,
+    ApiKeysDao, AuditLogsDao, CachedApiKeysDao, CachedUsersDao, ModelCostsDao, RefreshTokensDao,
+    UsageDao, UsageQuery, UsageStats, UsersDao,
 };
 
 /// Database error types
@@ -30,21 +34,26 @@ pub enum DatabaseError {
 
 pub type DatabaseResult<T> = Result<T, DatabaseError>;
 
-/// Database connection manager
+/// Database connection manager with optional caching
 pub struct DatabaseManager {
     pub connection: DatabaseConnection,
+    cache_manager: Arc<CacheManager>,
 }
 
 impl DatabaseManager {
-    pub fn new(connection: DatabaseConnection) -> Self {
-        Self { connection }
-    }
-
-    pub async fn new_from_config(config: &crate::config::Config) -> Result<Self, DatabaseError> {
+    /// Create database manager from configuration with caching
+    pub async fn new_from_config(
+        config: &Config,
+        cache_manager: Arc<CacheManager>,
+    ) -> Result<Self, DatabaseError> {
         let connection = sea_orm::Database::connect(&config.storage.database.url)
             .await
             .map_err(|e| DatabaseError::Database(e.to_string()))?;
-        Ok(Self::new(connection))
+
+        Ok(Self {
+            connection,
+            cache_manager,
+        })
     }
 
     /// Run database migrations
@@ -74,14 +83,22 @@ impl DatabaseManager {
         Ok(())
     }
 
+    /// Get cache manager reference
+    pub fn cache_manager(&self) -> Arc<CacheManager> {
+        self.cache_manager.clone()
+    }
+
     /// Get users DAO
-    pub fn users(&self) -> UsersDao {
-        UsersDao::new(self.connection.clone())
+    pub fn users(&self) -> CachedUsersDao {
+        CachedUsersDao::new(UsersDao::new(self.connection.clone()), &self.cache_manager)
     }
 
     /// Get API keys DAO
-    pub fn api_keys(&self) -> ApiKeysDao {
-        ApiKeysDao::new(self.connection.clone())
+    pub fn api_keys(&self) -> CachedApiKeysDao {
+        CachedApiKeysDao::new(
+            ApiKeysDao::new(self.connection.clone()),
+            &self.cache_manager,
+        )
     }
 
     /// Get usage DAO
@@ -103,4 +120,22 @@ impl DatabaseManager {
     pub fn model_costs(&self) -> ModelCostsDao {
         ModelCostsDao::new(self.connection.clone())
     }
+
+    /// Get cache statistics for all cached DAOs
+    pub fn get_cache_stats(&self) -> Option<CacheStats> {
+        // Create temporary DAOs to get stats
+        let users = self.users().get_cache_stats();
+        let api_keys = self.api_keys().get_cache_stats();
+
+        Some(CacheStats {
+            users, api_keys,
+        })
+    }
+}
+
+/// Cache statistics for all cached DAOs
+#[derive(Debug, Clone)]
+pub struct CacheStats {
+    pub users: TypedCacheStats,
+    pub api_keys: TypedCacheStats,
 }

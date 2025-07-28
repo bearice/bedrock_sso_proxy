@@ -7,6 +7,7 @@ use sea_orm::{
 use sea_orm_migration::sea_query::OnConflict;
 
 /// Users DAO for database operations
+#[derive(Clone)]
 pub struct UsersDao {
     db: DatabaseConnection,
 }

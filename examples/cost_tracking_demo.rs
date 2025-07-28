@@ -7,10 +7,7 @@ use axum::http::HeaderMap;
 /// 3. Demonstrate cost update from AWS Price List API
 /// 4. Show cost summary and management
 use bedrock_sso_proxy::{
-    config::{AwsConfig, Config},
-    cost_tracking::CostTrackingService,
-    database::{DatabaseManager, entities::StoredModelCost},
-    model_service::{ModelRequest, ModelService, UsageMetadata},
+    cache::CacheManager, config::{AwsConfig, Config}, cost_tracking::CostTrackingService, database::{entities::StoredModelCost, DatabaseManager}, model_service::{ModelRequest, ModelService, UsageMetadata}
 };
 use chrono::Utc;
 use rust_decimal::Decimal;
@@ -37,8 +34,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     };
     config.storage.database.enabled = true;
     config.storage.database.url = "sqlite::memory:".to_string();
-
-    let database = Arc::new(DatabaseManager::new_from_config(&config).await.unwrap());
+    let cache = Arc::new(CacheManager::new_memory());
+    let database = Arc::new(DatabaseManager::new_from_config(&config,cache).await.unwrap());
 
     // Run database migrations
     database.migrate().await?;

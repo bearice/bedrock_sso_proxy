@@ -899,9 +899,8 @@ mod tests {
         config.storage.redis.enabled = false;
         config.storage.database.enabled = true;
         config.storage.database.url = "sqlite::memory:".to_string();
-
-        let database = Arc::new(DatabaseManager::new_from_config(&config).await.unwrap());
         let cache = Arc::new(CacheManager::new_memory());
+        let database = Arc::new(DatabaseManager::new_from_config(&config,cache.clone()).await.unwrap());
 
         (database, cache)
     }
