@@ -73,6 +73,14 @@ body {
   margin-bottom: 1rem;
 }
 
+/* Small loading spinner for inline use */
+.loading-spinner.inline {
+  width: 16px;
+  height: 16px;
+  border-width: 2px;
+  margin: 0;
+}
+
 @keyframes spin {
   0% {
     transform: rotate(0deg);
