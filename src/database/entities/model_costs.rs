@@ -1,9 +1,11 @@
+use crate::cache::typed::typed_cache;
 use chrono::{DateTime, Utc};
 use rust_decimal::Decimal;
 use sea_orm::entity::prelude::*;
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Debug, PartialEq, DeriveEntityModel, Eq, Serialize, Deserialize)]
+#[typed_cache(ttl = 3600)] // Cache for 1 hour since costs change infrequently
 #[sea_orm(table_name = "model_costs")]
 pub struct Model {
     #[sea_orm(primary_key)]

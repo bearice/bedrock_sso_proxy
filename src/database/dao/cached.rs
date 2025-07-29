@@ -195,6 +195,7 @@ where
 }
 
 /// Cache key builder helper for consistent key generation
+#[derive(Clone)]
 pub struct CacheKeyBuilder {
     prefix: String,
 }

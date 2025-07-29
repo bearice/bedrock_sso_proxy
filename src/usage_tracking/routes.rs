@@ -1,21 +1,18 @@
 use crate::{
     auth::middleware::UserExtractor,
-    cost_tracking::{CostSummary, CostTrackingService, UpdateCostsResult},
     database::{
         dao::usage::{UsageQuery, UsageStats},
-        entities::{StoredModelCost, UsageRecord},
+        entities::UsageRecord,
     },
     error::AppError,
 };
 use axum::{
     Router,
-    extract::{Path, Query, State},
-    http::StatusCode,
+    extract::{Query, State},
     response::Json,
-    routing::{delete, get, post, put},
+    routing::get,
 };
 use chrono::{DateTime, Utc};
-use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 
 /// Create usage tracking API routes for regular users
@@ -32,15 +29,6 @@ pub fn create_admin_usage_routes() -> Router<crate::server::Server> {
         .route("/admin/usage/records", get(get_system_usage_records))
         .route("/admin/usage/stats", get(get_system_usage_stats))
         .route("/admin/usage/top-models", get(get_top_models))
-        // Model cost management endpoints
-        .route("/admin/model-costs", get(get_all_model_costs))
-        .route("/admin/model-costs", post(create_model_cost))
-        .route("/admin/model-costs/{model_id}", put(update_model_cost))
-        .route("/admin/model-costs/{model_id}", delete(delete_model_cost))
-        .route("/admin/model-costs/{model_id}", get(get_model_cost))
-        // Cost tracking endpoints
-        .route("/admin/costs/update", post(update_all_model_costs))
-        .route("/admin/costs/summary", get(get_cost_summary))
 }
 
 /// Query parameters for usage records
@@ -82,13 +70,6 @@ pub struct ModelUsage {
     pub total_tokens: u64,
 }
 
-/// Request/Response for model cost management
-#[derive(Debug, Serialize, Deserialize)]
-pub struct ModelCostRequest {
-    pub model_id: String,
-    pub input_cost_per_1k_tokens: f64,
-    pub output_cost_per_1k_tokens: f64,
-}
 
 /// Get user's usage records
 async fn get_user_usage_records(
@@ -247,135 +228,7 @@ async fn get_top_models(
     }))
 }
 
-/// Get all model costs (admin only)
-async fn get_all_model_costs(
-    State(server): State<crate::server::Server>,
-) -> Result<Json<Vec<StoredModelCost>>, AppError> {
-    // Admin permissions already checked by middleware
-    let costs = server.database.model_costs().get_all().await?;
-    Ok(Json(costs))
-}
 
-/// Get specific model cost (admin only)
-async fn get_model_cost(
-    State(server): State<crate::server::Server>,
-    Path(model_id): Path<String>,
-) -> Result<Json<StoredModelCost>, AppError> {
-    // Admin permissions already checked by middleware
-
-    let cost = server
-        .database
-        .model_costs()
-        .find_by_model(&model_id)
-        .await?
-        .ok_or_else(|| AppError::NotFound(format!("Model cost not found: {}", model_id)))?;
-
-    Ok(Json(cost))
-}
-
-/// Create or update model cost (admin only)
-async fn create_model_cost(
-    State(server): State<crate::server::Server>,
-    Json(request): Json<ModelCostRequest>,
-) -> Result<StatusCode, AppError> {
-    // Admin permissions already checked by middleware
-
-    let cost = StoredModelCost {
-        id: 0,                           // Will be set by database
-        region: "us-east-1".to_string(), // Default region for manual cost updates
-        model_id: request.model_id,
-        input_cost_per_1k_tokens: Decimal::from_f64_retain(request.input_cost_per_1k_tokens)
-            .unwrap_or_default(),
-        output_cost_per_1k_tokens: Decimal::from_f64_retain(request.output_cost_per_1k_tokens)
-            .unwrap_or_default(),
-        cache_write_cost_per_1k_tokens: None,
-        cache_read_cost_per_1k_tokens: None,
-        updated_at: Utc::now(),
-    };
-
-    server.database.model_costs().upsert_many(&[cost]).await?;
-    Ok(StatusCode::CREATED)
-}
-
-/// Update model cost (admin only)
-async fn update_model_cost(
-    State(server): State<crate::server::Server>,
-    Path(model_id): Path<String>,
-    Json(request): Json<ModelCostRequest>,
-) -> Result<StatusCode, AppError> {
-    // Admin permissions already checked by middleware
-
-    // Verify model exists
-    server
-        .database
-        .model_costs()
-        .find_by_model(&model_id)
-        .await?
-        .ok_or_else(|| AppError::NotFound(format!("Model cost not found: {}", model_id)))?;
-
-    let cost = StoredModelCost {
-        id: 0,                           // Will be set by database
-        region: "us-east-1".to_string(), // Default region for manual cost updates
-        model_id: model_id.clone(),
-        input_cost_per_1k_tokens: Decimal::from_f64_retain(request.input_cost_per_1k_tokens)
-            .unwrap_or_default(),
-        output_cost_per_1k_tokens: Decimal::from_f64_retain(request.output_cost_per_1k_tokens)
-            .unwrap_or_default(),
-        cache_write_cost_per_1k_tokens: None,
-        cache_read_cost_per_1k_tokens: None,
-        updated_at: Utc::now(),
-    };
-
-    server.database.model_costs().upsert_many(&[cost]).await?;
-    Ok(StatusCode::OK)
-}
-
-/// Delete model cost (admin only)
-async fn delete_model_cost(
-    State(server): State<crate::server::Server>,
-    Path(model_id): Path<String>,
-) -> Result<StatusCode, AppError> {
-    // Admin permissions already checked by middleware
-
-    server.database.model_costs().delete(&model_id).await?;
-    Ok(StatusCode::NO_CONTENT)
-}
-
-/// Update all model costs from uploaded CSV data (admin only)
-/// Requires CSV content in request body - does not use embedded data
-async fn update_all_model_costs(
-    State(server): State<crate::server::Server>,
-    body: String,
-) -> Result<Json<UpdateCostsResult>, AppError> {
-    // Admin permissions already checked by middleware
-
-    // Validate that CSV content is provided
-    if body.trim().is_empty() {
-        return Err(AppError::BadRequest(
-            "CSV content is required for price updates. Please provide pricing data in the request body.".to_string()
-        ));
-    }
-
-    // Create cost tracking service with us-east-1 region for pricing data
-    let cost_service = CostTrackingService::new(server.database.clone());
-
-    // Process the provided CSV content
-    let result = cost_service.batch_update_from_csv_content(&body).await?;
-
-    Ok(Json(result))
-}
-
-/// Get cost summary for all models (admin only)
-async fn get_cost_summary(
-    State(server): State<crate::server::Server>,
-) -> Result<Json<CostSummary>, AppError> {
-    // Admin permissions already checked by middleware
-
-    let cost_service = CostTrackingService::new(server.database.clone());
-    let summary = cost_service.get_cost_summary().await?;
-
-    Ok(Json(summary))
-}
 
 // Note: user_id is now extracted from JWT sub field (database user ID)
 // This eliminates the need for database lookups for regular user operations

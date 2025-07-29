@@ -678,13 +678,14 @@ impl ModelServiceImpl {
     /// Calculate cost for the given model and token usage
     async fn calculate_cost(
         &self,
+        region: &str,
         model_id: &str,
         input_tokens: u32,
         output_tokens: u32,
         cache_write_tokens: Option<u32>,
         cache_read_tokens: Option<u32>,
     ) -> Option<Decimal> {
-        match self.database.model_costs().find_by_model(model_id).await {
+        match self.database.model_costs().find_by_region_and_model(region, model_id).await {
             Ok(Some(cost_data)) => {
                 let input_cost = Decimal::from(input_tokens) * cost_data.input_cost_per_1k_tokens
                     / Decimal::from(1000);
@@ -987,6 +988,7 @@ impl ModelService for ModelServiceImpl {
         // Calculate cost if model pricing is available
         let cost_usd = self
             .calculate_cost(
+                &usage_metadata.region,
                 &request.model_id,
                 usage_metadata.input_tokens,
                 usage_metadata.output_tokens,
@@ -1179,7 +1181,7 @@ mod tests {
 
         // Calculate cost for 100 input tokens, 50 output tokens, no cache tokens
         let cost = model_service
-            .calculate_cost("test-model", 100, 50, None, None)
+            .calculate_cost("us-east-1", "test-model", 100, 50, None, None)
             .await;
 
         assert!(cost.is_some());

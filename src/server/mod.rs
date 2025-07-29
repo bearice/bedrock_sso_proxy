@@ -24,6 +24,7 @@ use crate::{
         TokenTrackingShutdown,
     },
     usage_tracking::{create_admin_usage_routes, create_user_usage_routes},
+    cost_tracking::routes::create_admin_cost_routes,
 };
 use axum::{
     Router,
@@ -333,6 +334,20 @@ impl Server {
             .nest(
                 "/api",
                 create_admin_usage_routes()
+                    .with_state(self.clone())
+                    .layer(middleware::from_fn_with_state(
+                        self.clone(),
+                        jwt_auth_middleware,
+                    ))
+                    .layer(middleware::from_fn_with_state(
+                        self.clone(),
+                        admin_middleware,
+                    )),
+            )
+            // Protected admin cost tracking API routes
+            .nest(
+                "/api",
+                create_admin_cost_routes()
                     .with_state(self.clone())
                     .layer(middleware::from_fn_with_state(
                         self.clone(),

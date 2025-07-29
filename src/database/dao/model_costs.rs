@@ -7,6 +7,7 @@ use sea_orm_migration::sea_query::OnConflict;
 use tracing::{debug, trace};
 
 /// Model costs DAO for database operations
+#[derive(Clone)]
 pub struct ModelCostsDao {
     db: DatabaseConnection,
 }
@@ -32,16 +33,6 @@ impl ModelCostsDao {
         Ok(cost)
     }
 
-    /// Get model cost by model ID (deprecated - use find_by_region_and_model)
-    pub async fn find_by_model(&self, model_id: &str) -> DatabaseResult<Option<StoredModelCost>> {
-        let cost = model_costs::Entity::find()
-            .filter(model_costs::Column::ModelId.eq(model_id))
-            .one(&self.db)
-            .await
-            .map_err(|e| DatabaseError::Database(e.to_string()))?;
-
-        Ok(cost)
-    }
 
     /// Store or update model cost using individual upserts for SQLite compatibility
     pub async fn upsert_many(&self, costs: &[StoredModelCost]) -> DatabaseResult<()> {
@@ -115,14 +106,4 @@ impl ModelCostsDao {
         Ok(())
     }
 
-    /// Delete model cost (deprecated - use delete_by_region_and_model)
-    pub async fn delete(&self, model_id: &str) -> DatabaseResult<()> {
-        model_costs::Entity::delete_many()
-            .filter(model_costs::Column::ModelId.eq(model_id))
-            .exec(&self.db)
-            .await
-            .map_err(|e| DatabaseError::Database(e.to_string()))?;
-
-        Ok(())
-    }
 }

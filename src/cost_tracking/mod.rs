@@ -1,4 +1,5 @@
 mod parser;
+pub mod routes;
 
 use chrono::{DateTime, Utc};
 pub use parser::{

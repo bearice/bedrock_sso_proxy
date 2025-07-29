@@ -18,8 +18,8 @@ pub mod entities;
 pub mod migration;
 
 pub use dao::{
-    ApiKeysDao, AuditLogsDao, CachedApiKeysDao, CachedUsersDao, ModelCostsDao, RefreshTokensDao,
-    UsageDao, UsageQuery, UsageStats, UsersDao,
+    ApiKeysDao, AuditLogsDao, CachedApiKeysDao, CachedModelCostsDao, CachedUsersDao, ModelCostsDao,
+    RefreshTokensDao, UsageDao, UsageQuery, UsageStats, UsersDao,
 };
 
 /// Database error types
@@ -65,7 +65,7 @@ pub trait DatabaseManager: Send + Sync {
     fn refresh_tokens(&self) -> RefreshTokensDao;
 
     /// Get model costs DAO
-    fn model_costs(&self) -> ModelCostsDao;
+    fn model_costs(&self) -> CachedModelCostsDao;
 
     /// Get cache statistics for all cached DAOs
     fn get_cache_stats(&self) -> Option<CacheStats>;
@@ -156,8 +156,11 @@ impl DatabaseManager for DatabaseManagerImpl {
     }
 
     /// Get model costs DAO
-    fn model_costs(&self) -> ModelCostsDao {
-        ModelCostsDao::new(self.connection.clone())
+    fn model_costs(&self) -> CachedModelCostsDao {
+        CachedModelCostsDao::new(
+            ModelCostsDao::new(self.connection.clone()),
+            &self.cache_manager,
+        )
     }
 
     /// Get cache statistics for all cached DAOs
@@ -165,8 +168,13 @@ impl DatabaseManager for DatabaseManagerImpl {
         // Create temporary DAOs to get stats
         let users = self.users().get_cache_stats();
         let api_keys = self.api_keys().get_cache_stats();
+        let model_costs = self.model_costs().get_cache_stats();
 
-        Some(CacheStats { users, api_keys })
+        Some(CacheStats {
+            users,
+            api_keys,
+            model_costs,
+        })
     }
 
     /// Get direct database connection (for migrations and admin operations)
@@ -202,4 +210,5 @@ impl HealthChecker for DatabaseManagerImpl {
 pub struct CacheStats {
     pub users: TypedCacheStats,
     pub api_keys: TypedCacheStats,
+    pub model_costs: TypedCacheStats,
 }
