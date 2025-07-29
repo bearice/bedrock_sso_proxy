@@ -29,12 +29,16 @@ class ApiError extends Error {
 }
 
 async function fetchApi<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
+  const headers: Record<string, string> = { ...options.headers };
+  
+  // Only set Content-Type for requests with a body
+  if (options.body) {
+    headers['Content-Type'] = 'application/json';
+  }
+  
   const response = await fetch(`${API_BASE}${endpoint}`, {
-    headers: {
-      'Content-Type': 'application/json',
-      ...options.headers,
-    },
     ...options,
+    headers,
   });
 
   if (!response.ok) {
@@ -61,8 +65,8 @@ function createAuthenticatedRequest(token: string, options: RequestInit = {}): R
   return {
     ...options,
     headers: {
-      Authorization: `Bearer ${token}`,
       ...options.headers,
+      Authorization: `Bearer ${token}`,
     },
   };
 }
@@ -109,11 +113,13 @@ export const authApi = {
 export const apiKeyApi = {
   // Create a new API key
   async createApiKey(token: string, request: CreateApiKeyRequest): Promise<CreateApiKeyResponse> {
-    return fetchApi<CreateApiKeyResponse>('/api/keys', {
-      method: 'POST',
-      body: JSON.stringify(request),
-      ...createAuthenticatedRequest(token),
-    });
+    return fetchApi<CreateApiKeyResponse>(
+      '/api/keys',
+      createAuthenticatedRequest(token, {
+        method: 'POST',
+        body: JSON.stringify(request),
+      })
+    );
   },
 
   // List all API keys for the authenticated user
@@ -123,10 +129,12 @@ export const apiKeyApi = {
 
   // Revoke an API key
   async revokeApiKey(token: string, keyId: string): Promise<{ message: string; key: string }> {
-    return fetchApi<{ message: string; key: string }>(`/api/keys/${keyId}`, {
-      method: 'DELETE',
-      ...createAuthenticatedRequest(token),
-    });
+    return fetchApi<{ message: string; key: string }>(
+      `/api/keys/${keyId}`,
+      createAuthenticatedRequest(token, {
+        method: 'DELETE',
+      })
+    );
   },
 };
 
@@ -241,9 +249,10 @@ export const usageApi = {
     params.append('format', query.format);
 
     const queryString = params.toString() ? `?${params.toString()}` : '';
-    const response = await fetch(`${API_BASE}/api/usage/export${queryString}`, {
-      ...createAuthenticatedRequest(token),
-    });
+    const response = await fetch(
+      `${API_BASE}/api/usage/export${queryString}`,
+      createAuthenticatedRequest(token)
+    );
 
     if (!response.ok) {
       throw new ApiError(response.status, `Export failed: ${response.statusText}`);

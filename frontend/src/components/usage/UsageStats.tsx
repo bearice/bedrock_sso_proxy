@@ -99,7 +99,8 @@ export function UsageStats({ stats, isLoading, error }: UsageStatsProps) {
     );
   }
 
-  const formatCurrency = (cents: number) => {
+  const formatCurrency = (cents: number | null) => {
+    if (cents === null || cents === undefined) return '$0.00';
     return `$${(cents / 100).toFixed(2)}`;
   };
 
@@ -111,44 +112,44 @@ export function UsageStats({ stats, isLoading, error }: UsageStatsProps) {
     {
       icon: <Activity size={24} style={{ color: '#4f46e5' }} />,
       label: 'Total Requests',
-      value: stats.total_requests.toLocaleString(),
+      value: (stats.total_requests ?? 0).toLocaleString(),
       color: '#4f46e5',
       background: '#eef2ff',
     },
     {
       icon: <Target size={24} style={{ color: '#059669' }} />,
       label: 'Success Rate',
-      value: formatPercentage(stats.success_rate),
+      value: formatPercentage(stats.success_rate ?? 0),
       color: '#059669',
       background: '#ecfdf5',
-      subtitle: `${stats.successful_requests} successful`,
+      subtitle: `${(stats.successful_requests ?? Math.round((stats.total_requests ?? 0) * (stats.success_rate ?? 0))).toLocaleString()} successful`,
     },
     {
       icon: <AlertCircle size={24} style={{ color: '#dc2626' }} />,
       label: 'Failed Requests',
-      value: stats.failed_requests.toLocaleString(),
+      value: (stats.failed_requests ?? Math.round((stats.total_requests ?? 0) * (1 - (stats.success_rate ?? 0)))).toLocaleString(),
       color: '#dc2626',
       background: '#fef2f2',
     },
     {
       icon: <Zap size={24} style={{ color: '#ea580c' }} />,
       label: 'Total Tokens',
-      value: stats.total_tokens.toLocaleString(),
+      value: (stats.total_tokens ?? 0).toLocaleString(),
       color: '#ea580c',
       background: '#fff7ed',
-      subtitle: `${stats.total_input_tokens.toLocaleString()} in, ${stats.total_output_tokens.toLocaleString()} out`,
+      subtitle: `${(stats.total_input_tokens ?? 0).toLocaleString()} in, ${(stats.total_output_tokens ?? 0).toLocaleString()} out`,
     },
     {
       icon: <DollarSign size={24} style={{ color: '#16a34a' }} />,
       label: 'Total Cost',
-      value: formatCurrency(stats.total_cost_cents),
+      value: formatCurrency((stats as any).total_cost ?? stats.total_cost_cents),
       color: '#16a34a',
       background: '#f0fdf4',
     },
     {
       icon: <TrendingUp size={24} style={{ color: '#7c3aed' }} />,
       label: 'Unique Models',
-      value: stats.unique_models.toString(),
+      value: (stats.unique_models ?? 0).toString(),
       color: '#7c3aed',
       background: '#faf5ff',
     },
@@ -169,8 +170,8 @@ export function UsageStats({ stats, isLoading, error }: UsageStatsProps) {
           textAlign: 'center',
         }}
       >
-        Usage statistics from {new Date(stats.date_range.start).toLocaleDateString()} to{' '}
-        {new Date(stats.date_range.end).toLocaleDateString()}
+        Usage statistics from {new Date((stats.date_range as any)?.[0] ?? stats.date_range?.start).toLocaleDateString()} to{' '}
+        {new Date((stats.date_range as any)?.[1] ?? stats.date_range?.end).toLocaleDateString()}
       </div>
 
       {/* Stats Grid */}

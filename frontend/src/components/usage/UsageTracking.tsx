@@ -28,8 +28,8 @@ export function UsageTracking() {
     const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
 
     return {
-      start_date: thirtyDaysAgo.toISOString().split('T')[0],
-      end_date: now.toISOString().split('T')[0],
+      start_date: thirtyDaysAgo.toISOString(),
+      end_date: now.toISOString(),
       limit: 50,
       offset: 0,
     };

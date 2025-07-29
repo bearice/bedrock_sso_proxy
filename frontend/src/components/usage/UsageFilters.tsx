@@ -17,11 +17,31 @@ export function UsageFilters({
 }: UsageFiltersProps) {
   const [showAdvanced, setShowAdvanced] = useState(false);
 
+  // Convert ISO date to YYYY-MM-DD for date inputs
+  const formatDateForInput = (isoDate?: string): string => {
+    if (!isoDate) return '';
+    return isoDate.split('T')[0];
+  };
+
+  // Convert YYYY-MM-DD to ISO string for API
+  const formatDateForApi = (dateString: string): string => {
+    if (!dateString) return '';
+    // Add time component for full ISO string
+    return new Date(dateString + 'T00:00:00.000Z').toISOString();
+  };
+
   const handleInputChange = useCallback(
     (field: keyof UsageQuery, value: string | number | boolean | undefined) => {
+      let processedValue = value;
+      
+      // Convert date strings to ISO format for API
+      if ((field === 'start_date' || field === 'end_date') && typeof value === 'string') {
+        processedValue = formatDateForApi(value);
+      }
+      
       onFiltersChange({
         ...filters,
-        [field]: value || undefined,
+        [field]: processedValue || undefined,
       });
     },
     [filters, onFiltersChange]
@@ -32,8 +52,8 @@ export function UsageFilters({
     const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
 
     onFiltersChange({
-      start_date: thirtyDaysAgo.toISOString().split('T')[0],
-      end_date: now.toISOString().split('T')[0],
+      start_date: thirtyDaysAgo.toISOString(),
+      end_date: now.toISOString(),
       limit: 50,
       offset: 0,
     });
@@ -46,8 +66,8 @@ export function UsageFilters({
 
       onFiltersChange({
         ...filters,
-        start_date: startDate.toISOString().split('T')[0],
-        end_date: now.toISOString().split('T')[0],
+        start_date: startDate.toISOString(),
+        end_date: now.toISOString(),
       });
     },
     [filters, onFiltersChange]
@@ -160,7 +180,7 @@ export function UsageFilters({
             <input
               id="start-date"
               type="date"
-              value={filters.start_date || ''}
+              value={formatDateForInput(filters.start_date)}
               onChange={(e) => handleInputChange('start_date', e.target.value)}
               disabled={isLoading}
               style={{
@@ -189,7 +209,7 @@ export function UsageFilters({
             <input
               id="end-date"
               type="date"
-              value={filters.end_date || ''}
+              value={formatDateForInput(filters.end_date)}
               onChange={(e) => handleInputChange('end_date', e.target.value)}
               disabled={isLoading}
               style={{
