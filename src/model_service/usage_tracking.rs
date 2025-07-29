@@ -20,8 +20,8 @@ pub struct UsageTrackingService {
 
 impl UsageTrackingService {
     pub fn new(config: Config, database: std::sync::Arc<dyn DatabaseManager>) -> Self {
-        Self { 
-            config, 
+        Self {
+            config,
             database,
             model_mapping: RegionalModelMapping::new(),
         }
@@ -101,7 +101,7 @@ impl UsageTrackingService {
     ) -> Option<Decimal> {
         // Strip regional prefix from model ID for cost lookup
         let normalized_model_id = self.model_mapping.strip_regional_prefix(model_id);
-        
+
         match self
             .database
             .model_costs()
@@ -135,7 +135,11 @@ impl UsageTrackingService {
                 Some(input_cost + output_cost + cache_write_cost + cache_read_cost)
             }
             Ok(None) => {
-                tracing::debug!("No cost data found for model: {} (normalized: {})", model_id, normalized_model_id);
+                tracing::debug!(
+                    "No cost data found for model: {} (normalized: {})",
+                    model_id,
+                    normalized_model_id
+                );
                 None
             }
             Err(e) => {

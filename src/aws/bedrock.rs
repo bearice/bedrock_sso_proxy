@@ -84,7 +84,9 @@ impl BedrockRuntimeImpl {
         body: Vec<u8>,
     ) -> Result<BedrockResponse, AppError> {
         // Add regional prefix to model ID if not already present
-        let regionalized_model_id = self.model_mapping.add_regional_prefix(model_id, &self.config.region);
+        let regionalized_model_id = self
+            .model_mapping
+            .add_regional_prefix(model_id, &self.config.region);
         let path = format!("/model/{}/invoke", regionalized_model_id);
         let url = format!("{}{}", self.base_url, path);
 
@@ -146,8 +148,13 @@ impl BedrockRuntimeImpl {
         body: Vec<u8>,
     ) -> Result<BedrockStreamResponse, AppError> {
         // Add regional prefix to model ID if not already present
-        let regionalized_model_id = self.model_mapping.add_regional_prefix(model_id, &self.config.region);
-        let path = format!("/model/{}/invoke-with-response-stream", regionalized_model_id);
+        let regionalized_model_id = self
+            .model_mapping
+            .add_regional_prefix(model_id, &self.config.region);
+        let path = format!(
+            "/model/{}/invoke-with-response-stream",
+            regionalized_model_id
+        );
         let url = format!("{}{}", self.base_url, path);
 
         let mut processed_headers = Self::process_headers_for_aws(headers);

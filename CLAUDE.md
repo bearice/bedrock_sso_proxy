@@ -252,6 +252,28 @@ cargo test --test usage_integration_tests # Usage tracking tests
 cargo run --bin bedrock_proxy -- migrate up       # Run all pending migrations
 cargo run --bin bedrock_proxy -- migrate down     # Rollback last migration
 cargo run --bin bedrock_proxy -- migrate status   # Show migration status
+
+# Maintenance and background processing commands
+cargo run --bin bedrock_proxy -- maintenance all                                # Run all maintenance tasks with defaults
+cargo run --bin bedrock_proxy -- maintenance all --dry-run                      # Preview all maintenance tasks
+
+# Usage summary generation (improves API performance)
+cargo run --bin bedrock_proxy -- maintenance summaries                          # Generate daily summaries for last 30 days
+cargo run --bin bedrock_proxy -- maintenance summaries --period weekly          # Generate weekly summaries
+cargo run --bin bedrock_proxy -- maintenance summaries --period monthly         # Generate monthly summaries
+cargo run --bin bedrock_proxy -- maintenance summaries --days-back 90           # Process last 90 days
+cargo run --bin bedrock_proxy -- maintenance summaries --user-id 123            # Process specific user only
+cargo run --bin bedrock_proxy -- maintenance summaries --model-id claude-sonnet-4  # Process specific model only
+
+# Database cleanup commands
+cargo run --bin bedrock_proxy -- maintenance cleanup-records --dry-run          # Preview old usage records to be deleted
+cargo run --bin bedrock_proxy -- maintenance cleanup-records --retention-days 30 # Delete usage records older than 30 days
+
+# Token and cache cleanup commands  
+cargo run --bin bedrock_proxy -- maintenance cleanup-tokens --refresh-tokens --dry-run  # Preview expired refresh tokens
+cargo run --bin bedrock_proxy -- maintenance cleanup-tokens --refresh-tokens    # Clean expired refresh tokens
+cargo run --bin bedrock_proxy -- maintenance cleanup-tokens --auth-cache        # Clear JWT validation cache
+cargo run --bin bedrock_proxy -- maintenance cleanup-tokens --oauth-states      # Clean OAuth state tokens
 ```
 
 ## Service Layer Architecture

@@ -2,6 +2,7 @@ pub mod anthropic;
 pub mod auth;
 pub mod aws;
 pub mod cache;
+pub mod commands;
 pub mod config;
 pub mod cost;
 pub mod database;
