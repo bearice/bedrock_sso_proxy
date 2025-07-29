@@ -1,10 +1,14 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+This file provides guidance to Claude Code (claude.ai/code) when working with
+code in this repository.
 
 ## Project Overview
 
-**Bedrock SSO Proxy** is a JWT-authenticated HTTP proxy server that provides secure access to AWS Bedrock APIs. It acts as an intermediary between clients and AWS Bedrock, handling JWT authentication and request forwarding with AWS Signature V4 signing.
+**Bedrock SSO Proxy** is a JWT-authenticated HTTP proxy server that provides
+secure access to AWS Bedrock APIs. It acts as an intermediary between clients
+and AWS Bedrock, handling JWT authentication and request forwarding with AWS
+Signature V4 signing.
 
 ## Architecture
 
@@ -14,6 +18,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ```
 
 **Service-Based Architecture:**
+
 ```
 ┌─────────────────┐    ┌──────────────────┐    ┌─────────────────┐
 │   Web Client    │    │  API Client      │    │  Admin Client   │
@@ -53,7 +58,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 - **`src/server/mod.rs`**: Service-based HTTP server with dependency injection
 - **`src/auth/`**: Multi-strategy authentication (JWT, OAuth, API keys)
-- **`src/model_service/`**: Model invocation with usage tracking and cost monitoring
+- **`src/model_service/`**: Model invocation with usage tracking and cost
+  monitoring
 - **`src/database/`**: SeaORM-based data access with cached DAOs
 - **`src/cache/`**: TypedCache system with Redis/memory backends
 - **`src/aws/bedrock.rs`**: AWS Bedrock runtime with health checks
@@ -61,16 +67,23 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ### Key Routes
 
 **Health & Status:**
+
 - `GET /health` - Public health check endpoint
 
 **Bedrock Format (AWS Native):**
-- `POST /bedrock/model/{model_id}/invoke` - Standard model invocation (JWT protected)
-- `POST /bedrock/model/{model_id}/invoke-with-response-stream` - Streaming responses (JWT protected)
+
+- `POST /bedrock/model/{model_id}/invoke` - Standard model invocation (JWT
+  protected)
+- `POST /bedrock/model/{model_id}/invoke-with-response-stream` - Streaming
+  responses (JWT protected)
 
 **Anthropic Format (Standard API):**
-- `POST /anthropic/v1/messages` - Standard Anthropic API with streaming support (JWT protected)
 
-The proxy now supports both AWS Bedrock and standard Anthropic API formats for maximum compatibility.
+- `POST /anthropic/v1/messages` - Standard Anthropic API with streaming support
+  (JWT protected)
+
+The proxy now supports both AWS Bedrock and standard Anthropic API formats for
+maximum compatibility.
 
 ### Authentication
 
@@ -82,6 +95,7 @@ The proxy supports **dual authentication** methods:
 ### API Key Management
 
 **Create API Key** (requires JWT authentication):
+
 ```bash
 curl -X POST "http://localhost:3000/api/keys" \
   -H "Authorization: Bearer YOUR_JWT_TOKEN" \
@@ -93,12 +107,14 @@ curl -X POST "http://localhost:3000/api/keys" \
 ```
 
 **List API Keys**:
+
 ```bash
 curl "http://localhost:3000/api/keys" \
   -H "Authorization: Bearer YOUR_JWT_TOKEN"
 ```
 
 **Revoke API Key**:
+
 ```bash
 curl -X DELETE "http://localhost:3000/api/keys/{key_id}" \
   -H "Authorization: Bearer YOUR_JWT_TOKEN"
@@ -107,6 +123,7 @@ curl -X DELETE "http://localhost:3000/api/keys/{key_id}" \
 ### API Usage Examples
 
 **Bedrock Format (JWT Auth):**
+
 ```bash
 curl -X POST "http://localhost:3000/bedrock/model/anthropic.claude-sonnet-4-20250514-v1:0/invoke" \
   -H "Authorization: Bearer YOUR_JWT_TOKEN" \
@@ -119,6 +136,7 @@ curl -X POST "http://localhost:3000/bedrock/model/anthropic.claude-sonnet-4-2025
 ```
 
 **Bedrock Format (API Key Auth):**
+
 ```bash
 curl -X POST "http://localhost:3000/bedrock/model/anthropic.claude-sonnet-4-20250514-v1:0/invoke" \
   -H "Authorization: Bearer SSOK_your_api_key_here" \
@@ -131,6 +149,7 @@ curl -X POST "http://localhost:3000/bedrock/model/anthropic.claude-sonnet-4-2025
 ```
 
 **Anthropic Format (API Key with X-API-Key header):**
+
 ```bash
 curl -X POST "http://localhost:3000/anthropic/v1/messages" \
   -H "X-API-Key: SSOK_your_api_key_here" \
@@ -143,6 +162,7 @@ curl -X POST "http://localhost:3000/anthropic/v1/messages" \
 ```
 
 **Anthropic Format (Streaming with API Key):**
+
 ```bash
 curl -X POST "http://localhost:3000/anthropic/v1/messages" \
   -H "Authorization: Bearer SSOK_your_api_key_here" \
@@ -158,6 +178,7 @@ curl -X POST "http://localhost:3000/anthropic/v1/messages" \
 ## Development Commands
 
 ### Build and Development
+
 ```bash
 cargo build                   # Build project (debug mode with unminified frontend + source maps)
 cargo build --release         # Production build (minified frontend + source maps)
@@ -171,10 +192,14 @@ cargo clean                   # Clean Rust build artifacts only
 ```
 
 **Note**: Frontend is automatically built with appropriate optimizations:
-- **Debug mode** (`cargo build`): Unminified code with source maps for development debugging
-- **Release mode** (`cargo build --release`): Minified code with source maps for production
+
+- **Debug mode** (`cargo build`): Unminified code with source maps for
+  development debugging
+- **Release mode** (`cargo build --release`): Minified code with source maps for
+  production
 
 ### Frontend Development
+
 ```bash
 cd frontend                   # Change to frontend directory
 npm install                   # Install dependencies
@@ -189,6 +214,7 @@ npm run type-check            # TypeScript type checking
 ```
 
 ### E2E Testing
+
 ```bash
 # Build and run the test client
 cargo build --example e2e_client
@@ -198,6 +224,7 @@ cargo run --example e2e_client -- message --text "Hello" # Single message
 ```
 
 ### Testing
+
 ```bash
 cargo test                    # All tests (unit + integration + security)
 cargo test auth               # Authentication tests only
@@ -208,6 +235,7 @@ cargo test --test usage_tracking_integration_tests # Usage tracking tests
 ```
 
 ### CLI Commands
+
 ```bash
 # Database migration commands
 cargo run --bin bedrock_proxy -- migrate up       # Run all pending migrations
@@ -217,28 +245,33 @@ cargo run --bin bedrock_proxy -- migrate status   # Show migration status
 
 ## Service Layer Architecture
 
-The proxy uses a service-based architecture with dependency injection for testability and modularity:
+The proxy uses a service-based architecture with dependency injection for
+testability and modularity:
 
 ### Core Services
 
 **ModelService** (`src/model_service/`):
+
 - Model invocation with usage tracking and cost monitoring
 - Handles both Bedrock and Anthropic API formats
 - Streams responses with connection management
 - Tracks token usage and costs per request
 
 **AuthService Layer** (`src/auth/`):
+
 - **JwtService**: Token generation, validation, and refresh
 - **OAuthService**: Multi-provider OAuth flow management
 - **ApiKeyService**: API key generation, validation, and revocation
 - **Middleware**: Unified authentication (JWT or API keys)
 
 **DatabaseManager** (`src/database/`):
+
 - **Cached DAOs**: Users, API keys with TypedCache integration
 - **Direct DAOs**: Usage tracking, audit logs, refresh tokens
 - **Migration management**: Automated schema updates
 
 **CacheManager** (`src/cache/`):
+
 - **TypedCache**: Structural hashing with automatic invalidation
 - **Backend abstraction**: Memory (dev) or Redis (prod)
 - **Health monitoring**: Connection status and performance metrics
@@ -246,6 +279,7 @@ The proxy uses a service-based architecture with dependency injection for testab
 ### Service Dependencies
 
 Services are injected through the `Server` struct:
+
 ```rust
 pub struct Server {
     pub config: Arc<Config>,
@@ -259,6 +293,7 @@ pub struct Server {
 ```
 
 This enables:
+
 - **Easy testing**: Services can be mocked individually
 - **Health monitoring**: Each service provides health checks
 - **Graceful shutdown**: Services coordinate shutdown sequence
@@ -278,7 +313,9 @@ This enables:
 ## Configuration
 
 ### File Structure
-Configuration uses hierarchical loading: defaults → YAML file → environment variables
+
+Configuration uses hierarchical loading: defaults → YAML file → environment
+variables
 
 ```yaml
 server:
@@ -293,7 +330,7 @@ aws:
 logging:
   level: "info"
 cache:
-  backend: "memory"  # or "redis"
+  backend: "memory" # or "redis"
   redis_url: "redis://localhost:6379"
   redis_key_prefix: "bedrock_sso:"
   validation_ttl: 3600
@@ -310,7 +347,9 @@ metrics:
 ```
 
 ### Environment Variables
+
 Use `BEDROCK_` prefix with double underscores for nesting:
+
 - `BEDROCK_SERVER__PORT=3000`
 - `BEDROCK_JWT__SECRET=secret`
 - `BEDROCK_AWS__REGION=us-east-1`
@@ -326,26 +365,29 @@ Use `BEDROCK_` prefix with double underscores for nesting:
 The proxy supports both in-memory and Redis caching:
 
 **Memory Cache (Default):**
+
 - Suitable for single-instance deployments
 - No external dependencies
 - Data lost on restart
 
 **Redis Cache:**
+
 - Suitable for production/distributed deployments
 - Persistent across restarts
 - Scalable for multiple instances
 
 ```yaml
 cache:
-  backend: "redis"                    # "memory" or "redis"
+  backend: "redis" # "memory" or "redis"
   redis_url: "redis://localhost:6379" # Redis connection URL
-  redis_key_prefix: "bedrock_sso:"    # Key prefix to avoid conflicts
-  validation_ttl: 3600               # JWT validation cache TTL (seconds)
-  max_entries: 10000                 # Max cache entries (memory only)
-  cleanup_interval: 3600             # Cache cleanup interval (seconds)
+  redis_key_prefix: "bedrock_sso:" # Key prefix to avoid conflicts
+  validation_ttl: 3600 # JWT validation cache TTL (seconds)
+  max_entries: 10000 # Max cache entries (memory only)
+  cleanup_interval: 3600 # Cache cleanup interval (seconds)
 ```
 
 **Cache Usage:**
+
 - OAuth state tokens (temporary, ~10 minutes)
 - JWT validation results (configurable TTL)
 - API key lookups (until revoked)
@@ -361,6 +403,7 @@ cache:
 ### Pre-Commit Workflow (REQUIRED)
 
 **Backend (Rust):**
+
 ```bash
 cargo fmt          # Format code
 cargo clippy       # Check linting/warnings
@@ -368,6 +411,7 @@ cargo test         # Run tests
 ```
 
 **Frontend (React/TypeScript):**
+
 ```bash
 cd frontend
 npm run format     # Format with Prettier
@@ -375,11 +419,13 @@ npm run lint       # ESLint checks
 npm run type-check # TypeScript validation
 ```
 
-**Always run these before committing** - no exceptions! This ensures code quality and consistency.
+**Always run these before committing** - no exceptions! This ensures code
+quality and consistency.
 
 ## Project Status
 
 **Completed Phases (8/9)**:
+
 - ✅ Phase 1: Core infrastructure and configuration
 - ✅ Phase 2: JWT authentication layer
 - ✅ Phase 3: AWS Bedrock integration with credential handling
@@ -392,6 +438,7 @@ npm run type-check # TypeScript validation
 - ✅ Phase 8.5.1: Rate limiting removal (simplified request handling)
 
 **Remaining Phases**:
+
 - ❌ Phase 9: Deployment (Docker, CI/CD, Kubernetes)
 
 ## Testing Architecture
@@ -399,27 +446,34 @@ npm run type-check # TypeScript validation
 - **Unit Tests**: 100 tests covering all modules including OAuth functionality
 - **Integration Tests**: 7 tests with real JWT token validation
 - **Security Tests**: 10 comprehensive security attack simulations
-- **Total Test Coverage**: 117 tests passing (100 unit + 7 integration + 10 security)
-- **Test Coverage**: Authentication, OAuth, routing, streaming, error handling, security vulnerabilities
+- **Total Test Coverage**: 117 tests passing (100 unit + 7 integration + 10
+  security)
+- **Test Coverage**: Authentication, OAuth, routing, streaming, error handling,
+  security vulnerabilities
 
 ## Security Features
 
 - **JWT Validation**: HS256 with strict expiration validation, zero leeway
-- **OAuth 2.0 Integration**: Full OAuth flow with state validation and CSRF protection
+- **OAuth 2.0 Integration**: Full OAuth flow with state validation and CSRF
+  protection
 - **Token Management**: Refresh token rotation and validation result caching
 - **Header Processing**: Strips Authorization headers before AWS forwarding
 - **AWS Signing**: Proper Signature V4 implementation for AWS authentication
 - **Error Handling**: No sensitive information exposure in responses
-- **Multi-Provider Support**: Google, GitHub, Microsoft, GitLab, Auth0, Okta, and custom providers
+- **Multi-Provider Support**: Google, GitHub, Microsoft, GitLab, Auth0, Okta,
+  and custom providers
 
 ## Project Workflow Notes
 
-- When clearing context between phases, summarize key changes and prepare notes for the next phase of development
-- Keep track of context clearing to ensure continuity and understanding of project progression
+- When clearing context between phases, summarize key changes and prepare notes
+  for the next phase of development
+- Keep track of context clearing to ensure continuity and understanding of
+  project progression
 
 ## Development Workflow
 
 ### Service Testing
+
 For testing individual services, use the `test_utils::TestServerBuilder`:
 
 ```rust
@@ -434,6 +488,7 @@ let server = TestServerBuilder::new()
 ```
 
 ### Working with TypedCache
+
 The TypedCache system provides automatic cache invalidation:
 
 ```rust
@@ -452,6 +507,7 @@ cache.set("user_123", &user).await?;
 ```
 
 ### Running Specific Tests
+
 ```bash
 # Run specific test file
 cargo test --test integration_tests
@@ -467,6 +523,7 @@ cargo test auth::tests::
 ```
 
 ### Database Development
+
 ```bash
 # Create new migration
 sea-orm-cli migrate generate create_new_table
@@ -477,24 +534,41 @@ cargo run --bin bedrock_proxy -- migrate up
 ```
 
 ### Background Process Note
-- If you need to run a test server, ask user to do it, you can not spawn background process.
+
+- If you need to run a test server, ask user to do it, you can not spawn
+  background process.
 
 ## Important Project Notes
 
 ### Architecture Decision Records
-- **Service-based design**: All major functionality is isolated in services with dependency injection
+
+- **Service-based design**: All major functionality is isolated in services with
+  dependency injection
 - **TypedCache**: Structural hashing prevents cache invalidation bugs
 - **Dual authentication**: JWT for web clients, API keys for programmatic access
-- **Graceful shutdown**: Services coordinate shutdown in proper order (tokens → streaming → cache → database)
+- **Graceful shutdown**: Services coordinate shutdown in proper order (tokens →
+  streaming → cache → database)
 
 ### Key Patterns
+
 - **Health checks**: All services implement `HealthChecker` trait for monitoring
-- **Error handling**: Consistent error types across layers with proper HTTP status mapping
+- **Error handling**: Consistent error types across layers with proper HTTP
+  status mapping
 - **Configuration**: Hierarchical loading (defaults → YAML → env vars)
 - **Testing**: `TestServerBuilder` for integration tests with service mocking
 
 ### Performance Considerations
-- **Streaming**: Long-lived connections are tracked and properly closed during shutdown
+
+- **Streaming**: Long-lived connections are tracked and properly closed during
+  shutdown
 - **Caching**: TypedCache with structural hashing for efficient invalidation
 - **Database**: SeaORM with connection pooling and async operations
 - **Memory**: Request body size limited to 10MB to prevent DoS attacks
+
+### Coding Guidelines
+
+- **Imports**: If you are referring to something in the crate, import it instead
+  using an absolute path
+- Use import as possible, unless it causes naming conflicts
+- When using entities in database, use type alias instead of raw Model name,
+  like UserRecord against users::Model
