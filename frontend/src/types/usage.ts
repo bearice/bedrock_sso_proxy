@@ -1,0 +1,72 @@
+// Usage Tracking Types
+
+export interface UsageRecord {
+  id: number;
+  user_id: number;
+  model_id: string;
+  input_tokens: number;
+  output_tokens: number;
+  total_tokens: number;
+  request_timestamp: string;
+  response_timestamp?: string;
+  success: boolean;
+  error_message?: string;
+  cost_cents?: number;
+}
+
+export interface UsageStats {
+  total_requests: number;
+  successful_requests: number;
+  failed_requests: number;
+  total_input_tokens: number;
+  total_output_tokens: number;
+  total_tokens: number;
+  success_rate: number;
+  total_cost_cents: number;
+  unique_models: number;
+  date_range: {
+    start: string;
+    end: string;
+  };
+}
+
+export interface UsageQuery {
+  limit?: number;
+  offset?: number;
+  model?: string;
+  start_date?: string;
+  end_date?: string;
+  success_only?: boolean;
+}
+
+export interface UsageStatsQuery {
+  start_date?: string;
+  end_date?: string;
+}
+
+export interface UsageRecordsResponse {
+  records: UsageRecord[];
+  total: number;
+  limit: number;
+  offset: number;
+}
+
+export interface ModelUsage {
+  model_id: string;
+  total_tokens: number;
+}
+
+export interface TopModelsResponse {
+  models: ModelUsage[];
+}
+
+// Usage filter presets
+export type UsagePeriod = 'today' | 'week' | 'month' | 'all' | 'custom';
+
+export interface UsageFilters {
+  period: UsagePeriod;
+  startDate?: Date;
+  endDate?: Date;
+  model?: string;
+  successOnly?: boolean;
+}

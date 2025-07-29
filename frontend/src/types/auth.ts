@@ -43,3 +43,25 @@ export interface AuthState {
   expiresAt: number | null;
   scopes: string[];
 }
+
+// API Key Management Types
+export interface CreateApiKeyRequest {
+  name: string;
+  expires_in_days?: number;
+}
+
+export interface CreateApiKeyResponse {
+  id: number;
+  name: string;
+  key: string;
+  created_at: string;
+  expires_at?: string;
+}
+
+export interface ApiKeyInfo {
+  id: number;
+  name: string;
+  created_at: string;
+  expires_at?: string;
+  revoked_at?: string;
+}
