@@ -12,7 +12,6 @@ pub mod model_service;
 pub mod routes;
 pub mod server;
 pub mod shutdown;
-pub mod usage;
 
 #[cfg(any(test, feature = "test-utils", debug_assertions))]
 pub mod test_utils;

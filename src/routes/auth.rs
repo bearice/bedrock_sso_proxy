@@ -1,11 +1,12 @@
 use crate::{
     auth::{
         jwt::OAuthClaims,
-        oauth::{OAuthService, RefreshRequest, TokenRequest},
+        oauth::{RefreshRequest, TokenRequest},
         request_context::RequestContext,
     },
     database::entities::UserRecord,
     error::AppError,
+    server::Server,
 };
 use axum::{
     Extension, Router,
@@ -15,7 +16,6 @@ use axum::{
     routing::{get, post},
 };
 use serde::Deserialize;
-use std::sync::Arc;
 use url::Url;
 
 #[derive(Deserialize)]
@@ -24,7 +24,7 @@ pub struct AuthorizeQuery {
     pub state: Option<String>,
 }
 
-pub fn create_auth_routes() -> Router<Arc<OAuthService>> {
+pub fn create_auth_routes() -> Router<Server> {
     Router::new()
         .route("/authorize/{provider}", get(authorize_handler))
         .route("/token", post(token_handler))
@@ -33,12 +33,12 @@ pub fn create_auth_routes() -> Router<Arc<OAuthService>> {
         .route("/callback/{provider}", get(callback_handler))
 }
 
-pub fn create_protected_auth_routes() -> Router<Arc<OAuthService>> {
+pub fn create_protected_auth_routes() -> Router<Server> {
     Router::new().route("/me", get(me_handler))
 }
 
 pub async fn authorize_handler(
-    State(oauth_service): State<Arc<OAuthService>>,
+    State(server): State<Server>,
     Path(provider): Path<String>,
     Query(params): Query<AuthorizeQuery>,
     headers: HeaderMap,
@@ -48,43 +48,45 @@ pub async fn authorize_handler(
         build_redirect_uri_from_request(&headers, &provider)
     });
 
-    let response = oauth_service
+    let response = server
+        .oauth_service
         .get_authorization_url(&provider, &redirect_uri)
         .await?;
     Ok(Json(response))
 }
 
 pub async fn token_handler(
-    State(oauth_service): State<Arc<OAuthService>>,
+    State(server): State<Server>,
     headers: HeaderMap,
     Json(request): Json<TokenRequest>,
 ) -> Result<Json<crate::auth::oauth::TokenResponse>, AppError> {
     let context = RequestContext::extract_from_headers(&headers);
-    let response = oauth_service
+    let response = server
+        .oauth_service
         .exchange_code_for_token(request, context)
         .await?;
     Ok(Json(response))
 }
 
 pub async fn refresh_handler(
-    State(oauth_service): State<Arc<OAuthService>>,
+    State(server): State<Server>,
     headers: HeaderMap,
     Json(request): Json<RefreshRequest>,
 ) -> Result<Json<crate::auth::oauth::TokenResponse>, AppError> {
     let context = RequestContext::extract_from_headers(&headers);
-    let response = oauth_service.refresh_token(request, context).await?;
+    let response = server.oauth_service.refresh_token(request, context).await?;
     Ok(Json(response))
 }
 
 pub async fn providers_handler(
-    State(oauth_service): State<Arc<OAuthService>>,
+    State(server): State<Server>,
 ) -> Result<Json<crate::auth::oauth::ProvidersResponse>, AppError> {
-    let response = oauth_service.list_providers();
+    let response = server.oauth_service.list_providers();
     Ok(Json(response))
 }
 
 pub async fn callback_handler(
-    State(oauth_service): State<Arc<OAuthService>>,
+    State(server): State<Server>,
     Path(provider): Path<String>,
     Query(params): Query<CallbackQuery>,
     headers: HeaderMap,
@@ -108,7 +110,8 @@ pub async fn callback_handler(
         .ok_or_else(|| AppError::BadRequest("Missing state parameter".to_string()))?;
 
     // Get the redirect URI from the state data (stored when authorization URL was generated)
-    let redirect_uri = oauth_service
+    let redirect_uri = server
+        .oauth_service
         .get_redirect_uri_for_state(&state)
         .await
         .ok_or_else(|| AppError::BadRequest("Invalid or expired state parameter".to_string()))?;
@@ -121,7 +124,8 @@ pub async fn callback_handler(
     };
 
     let context = RequestContext::extract_from_headers(&headers);
-    match oauth_service
+    match server
+        .oauth_service
         .exchange_code_for_token(token_request, context)
         .await
     {
@@ -151,13 +155,14 @@ pub async fn callback_handler(
 /// Get current user information (requires authentication)
 pub async fn me_handler(
     Extension(claims): Extension<OAuthClaims>,
-    State(oauth_service): State<Arc<OAuthService>>,
+    State(server): State<Server>,
 ) -> Result<Json<UserRecord>, AppError> {
     // Get user ID from subject
     let user_id = claims.sub;
 
     // Get user from database by ID through OAuth service
-    let user_record = oauth_service
+    let user_record = server
+        .oauth_service
         .get_user_by_id(user_id)
         .await
         .map_err(|e| AppError::Internal(format!("Failed to get user: {}", e)))?
@@ -324,81 +329,45 @@ fn build_callback_url(params: &[(&str, &str)]) -> Result<String, AppError> {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use std::collections::HashMap;
+
     use crate::{
-        auth::config::{JwtConfig, OAuthConfig, OAuthProvider},
-        auth::oauth::OAuthService,
-        cache::config::CacheConfig,
-        config::Config,
+        Config,
+        auth::config::{OAuthConfig, OAuthProvider},
     };
+
+    use super::*;
+
     use axum::{
         body::Body,
         http::{Request, StatusCode},
     };
-    use jsonwebtoken::Algorithm;
-    use std::collections::HashMap;
+
     use tower::ServiceExt;
 
-    async fn create_test_oauth_service() -> Arc<OAuthService> {
+    fn create_test_config() -> Config {
         let mut providers = HashMap::new();
         providers.insert(
             "google".to_string(),
             OAuthProvider {
                 client_id: "test-client-id".to_string(),
                 client_secret: "test-client-secret".to_string(),
-                redirect_uri: Some("http://localhost:3000/callback".to_string()),
-                scopes: vec!["openid".to_string(), "email".to_string()],
-                authorization_url: Some("https://accounts.google.com/o/oauth2/v2/auth".to_string()),
-                token_url: Some("https://oauth2.googleapis.com/token".to_string()),
-                user_info_url: Some("https://www.googleapis.com/oauth2/v2/userinfo".to_string()),
-                user_id_field: "id".to_string(),
-                email_field: "email".to_string(),
-                tenant_id: None,
-                instance_url: None,
-                domain: None,
+                ..Default::default()
             },
         );
-
-        let config = Config {
+        Config {
             oauth: OAuthConfig { providers },
-            jwt: JwtConfig {
-                secret: "test-secret".to_string(),
-                algorithm: "HS256".to_string(),
-                access_token_ttl: 3600,
-                refresh_token_ttl: 86400,
-            },
-            cache: CacheConfig {
-                validation_ttl: 3600,
-                max_entries: 1000,
-                cleanup_interval: 300,
-                backend: "memory".to_string(),
-                redis_url: "redis://localhost:6379".to_string(),
-                redis_key_prefix: "test:".to_string(),
-            },
             ..Default::default()
-        };
-
-        let mut db_config = crate::config::Config::default();
-        db_config.cache.backend = "memory".to_string();
-        db_config.database.enabled = true;
-        db_config.database.url = "sqlite::memory:".to_string();
-
-        let cache = Arc::new(crate::cache::CacheManagerImpl::new_memory());
-        let database = Arc::new(
-            crate::database::DatabaseManagerImpl::new_from_config(&db_config, cache.clone())
-                .await
-                .unwrap(),
-        );
-        let jwt_service =
-            crate::auth::jwt::JwtServiceImpl::new("test-secret".to_string(), Algorithm::HS256)
-                .unwrap();
-        Arc::new(OAuthService::new(config, Arc::new(jwt_service), database, cache).unwrap())
+        }
     }
 
     #[tokio::test]
     async fn test_authorize_handler() {
-        let oauth_service = create_test_oauth_service().await;
-        let app = create_auth_routes().with_state(oauth_service);
+        let server = crate::test_utils::TestServerBuilder::new()
+            .with_config(create_test_config())
+            .build()
+            .await;
+        let app = create_auth_routes().with_state(server);
 
         let request = Request::builder()
             .uri("/authorize/google")
@@ -411,8 +380,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_authorize_handler_unknown_provider() {
-        let oauth_service = create_test_oauth_service().await;
-        let app = create_auth_routes().with_state(oauth_service);
+        let server = crate::test_utils::TestServerBuilder::new().build().await;
+        let app = create_auth_routes().with_state(server);
 
         let request = Request::builder()
             .uri("/authorize/unknown")
@@ -425,8 +394,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_providers_handler() {
-        let oauth_service = create_test_oauth_service().await;
-        let app = create_auth_routes().with_state(oauth_service);
+        let server = crate::test_utils::TestServerBuilder::new().build().await;
+        let app = create_auth_routes().with_state(server);
 
         let request = Request::builder()
             .uri("/providers")

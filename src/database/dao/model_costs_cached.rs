@@ -53,7 +53,8 @@ impl CachedModelCostsDao {
     pub async fn find_by_model(&self, model_id: &str) -> DatabaseResult<Option<StoredModelCost>> {
         // Use default region for backward compatibility
         let default_region = "us-east-1";
-        self.find_by_region_and_model(default_region, model_id).await
+        self.find_by_region_and_model(default_region, model_id)
+            .await
     }
 
     /// Store or update model costs with cache invalidation
@@ -105,7 +106,6 @@ impl CachedModelCostsDao {
             .await
     }
 
-
     /// Get the inner DAO reference
     pub fn inner(&self) -> &ModelCostsDao {
         self.cached_dao.inner()
@@ -115,7 +115,6 @@ impl CachedModelCostsDao {
     pub fn get_cache_stats(&self) -> crate::cache::typed::TypedCacheStats {
         self.cached_dao.get_cache_stats()
     }
-
 
     /// Invalidate all cache entries for a specific region and model
     pub async fn invalidate_region_model_cache(
@@ -128,4 +127,3 @@ impl CachedModelCostsDao {
         self.cached_dao.invalidate_keys(&cache_keys).await
     }
 }
-

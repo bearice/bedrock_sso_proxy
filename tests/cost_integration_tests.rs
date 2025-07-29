@@ -26,7 +26,7 @@ async fn create_test_server() -> bedrock_sso_proxy::server::Server {
 }
 
 fn create_test_router(server: &bedrock_sso_proxy::server::Server) -> Router {
-    bedrock_sso_proxy::cost::routes::create_admin_cost_routes()
+    bedrock_sso_proxy::routes::create_admin_cost_routes()
         .with_state(server.clone())
         .layer(middleware::from_fn_with_state(
             server.clone(),
@@ -38,10 +38,7 @@ fn create_test_router(server: &bedrock_sso_proxy::server::Server) -> Router {
         ))
 }
 
-fn create_test_token(
-    jwt_service: &dyn JwtService,
-    user_id: i32,
-) -> String {
+fn create_test_token(jwt_service: &dyn JwtService, user_id: i32) -> String {
     let claims = bedrock_sso_proxy::auth::jwt::OAuthClaims::new(user_id, 3600);
     jwt_service.create_oauth_token(&claims).unwrap()
 }
@@ -94,7 +91,11 @@ async fn setup_test_data(database: &dyn DatabaseManager) -> i32 {
         },
     ];
 
-    database.model_costs().upsert_many(&model_costs).await.unwrap();
+    database
+        .model_costs()
+        .upsert_many(&model_costs)
+        .await
+        .unwrap();
     admin_id
 }
 

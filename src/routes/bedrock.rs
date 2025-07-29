@@ -1,7 +1,5 @@
 use crate::{
-    database::entities::UserRecord,
-    error::AppError,
-    model_service::{ModelRequest, ModelService},
+    database::entities::UserRecord, error::AppError, model_service::ModelRequest, server::Server,
 };
 use axum::{
     Router,
@@ -12,9 +10,8 @@ use axum::{
     routing::post,
 };
 use futures_util::StreamExt;
-use std::sync::Arc;
 
-pub fn create_bedrock_routes() -> Router<Arc<dyn ModelService>> {
+pub fn create_bedrock_routes() -> Router<Server> {
     Router::new()
         .route("/model/{model_id}/invoke", post(invoke_model))
         .route(
@@ -25,7 +22,7 @@ pub fn create_bedrock_routes() -> Router<Arc<dyn ModelService>> {
 
 async fn invoke_model(
     Path(model_id): Path<String>,
-    State(model_service): State<Arc<dyn ModelService>>,
+    State(server): State<Server>,
     Extension(user): Extension<UserRecord>,
     headers: HeaderMap,
     body: Bytes,
@@ -48,7 +45,7 @@ async fn invoke_model(
     };
 
     // Use ModelService to invoke model (includes automatic usage tracking)
-    match model_service.invoke_model(model_request).await {
+    match server.model_service.invoke_model(model_request).await {
         Ok(model_response) => {
             tracing::info!(
                 "Successfully invoked model {} with status {}",
@@ -72,7 +69,7 @@ async fn invoke_model(
 /// Handle streaming invoke model requests (Server-Sent Events)
 async fn invoke_model_with_response_stream(
     Path(model_id): Path<String>,
-    State(model_service): State<Arc<dyn ModelService>>,
+    State(server): State<Server>,
     Extension(user): Extension<UserRecord>,
     headers: HeaderMap,
     body: Bytes,
@@ -97,7 +94,11 @@ async fn invoke_model_with_response_stream(
     };
 
     // Use ModelService to invoke streaming model (includes automatic usage tracking)
-    match model_service.invoke_model_stream(model_request).await {
+    match server
+        .model_service
+        .invoke_model_stream(model_request)
+        .await
+    {
         Ok(model_response) => {
             tracing::info!(
                 "Successfully invoked streaming model {} with status {}",
@@ -186,12 +187,9 @@ mod tests {
     #[tokio::test]
     async fn test_invoke_model_empty_model_id() {
         let server = create_test_server().await;
-        let app = create_bedrock_routes()
-            .with_state(server.model_service.clone())
-            .layer(middleware::from_fn_with_state(
-                server.clone(),
-                jwt_auth_middleware,
-            ));
+        let app = create_bedrock_routes().with_state(server.clone()).layer(
+            middleware::from_fn_with_state(server.clone(), jwt_auth_middleware),
+        );
 
         let request = Request::builder()
             .uri("/model/%20/invoke") // URL-encoded space
@@ -207,12 +205,9 @@ mod tests {
     #[tokio::test]
     async fn test_invoke_model_with_custom_headers() {
         let server = create_test_server().await;
-        let app = create_bedrock_routes()
-            .with_state(server.model_service.clone())
-            .layer(middleware::from_fn_with_state(
-                server.clone(),
-                jwt_auth_middleware,
-            ));
+        let app = create_bedrock_routes().with_state(server.clone()).layer(
+            middleware::from_fn_with_state(server.clone(), jwt_auth_middleware),
+        );
 
         let request = Request::builder()
             .uri("/model/anthropic.claude-v2/invoke")
@@ -231,12 +226,9 @@ mod tests {
     #[tokio::test]
     async fn test_invoke_model_streaming_with_empty_model_id() {
         let server = create_test_server().await;
-        let app = create_bedrock_routes()
-            .with_state(server.model_service.clone())
-            .layer(middleware::from_fn_with_state(
-                server.clone(),
-                jwt_auth_middleware,
-            ));
+        let app = create_bedrock_routes().with_state(server.clone()).layer(
+            middleware::from_fn_with_state(server.clone(), jwt_auth_middleware),
+        );
 
         // Create a valid JWT token for the test
         fn create_oauth_token(
@@ -267,12 +259,9 @@ mod tests {
     #[tokio::test]
     async fn test_invoke_model_with_response_stream_success() {
         let server = create_test_server().await;
-        let app = create_bedrock_routes()
-            .with_state(server.model_service.clone())
-            .layer(middleware::from_fn_with_state(
-                server.clone(),
-                jwt_auth_middleware,
-            ));
+        let app = create_bedrock_routes().with_state(server.clone()).layer(
+            middleware::from_fn_with_state(server.clone(), jwt_auth_middleware),
+        );
 
         let request = Request::builder()
             .uri("/model/anthropic.claude-v2/invoke-with-response-stream")
@@ -291,12 +280,9 @@ mod tests {
     #[tokio::test]
     async fn test_invoke_model_with_large_body() {
         let server = create_test_server().await;
-        let app = create_bedrock_routes()
-            .with_state(server.model_service.clone())
-            .layer(middleware::from_fn_with_state(
-                server.clone(),
-                jwt_auth_middleware,
-            ));
+        let app = create_bedrock_routes().with_state(server.clone()).layer(
+            middleware::from_fn_with_state(server.clone(), jwt_auth_middleware),
+        );
 
         // Create a large JSON body (simulating large input)
         let large_content = "A".repeat(1000);

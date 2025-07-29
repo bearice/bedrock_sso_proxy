@@ -175,7 +175,9 @@ impl TestServerBuilder {
             health_service,
             database,
             cache,
-            streaming_manager: Arc::new(crate::shutdown::StreamingConnectionManager::new(shutdown_coordinator.clone())),
+            streaming_manager: Arc::new(crate::shutdown::StreamingConnectionManager::new(
+                shutdown_coordinator.clone(),
+            )),
             shutdown_coordinator,
             cost_service,
         })

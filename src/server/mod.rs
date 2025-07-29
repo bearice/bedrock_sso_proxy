@@ -1,4 +1,5 @@
 pub mod config;
+pub mod route_builder;
 
 use crate::{
     auth::{
@@ -9,27 +10,23 @@ use crate::{
     aws::bedrock::BedrockRuntimeImpl,
     cache::{CacheManager, CacheManagerImpl},
     config::Config,
-    database::{DatabaseManager, DatabaseManagerImpl, entities::UserRecord},
+    database::{DatabaseManager, DatabaseManagerImpl},
     error::AppError,
     health::HealthService,
     metrics,
     model_service::{ModelService, ModelServiceImpl},
     routes::{
-        create_anthropic_routes, create_api_key_routes, create_auth_routes, create_bedrock_routes,
-        create_frontend_router, create_health_routes, create_protected_auth_routes,
+        create_admin_api_routes, create_anthropic_routes, create_auth_routes,
+        create_bedrock_routes, create_frontend_router, create_health_routes,
+        create_protected_auth_routes, create_user_api_routes,
     },
-    shutdown::{
-        ShutdownCoordinator, ShutdownManager, StreamingConnectionManager,
-    },
-    usage::{create_admin_usage_routes, create_user_usage_routes},
-    cost::routes::create_admin_cost_routes,
+    server::route_builder::middleware_factories::request_response_logger,
+    shutdown::{ShutdownCoordinator, ShutdownManager, StreamingConnectionManager},
 };
 use axum::{
     Router,
-    body::Body,
-    extract::{ConnectInfo, DefaultBodyLimit, Request},
-    middleware::{self, Next},
-    response::Response,
+    extract::DefaultBodyLimit,
+    middleware::{self},
 };
 use std::{net::SocketAddr, sync::Arc, time::Duration};
 use tokio::net::TcpListener;
@@ -53,7 +50,6 @@ pub struct Server {
 }
 
 impl Server {
-
     pub async fn new(config: Config) -> Result<Self, AppError> {
         // Initialize metrics if enabled
         let _metrics_handle = if config.metrics.enabled {
@@ -101,14 +97,15 @@ impl Server {
 
         // Initialize shutdown coordinator and streaming manager
         let shutdown_coordinator = Arc::new(ShutdownCoordinator::new());
-        let streaming_manager = Arc::new(StreamingConnectionManager::new(shutdown_coordinator.clone()));
+        let streaming_manager = Arc::new(StreamingConnectionManager::new(
+            shutdown_coordinator.clone(),
+        ));
 
         // Initialize model service with streaming manager
-        let model_service: Arc<dyn ModelService> = Arc::new(ModelServiceImpl::new(
-            bedrock.clone(),
-            database.clone(),
-            config.clone(),
-        ).with_streaming_manager(streaming_manager.clone()));
+        let model_service: Arc<dyn ModelService> = Arc::new(
+            ModelServiceImpl::new(bedrock.clone(), database.clone(), config.clone())
+                .with_streaming_manager(streaming_manager.clone()),
+        );
 
         // Initialize OAuth service (needs concrete cache type)
         let oauth_service = Arc::new(OAuthService::new(
@@ -219,159 +216,84 @@ impl Server {
     // Creates an application router
     pub fn create_app(&self) -> Router {
         let mut app = Router::new()
-            // OAuth authentication routes (no auth required)
-            .nest(
-                "/auth",
-                create_auth_routes().with_state(self.oauth_service.clone()),
-            )
-            // Protected OAuth routes (JWT auth required)
-            .nest(
-                "/auth",
-                create_protected_auth_routes()
-                    .with_state(self.oauth_service.clone())
-                    .layer(middleware::from_fn_with_state(
-                        self.clone(),
-                        jwt_auth_middleware,
-                    )),
-            )
-            // Health check routes (no auth required)
-            .nest(
-                "/health",
-                create_health_routes().with_state(self.health_service.clone()),
-            )
-            // Protected usage tracking API routes (user routes only)
-            .nest(
-                "/api",
-                create_user_usage_routes().with_state(self.clone()).layer(
-                    middleware::from_fn_with_state(self.clone(), jwt_auth_middleware),
-                ),
-            )
-            // Protected API key management routes (JWT auth required)
-            .nest(
-                "/api",
-                create_api_key_routes().with_state(self.clone()).layer(
-                    middleware::from_fn_with_state(self.clone(), jwt_auth_middleware),
-                ),
-            )
-            // Protected admin usage tracking API routes
-            .nest(
-                "/api",
-                create_admin_usage_routes()
-                    .with_state(self.clone())
-                    .layer(middleware::from_fn_with_state(
-                        self.clone(),
-                        jwt_auth_middleware,
-                    ))
-                    .layer(middleware::from_fn_with_state(
-                        self.clone(),
-                        admin_middleware,
-                    )),
-            )
-            // Protected admin cost tracking API routes
-            .nest(
-                "/api",
-                create_admin_cost_routes()
-                    .with_state(self.clone())
-                    .layer(middleware::from_fn_with_state(
-                        self.clone(),
-                        jwt_auth_middleware,
-                    ))
-                    .layer(middleware::from_fn_with_state(
-                        self.clone(),
-                        admin_middleware,
-                    )),
-            )
-            // Protected Bedrock API routes - Unified authentication (JWT or API key)
-            .nest(
-                "/bedrock",
-                create_bedrock_routes()
-                    .with_state(self.model_service.clone())
-                    .layer(DefaultBodyLimit::max(MAX_BODY_SIZE))
-                    .layer(middleware::from_fn_with_state(
-                        self.clone(),
-                        auth_middleware,
-                    )),
-            )
-            // Protected Anthropic API routes - Unified authentication (JWT or API key)
-            .nest(
-                "/anthropic",
-                create_anthropic_routes()
-                    .with_state(self.model_service.clone())
-                    .layer(DefaultBodyLimit::max(MAX_BODY_SIZE))
-                    .layer(middleware::from_fn_with_state(
-                        self.clone(),
-                        auth_middleware,
-                    )),
-            )
-            // Frontend routes (serve last to not conflict with API routes)
-            .fallback_service(create_frontend_router(self.config.frontend.clone()));
+            // OAuth authentication routes
+            .nest("/auth", create_auth_routes())
+            .nest("/auth", self.protected_auth_routes())
+            // Health check routes
+            .nest("/health", create_health_routes())
+            // API routes
+            .nest("/api", self.user_api_routes())
+            .nest("/api", self.admin_api_routes())
+            // Model API routes
+            .nest("/bedrock", self.bedrock_routes())
+            .nest("/anthropic", self.anthropic_routes())
+            // Frontend routes
+            .fallback_service(create_frontend_router(self.config.frontend.clone()))
+            // All routes use Server as state
+            .with_state(self.clone());
 
-        // Add metrics middleware if enabled
+        // Add conditional middleware
+        app = self.add_conditional_middleware(app);
+        app
+    }
+
+    /// Helper method for protected auth routes
+    fn protected_auth_routes(&self) -> Router<Server> {
+        create_protected_auth_routes().layer(middleware::from_fn_with_state(
+            self.clone(),
+            jwt_auth_middleware,
+        ))
+    }
+
+    /// Helper method for user API routes
+    fn user_api_routes(&self) -> Router<Server> {
+        create_user_api_routes().layer(middleware::from_fn_with_state(
+            self.clone(),
+            jwt_auth_middleware,
+        ))
+    }
+
+    /// Helper method for admin API routes
+    fn admin_api_routes(&self) -> Router<Server> {
+        create_admin_api_routes()
+            .layer(middleware::from_fn_with_state(
+                self.clone(),
+                jwt_auth_middleware,
+            ))
+            .layer(middleware::from_fn_with_state(
+                self.clone(),
+                admin_middleware,
+            ))
+    }
+
+    /// Helper method for bedrock routes
+    fn bedrock_routes(&self) -> Router<Server> {
+        create_bedrock_routes()
+            .layer(DefaultBodyLimit::max(MAX_BODY_SIZE))
+            .layer(middleware::from_fn_with_state(
+                self.clone(),
+                auth_middleware,
+            ))
+    }
+
+    /// Helper method for anthropic routes
+    fn anthropic_routes(&self) -> Router<Server> {
+        create_anthropic_routes()
+            .layer(DefaultBodyLimit::max(MAX_BODY_SIZE))
+            .layer(middleware::from_fn_with_state(
+                self.clone(),
+                auth_middleware,
+            ))
+    }
+
+    /// Helper method for adding conditional middleware
+    fn add_conditional_middleware(&self, mut app: Router) -> Router {
         if self.config.metrics.enabled {
             app = app.layer(middleware::from_fn(metrics::metrics_middleware));
         }
-
-        // Add request logging middleware if enabled
         if self.config.logging.log_request {
-            // Enhanced request/response logging middleware
-            async fn request_response_logger(req: Request<Body>, next: Next) -> Response {
-                // Get method and path
-                let method = req.method().to_string();
-                let path = req.uri().path().to_string();
-
-                // Skip logging for static files and frontend routes
-                // Only log API routes that start with /bedrock, /anthropic, /auth, or /health
-                let is_api_route = path.starts_with("/bedrock")
-                    || path.starts_with("/anthropic")
-                    || path.starts_with("/auth")
-                    || path.starts_with("/health");
-
-                if is_api_route {
-                    // Get IP from extensions if available (from ConnectInfo)
-                    let ip = req
-                        .extensions()
-                        .get::<ConnectInfo<SocketAddr>>()
-                        .map(|connect_info| connect_info.0.ip().to_string())
-                        .unwrap_or_else(|| "unknown".to_string());
-
-                    // Get user from JWT claims if available
-                    let user = req
-                        .extensions()
-                        .get::<UserRecord>()
-                        .map(|user| user.provider_user_id.clone())
-                        .unwrap_or_else(|| "anonymous".to_string());
-
-                    // Log request with simple format - only for API routes
-                    info!("Request: {} {} ip={} user={}", method, path, ip, user);
-
-                    // Track request start time for latency calculation
-                    let start = std::time::Instant::now();
-
-                    // Continue with the request
-                    let response = next.run(req).await;
-
-                    // Calculate request duration
-                    let duration = start.elapsed();
-
-                    // Log response
-                    info!(
-                        "Response: {} {} status={} latency={}ms",
-                        method,
-                        path,
-                        response.status().as_u16(),
-                        duration.as_millis()
-                    );
-
-                    response
-                } else {
-                    // Skip logging for non-API routes
-                    next.run(req).await
-                }
-            }
-
             app = app.layer(middleware::from_fn(request_response_logger));
         }
-
         app
     }
 }

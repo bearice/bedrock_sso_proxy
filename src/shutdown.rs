@@ -8,7 +8,10 @@ use std::{
     time::Duration,
 };
 use tokio::{
-    signal, sync::{watch, RwLock}, task::JoinHandle, time::timeout
+    signal,
+    sync::{RwLock, watch},
+    task::JoinHandle,
+    time::timeout,
 };
 use tracing::{error, info};
 
@@ -139,11 +142,8 @@ impl ShutdownManager {
         self.register(HttpServerShutdown::new("HTTP Server".to_string()));
     }
 
-    pub fn register_background_task(&mut self, task: JoinHandle<()>, name: &str){
-        self.register(BackgroundTaskShutdown::new(
-            name.to_string(),
-            task,
-        ));
+    pub fn register_background_task(&mut self, task: JoinHandle<()>, name: &str) {
+        self.register(BackgroundTaskShutdown::new(name.to_string(), task));
     }
     /// Shutdown all registered components
     pub async fn shutdown_all(&self) {

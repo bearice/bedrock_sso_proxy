@@ -33,7 +33,6 @@ impl ModelCostsDao {
         Ok(cost)
     }
 
-
     /// Store or update model cost using individual upserts for SQLite compatibility
     pub async fn upsert_many(&self, costs: &[StoredModelCost]) -> DatabaseResult<()> {
         debug!("Upserting {} model_costs", costs.len());
@@ -105,5 +104,4 @@ impl ModelCostsDao {
 
         Ok(())
     }
-
 }

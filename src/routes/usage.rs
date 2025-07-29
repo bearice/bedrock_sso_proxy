@@ -70,7 +70,6 @@ pub struct ModelUsage {
     pub total_tokens: u64,
 }
 
-
 /// Get user's usage records
 async fn get_user_usage_records(
     State(server): State<crate::server::Server>,
@@ -227,8 +226,6 @@ async fn get_top_models(
         models: model_usage,
     }))
 }
-
-
 
 // Note: user_id is now extracted from JWT sub field (database user ID)
 // This eliminates the need for database lookups for regular user operations

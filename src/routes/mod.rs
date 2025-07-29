@@ -2,12 +2,33 @@ pub mod anthropic;
 pub mod api_keys;
 pub mod auth;
 pub mod bedrock;
+pub mod cost;
 pub mod frontend;
 pub mod health;
+pub mod usage;
 
 pub use anthropic::create_anthropic_routes;
 pub use api_keys::create_api_key_routes;
 pub use auth::{create_auth_routes, create_protected_auth_routes};
 pub use bedrock::create_bedrock_routes;
+pub use cost::create_admin_cost_routes;
 pub use frontend::create_frontend_router;
 pub use health::create_health_routes;
+pub use usage::{create_admin_usage_routes, create_user_usage_routes};
+
+use crate::Server;
+use axum::Router;
+
+/// Create admin-only API routes
+pub fn create_admin_api_routes() -> Router<Server> {
+    Router::new()
+        .merge(create_admin_usage_routes())
+        .merge(create_admin_cost_routes())
+}
+
+/// Create user API routes
+pub fn create_user_api_routes() -> Router<Server> {
+    Router::new()
+        .merge(create_user_usage_routes())
+        .merge(create_api_key_routes())
+}

@@ -1,7 +1,5 @@
 use crate::aws::bedrock::BedrockRuntime;
-use crate::{
-    config::Config, database::DatabaseManager, error::AppError,
-};
+use crate::{config::Config, database::DatabaseManager, error::AppError};
 use async_trait::async_trait;
 use std::collections::HashMap;
 use std::{sync::Arc, time::Instant};
@@ -20,7 +18,6 @@ pub use types::*;
 /// Model service trait for dependency injection and testing
 #[async_trait]
 pub trait ModelService: Send + Sync {
-
     /// Non-streaming model invocation with automatic usage tracking
     async fn invoke_model(&self, request: ModelRequest) -> Result<ModelResponse, AppError>;
 
@@ -29,7 +26,6 @@ pub trait ModelService: Send + Sync {
         &self,
         request: ModelRequest,
     ) -> Result<ModelStreamResponse, AppError>;
-
 
     /// Create a ModelMapper from the current configuration
     fn create_model_mapper(&self) -> crate::anthropic::model_mapping::ModelMapper;
@@ -78,8 +74,6 @@ impl std::fmt::Debug for ModelServiceImpl {
             .finish()
     }
 }
-
-
 
 impl ModelServiceImpl {
     pub fn new(
@@ -136,10 +130,10 @@ impl ModelServiceImpl {
         response_body: &[u8],
         response_time_ms: u32,
     ) -> Result<UsageMetadata, AppError> {
-        let usage_tracker = usage_tracking::UsageTrackingService::new(self.config.clone(), self.database.clone());
+        let usage_tracker =
+            usage_tracking::UsageTrackingService::new(self.config.clone(), self.database.clone());
         usage_tracker.extract_usage_metadata(headers, response_body, response_time_ms)
     }
-
 }
 
 #[async_trait]
@@ -148,7 +142,6 @@ impl ModelService for ModelServiceImpl {
     fn create_model_mapper(&self) -> crate::anthropic::model_mapping::ModelMapper {
         self.config.create_model_mapper()
     }
-
 
     /// Non-streaming model invocation with automatic usage tracking
     async fn invoke_model(&self, request: ModelRequest) -> Result<ModelResponse, AppError> {
@@ -239,7 +232,6 @@ impl ModelService for ModelServiceImpl {
         Ok(response)
     }
 
-
     /// Get the AWS client for direct access if needed (returns trait object)
     fn bedrock(&self) -> &dyn BedrockRuntime {
         self.bedrock.as_ref()
@@ -303,7 +295,8 @@ impl ModelService for ModelServiceImpl {
         request: &ModelRequest,
         usage_metadata: &UsageMetadata,
     ) -> Result<(), AppError> {
-        let usage_tracker = usage_tracking::UsageTrackingService::new(self.config.clone(), self.database.clone());
+        let usage_tracker =
+            usage_tracking::UsageTrackingService::new(self.config.clone(), self.database.clone());
         usage_tracker.track_usage(request, usage_metadata).await
     }
 }

@@ -30,7 +30,7 @@ pub struct OAuthConfig {
     pub providers: HashMap<String, OAuthProvider>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Default, Debug, Clone, Serialize, Deserialize)]
 pub struct OAuthProvider {
     pub client_id: String,
     pub client_secret: String,

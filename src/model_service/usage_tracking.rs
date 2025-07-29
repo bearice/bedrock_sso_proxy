@@ -3,10 +3,10 @@ use chrono::Utc;
 use rust_decimal::Decimal;
 
 use crate::{
-    error::AppError,
-    model_service::types::{ModelRequest, UsageMetadata},
     config::Config,
     database::DatabaseManager,
+    error::AppError,
+    model_service::types::{ModelRequest, UsageMetadata},
 };
 use serde::{Deserialize, Serialize};
 
@@ -93,7 +93,12 @@ impl UsageTrackingService {
         cache_write_tokens: Option<u32>,
         cache_read_tokens: Option<u32>,
     ) -> Option<Decimal> {
-        match self.database.model_costs().find_by_region_and_model(region, model_id).await {
+        match self
+            .database
+            .model_costs()
+            .find_by_region_and_model(region, model_id)
+            .await
+        {
             Ok(Some(cost_data)) => {
                 let input_cost = Decimal::from(input_tokens) * cost_data.input_cost_per_1k_tokens
                     / Decimal::from(1000);

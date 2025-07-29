@@ -98,7 +98,7 @@ impl std::error::Error for CsvParsingError {}
 ///
 /// # Example
 /// ```rust
-/// use bedrock_sso_proxy::cost_tracking::parse_csv_pricing_data;
+/// use bedrock_sso_proxy::cost::parse_csv_pricing_data;
 /// let csv_data = "region_id,model_id,model_name,provider,input_price,output_price,batch_input_price,batch_output_price,cache_write_price,cache_read_price,timestamp\nus-east-1,claude-3-sonnet,Claude 3 Sonnet,Anthropic,0.003,0.015,,,0.0018,0.00036,2024-01-15T10:30:00Z";
 /// match parse_csv_pricing_data(csv_data) {
 ///     Ok(pricing) => println!("Successfully parsed {} records", pricing.len()),

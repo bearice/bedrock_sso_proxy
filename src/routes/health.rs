@@ -1,4 +1,4 @@
-use crate::{error::AppError, health::HealthService};
+use crate::{error::AppError, server::Server};
 use axum::{
     Router,
     extract::{Query, State},
@@ -7,7 +7,6 @@ use axum::{
 };
 use serde::Deserialize;
 use serde_json::Value;
-use std::sync::Arc;
 
 #[derive(Debug, Deserialize)]
 struct HealthCheckQuery {
@@ -20,17 +19,17 @@ struct HealthCheckQuery {
 /// This module provides system-wide health check endpoints that are shared
 /// across all services. The health service aggregates checks from all
 /// registered components (AWS, OAuth, JWT, Storage, etc.)
-pub fn create_health_routes() -> Router<Arc<HealthService>> {
+pub fn create_health_routes() -> Router<Server> {
     Router::new().route("/", get(health_check))
 }
 
 async fn health_check(
-    State(health_service): State<Arc<HealthService>>,
+    State(server): State<Server>,
     Query(params): Query<HealthCheckQuery>,
 ) -> Result<Json<Value>, AppError> {
     // Use the centralized health service
     let filter = params.check.as_deref();
-    let health_response = health_service.check_health(filter).await;
+    let health_response = server.health_service.check_health(filter).await;
 
     // Convert the health response to the expected JSON format
     let response_json = serde_json::to_value(&health_response)
@@ -42,30 +41,17 @@ async fn health_check(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::health::HealthService;
+
     use axum::{
         body::Body,
         http::{Request, StatusCode},
     };
     use tower::ServiceExt;
 
-    async fn create_test_health_service() -> Arc<HealthService> {
-        let health_service = Arc::new(HealthService::new());
-
-        // Create ModelService for testing and register its AWS health checker
-        let server = crate::test_utils::TestServerBuilder::new().build().await;
-        let model_service = server.model_service;
-
-        health_service
-            .register(model_service.bedrock().health_checker())
-            .await;
-        health_service
-    }
-
     #[tokio::test]
     async fn test_health_check_basic() {
-        let health_service = create_test_health_service().await;
-        let app = create_health_routes().with_state(health_service);
+        let server = crate::test_utils::TestServerBuilder::new().build().await;
+        let app = create_health_routes().with_state(server);
 
         let request = Request::builder().uri("/").body(Body::empty()).unwrap();
 
@@ -75,8 +61,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_health_check_with_all_query() {
-        let health_service = create_test_health_service().await;
-        let app = create_health_routes().with_state(health_service);
+        let server = crate::test_utils::TestServerBuilder::new().build().await;
+        let app = create_health_routes().with_state(server);
 
         let request = Request::builder()
             .uri("/?check=all")
@@ -89,8 +75,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_health_check_with_specific_query() {
-        let health_service = create_test_health_service().await;
-        let app = create_health_routes().with_state(health_service);
+        let server = crate::test_utils::TestServerBuilder::new().build().await;
+        let app = create_health_routes().with_state(server);
 
         let request = Request::builder()
             .uri("/?check=aws")
@@ -103,8 +89,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_health_check_with_unknown_query() {
-        let health_service = create_test_health_service().await;
-        let app = create_health_routes().with_state(health_service);
+        let server = crate::test_utils::TestServerBuilder::new().build().await;
+        let app = create_health_routes().with_state(server);
 
         let request = Request::builder()
             .uri("/?check=unknown")

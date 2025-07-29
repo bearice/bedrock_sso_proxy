@@ -31,7 +31,7 @@ fn create_test_router(server: &bedrock_sso_proxy::server::Server) -> Router {
     // Combine user and admin routes for testing
     Router::new()
         .merge(
-            bedrock_sso_proxy::usage::create_user_usage_routes()
+            bedrock_sso_proxy::routes::create_user_usage_routes()
                 .with_state(server.clone())
                 .layer(middleware::from_fn_with_state(
                     server.clone(),
@@ -39,7 +39,7 @@ fn create_test_router(server: &bedrock_sso_proxy::server::Server) -> Router {
                 )),
         )
         .merge(
-            bedrock_sso_proxy::usage::create_admin_usage_routes()
+            bedrock_sso_proxy::routes::create_admin_usage_routes()
                 .with_state(server.clone())
                 .layer(middleware::from_fn_with_state(
                     server.clone(),
@@ -352,7 +352,6 @@ async fn test_admin_get_top_models() {
     assert_eq!(models[0]["total_tokens"], 275); // 200 + 75
 }
 
-
 #[tokio::test]
 async fn test_non_admin_access_denied() {
     let server = create_test_server().await;
@@ -437,4 +436,3 @@ async fn test_pagination_limits() {
     let json: Value = serde_json::from_slice(&body).unwrap();
     assert_eq!(json["limit"], 500); // Should be capped at 500
 }
-

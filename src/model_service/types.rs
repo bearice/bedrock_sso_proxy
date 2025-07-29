@@ -67,7 +67,6 @@ pub struct UsageMetadata {
     pub response_time_ms: u32,
 }
 
-
 /// AWS Bedrock invocation metrics from streaming response
 #[derive(Debug, Deserialize, Serialize)]
 pub(crate) struct BedrockInvocationMetrics {

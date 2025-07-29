@@ -1,10 +1,10 @@
 use super::*;
 use crate::{
     anthropic::transform::transform_bedrock_event_to_anthropic,
-    aws::config::AwsConfig,
     aws::bedrock::BedrockRuntimeImpl,
+    aws::config::AwsConfig,
     config::Config,
-    database::{entities::*, UsageQuery},
+    database::{UsageQuery, entities::*},
     model_service::streaming::{EventStreamParser, ParsedEventStream},
     model_service::types::*,
     test_utils::TestServerBuilder,
@@ -102,7 +102,6 @@ async fn test_extract_usage_metadata_from_response_body() {
     assert_eq!(metadata.region, "us-east-1");
 }
 
-
 #[tokio::test]
 async fn test_calculate_cost() {
     let (server, config) = create_test_server().await;
@@ -126,7 +125,8 @@ async fn test_calculate_cost() {
         .unwrap();
 
     // Test cost calculation through the usage tracking service
-    let usage_service = crate::model_service::usage_tracking::UsageTrackingService::new(config, database);
+    let usage_service =
+        crate::model_service::usage_tracking::UsageTrackingService::new(config, database);
     let cost = usage_service
         .calculate_cost("us-east-1", "test-model", 100, 50, None, None)
         .await;

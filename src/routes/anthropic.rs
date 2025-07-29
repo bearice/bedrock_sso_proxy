@@ -10,6 +10,7 @@ use crate::{
     database::entities::UserRecord,
     error::AppError,
     model_service::{ModelRequest, ModelService},
+    server::Server,
 };
 use axum::{
     Router,
@@ -25,14 +26,14 @@ use std::sync::Arc;
 use tracing::{error, info};
 
 /// Create routes for Anthropic API endpoints
-pub fn create_anthropic_routes() -> Router<Arc<dyn ModelService>> {
+pub fn create_anthropic_routes() -> Router<Server> {
     Router::new().route("/v1/messages", post(create_message))
 }
 
 /// Handle POST /v1/messages - Anthropic API format message creation
 /// Supports both streaming and non-streaming responses based on the `stream` parameter
 pub async fn create_message(
-    State(model_service): State<Arc<dyn ModelService>>,
+    State(server): State<Server>,
     Extension(user): Extension<UserRecord>,
     headers: HeaderMap,
     body: Bytes,
@@ -82,7 +83,7 @@ pub async fn create_message(
     tracing::trace!("Request validation passed");
 
     // Create model mapper for transformations from service config
-    let model_mapper = model_service.create_model_mapper();
+    let model_mapper = server.model_service.create_model_mapper();
 
     // Transform Anthropic request to Bedrock format
     tracing::trace!(
@@ -111,7 +112,7 @@ pub async fn create_message(
 
     if is_streaming {
         handle_streaming_message(
-            model_service,
+            server.model_service.clone(),
             headers,
             bedrock_model_id,
             bedrock_body,
@@ -122,7 +123,7 @@ pub async fn create_message(
         .await
     } else {
         handle_non_streaming_message(
-            model_service,
+            server.model_service.clone(),
             headers,
             bedrock_model_id,
             bedrock_body,
@@ -413,12 +414,9 @@ mod tests {
     #[tokio::test]
     async fn test_create_message_basic() {
         let server = create_test_server().await;
-        let app = create_anthropic_routes()
-            .with_state(server.model_service.clone())
-            .layer(middleware::from_fn_with_state(
-                server.clone(),
-                jwt_auth_middleware,
-            ));
+        let app = create_anthropic_routes().with_state(server.clone()).layer(
+            middleware::from_fn_with_state(server.clone(), jwt_auth_middleware),
+        );
 
         let request = Request::builder()
             .uri("/v1/messages")
@@ -436,12 +434,9 @@ mod tests {
     #[tokio::test]
     async fn test_create_message_streaming() {
         let server = create_test_server().await;
-        let app = create_anthropic_routes()
-            .with_state(server.model_service.clone())
-            .layer(middleware::from_fn_with_state(
-                server.clone(),
-                jwt_auth_middleware,
-            ));
+        let app = create_anthropic_routes().with_state(server.clone()).layer(
+            middleware::from_fn_with_state(server.clone(), jwt_auth_middleware),
+        );
 
         let request = Request::builder()
             .uri("/v1/messages")
@@ -459,12 +454,9 @@ mod tests {
     #[tokio::test]
     async fn test_create_message_invalid_json() {
         let server = create_test_server().await;
-        let app = create_anthropic_routes()
-            .with_state(server.model_service.clone())
-            .layer(middleware::from_fn_with_state(
-                server.clone(),
-                jwt_auth_middleware,
-            ));
+        let app = create_anthropic_routes().with_state(server.clone()).layer(
+            middleware::from_fn_with_state(server.clone(), jwt_auth_middleware),
+        );
 
         // Create a valid JWT token for the test
         fn create_oauth_token(
@@ -495,12 +487,9 @@ mod tests {
     #[tokio::test]
     async fn test_create_message_missing_required_fields() {
         let server = create_test_server().await;
-        let app = create_anthropic_routes()
-            .with_state(server.model_service.clone())
-            .layer(middleware::from_fn_with_state(
-                server.clone(),
-                jwt_auth_middleware,
-            ));
+        let app = create_anthropic_routes().with_state(server.clone()).layer(
+            middleware::from_fn_with_state(server.clone(), jwt_auth_middleware),
+        );
 
         let incomplete_request = serde_json::to_string(&serde_json::json!({
             "model": "claude-sonnet-4-20250514",
@@ -523,12 +512,9 @@ mod tests {
     #[tokio::test]
     async fn test_create_message_unsupported_model() {
         let server = create_test_server().await;
-        let app = create_anthropic_routes()
-            .with_state(server.model_service.clone())
-            .layer(middleware::from_fn_with_state(
-                server.clone(),
-                jwt_auth_middleware,
-            ));
+        let app = create_anthropic_routes().with_state(server.clone()).layer(
+            middleware::from_fn_with_state(server.clone(), jwt_auth_middleware),
+        );
 
         let request_with_unsupported_model = serde_json::to_string(&serde_json::json!({
             "model": "unsupported-model",
@@ -557,12 +543,9 @@ mod tests {
     #[tokio::test]
     async fn test_create_message_with_system_prompt() {
         let server = create_test_server().await;
-        let app = create_anthropic_routes()
-            .with_state(server.model_service.clone())
-            .layer(middleware::from_fn_with_state(
-                server.clone(),
-                jwt_auth_middleware,
-            ));
+        let app = create_anthropic_routes().with_state(server.clone()).layer(
+            middleware::from_fn_with_state(server.clone(), jwt_auth_middleware),
+        );
 
         let request_with_system = serde_json::to_string(&serde_json::json!({
             "model": "claude-sonnet-4-20250514",
@@ -593,12 +576,9 @@ mod tests {
     #[tokio::test]
     async fn test_create_message_with_all_parameters() {
         let server = create_test_server().await;
-        let app = create_anthropic_routes()
-            .with_state(server.model_service.clone())
-            .layer(middleware::from_fn_with_state(
-                server.clone(),
-                jwt_auth_middleware,
-            ));
+        let app = create_anthropic_routes().with_state(server.clone()).layer(
+            middleware::from_fn_with_state(server.clone(), jwt_auth_middleware),
+        );
 
         let full_request = serde_json::to_string(&serde_json::json!({
             "model": "claude-sonnet-4-20250514",
@@ -633,12 +613,9 @@ mod tests {
     #[tokio::test]
     async fn test_create_message_with_model_alias() {
         let server = create_test_server().await;
-        let app = create_anthropic_routes()
-            .with_state(server.model_service.clone())
-            .layer(middleware::from_fn_with_state(
-                server.clone(),
-                jwt_auth_middleware,
-            ));
+        let app = create_anthropic_routes().with_state(server.clone()).layer(
+            middleware::from_fn_with_state(server.clone(), jwt_auth_middleware),
+        );
 
         let request_with_alias = serde_json::to_string(&serde_json::json!({
             "model": "claude-3-sonnet", // Using alias instead of full name
@@ -668,12 +645,9 @@ mod tests {
     #[tokio::test]
     async fn test_create_message_large_request() {
         let server = create_test_server().await;
-        let app = create_anthropic_routes()
-            .with_state(server.model_service.clone())
-            .layer(middleware::from_fn_with_state(
-                server.clone(),
-                jwt_auth_middleware,
-            ));
+        let app = create_anthropic_routes().with_state(server.clone()).layer(
+            middleware::from_fn_with_state(server.clone(), jwt_auth_middleware),
+        );
 
         // Create a large content string
         let large_content = "A".repeat(5000);
