@@ -1,5 +1,7 @@
 import { useState, useCallback, useEffect } from 'react';
 import { useAuth } from '../hooks/useAuth';
+import { ApiKeyManagement } from '../components/apikeys';
+import { UsageTracking } from '../components/usage';
 import {
   LogOut,
   Copy,
@@ -11,6 +13,8 @@ import {
   ExternalLink,
   Terminal,
   FileText,
+  Activity,
+  Settings,
 } from 'lucide-react';
 
 interface UserInfo {
@@ -30,6 +34,7 @@ export function DashboardPage() {
   const [copied, setCopied] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [userInfo, setUserInfo] = useState<UserInfo | null>(null);
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'api-keys' | 'usage'>('dashboard');
 
   // Fetch user info from /auth/me API
   useEffect(() => {
@@ -188,292 +193,417 @@ export function DashboardPage() {
         )}
       </div>
 
-      {/* Claude Code Quick Start */}
+      {/* Navigation Tabs */}
       <div
-        className="card"
-        style={{ background: '#f8fafc', border: '2px solid #4f46e5', borderRadius: '12px' }}
+        style={{
+          background: 'white',
+          borderRadius: '12px',
+          marginBottom: '1.5rem',
+          border: '1px solid #e9ecef',
+          overflow: 'hidden',
+        }}
       >
-        <h2 style={{ color: '#4f46e5', fontSize: '1.5rem', marginBottom: '1rem' }}>
-          <Terminal size={24} style={{ marginRight: '0.5rem', verticalAlign: 'text-bottom' }} />
-          🚀 Use with Claude Code
-        </h2>
-        <p
-          style={{
-            fontSize: '1.1rem',
-            marginBottom: '1.5rem',
-            color: '#374151',
-            fontWeight: '500',
-          }}
-        >
-          Ready to use! Copy this command to use Claude Code with your authenticated proxy:
-        </p>
-
         <div
           style={{
-            background: '#1f2937',
-            color: '#f9fafb',
-            padding: '1rem',
-            borderRadius: '8px',
-            marginBottom: '1rem',
-            fontFamily: 'monospace',
-            fontSize: '0.9rem',
-            wordBreak: 'break-all',
-            border: '1px solid #374151',
+            display: 'flex',
+            borderBottom: '1px solid #e9ecef',
           }}
         >
-          export ANTHROPIC_AUTH_TOKEN={token?.substring(0, 40)}...
-          <br />
-          export ANTHROPIC_BASE_URL={currentDomain}/anthropic
-          <br />
-          claude
-        </div>
-
-        <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
           <button
-            onClick={() =>
-              copyToClipboard(
-                `export ANTHROPIC_AUTH_TOKEN=${token}\nexport ANTHROPIC_BASE_URL=${currentDomain}/anthropic\nclaude`,
-                'claude-command'
-              )
-            }
-            className="btn"
+            onClick={() => setActiveTab('dashboard')}
             style={{
-              background: '#4f46e5',
-              color: 'white',
-              border: '1px solid #4f46e5',
+              flex: 1,
+              padding: '1rem 1.5rem',
+              border: 'none',
+              background: activeTab === 'dashboard' ? '#4f46e5' : 'transparent',
+              color: activeTab === 'dashboard' ? 'white' : '#6c757d',
+              cursor: 'pointer',
+              fontSize: '1rem',
+              fontWeight: 500,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '0.5rem',
+              transition: 'all 0.2s ease',
+            }}
+            onMouseEnter={(e) => {
+              if (activeTab !== 'dashboard') {
+                e.currentTarget.style.background = '#f8f9fa';
+              }
+            }}
+            onMouseLeave={(e) => {
+              if (activeTab !== 'dashboard') {
+                e.currentTarget.style.background = 'transparent';
+              }
             }}
           >
-            <Copy size={16} />
-            {copied === 'claude-command' ? 'Copied!' : 'Copy Full Command'}
+            <Settings size={18} />
+            Dashboard
           </button>
-
           <button
-            onClick={() => copyToClipboard(token!, 'token-quick')}
-            className="btn"
+            onClick={() => setActiveTab('api-keys')}
             style={{
-              background: '#6b7280',
-              color: 'white',
-              border: '1px solid #6b7280',
+              flex: 1,
+              padding: '1rem 1.5rem',
+              border: 'none',
+              background: activeTab === 'api-keys' ? '#4f46e5' : 'transparent',
+              color: activeTab === 'api-keys' ? 'white' : '#6c757d',
+              cursor: 'pointer',
+              fontSize: '1rem',
+              fontWeight: 500,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '0.5rem',
+              transition: 'all 0.2s ease',
+            }}
+            onMouseEnter={(e) => {
+              if (activeTab !== 'api-keys') {
+                e.currentTarget.style.background = '#f8f9fa';
+              }
+            }}
+            onMouseLeave={(e) => {
+              if (activeTab !== 'api-keys') {
+                e.currentTarget.style.background = 'transparent';
+              }
             }}
           >
-            <Key size={16} />
-            {copied === 'token-quick' ? 'Copied!' : 'Copy Token Only'}
+            <Key size={18} />
+            API Keys
           </button>
-        </div>
-
-        <div
-          style={{
-            background: '#ecfdf5',
-            color: '#047857',
-            padding: '0.75rem',
-            borderRadius: '6px',
-            marginTop: '1rem',
-            fontSize: '0.9rem',
-            border: '1px solid #a7f3d0',
-          }}
-        >
-          💡 <strong>Quick tip:</strong> Run this command in your terminal to start using Claude
-          Code with this proxy immediately!
+          <button
+            onClick={() => setActiveTab('usage')}
+            style={{
+              flex: 1,
+              padding: '1rem 1.5rem',
+              border: 'none',
+              background: activeTab === 'usage' ? '#4f46e5' : 'transparent',
+              color: activeTab === 'usage' ? 'white' : '#6c757d',
+              cursor: 'pointer',
+              fontSize: '1rem',
+              fontWeight: 500,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '0.5rem',
+              transition: 'all 0.2s ease',
+            }}
+            onMouseEnter={(e) => {
+              if (activeTab !== 'usage') {
+                e.currentTarget.style.background = '#f8f9fa';
+              }
+            }}
+            onMouseLeave={(e) => {
+              if (activeTab !== 'usage') {
+                e.currentTarget.style.background = 'transparent';
+              }
+            }}
+          >
+            <Activity size={18} />
+            Usage Tracking
+          </button>
         </div>
       </div>
 
-      {/* Token Display */}
-      <div className="card">
-        <h2>
-          <Key size={24} style={{ marginRight: '0.5rem', verticalAlign: 'text-bottom' }} />
-          JWT Access Token
-        </h2>
-        <p>Use this token to authenticate your requests to the Bedrock API.</p>
+      {/* Tab Content */}
+      {activeTab === 'dashboard' && (
+        <>
+          {/* Claude Code Quick Start */}
+          <div
+            className="card"
+            style={{ background: '#f8fafc', border: '2px solid #4f46e5', borderRadius: '12px' }}
+          >
+            <h2 style={{ color: '#4f46e5', fontSize: '1.5rem', marginBottom: '1rem' }}>
+              <Terminal size={24} style={{ marginRight: '0.5rem', verticalAlign: 'text-bottom' }} />
+              🚀 Use with Claude Code
+            </h2>
+            <p
+              style={{
+                fontSize: '1.1rem',
+                marginBottom: '1.5rem',
+                color: '#374151',
+                fontWeight: '500',
+              }}
+            >
+              Ready to use! Copy this command to use Claude Code with your authenticated proxy:
+            </p>
 
-        <div className="token-display">
-          <div className="token-box">
-            <h4>Access Token</h4>
-            <div className="token-value">{token}</div>
-            <button onClick={() => copyToClipboard(token!, 'token')} className="copy-btn">
-              <Copy size={14} />
-              {copied === 'token' ? 'Copied!' : 'Copy Token'}
-            </button>
-          </div>
+            <div
+              style={{
+                background: '#1f2937',
+                color: '#f9fafb',
+                padding: '1rem',
+                borderRadius: '8px',
+                marginBottom: '1rem',
+                fontFamily: 'monospace',
+                fontSize: '0.9rem',
+                wordBreak: 'break-all',
+                border: '1px solid #374151',
+              }}
+            >
+              export ANTHROPIC_AUTH_TOKEN={token?.substring(0, 40)}...
+              <br />
+              export ANTHROPIC_BASE_URL={currentDomain}/anthropic
+              <br />
+              claude
+            </div>
 
-          {refreshToken && refreshToken.trim() && (
-            <div className="token-box">
-              <h4>Refresh Token</h4>
-              <div className="token-value">{refreshToken}</div>
-              <button onClick={() => copyToClipboard(refreshToken, 'refresh')} className="copy-btn">
-                <Copy size={14} />
-                {copied === 'refresh' ? 'Copied!' : 'Copy Refresh Token'}
+            <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
+              <button
+                onClick={() =>
+                  copyToClipboard(
+                    `export ANTHROPIC_AUTH_TOKEN=${token}\nexport ANTHROPIC_BASE_URL=${currentDomain}/anthropic\nclaude`,
+                    'claude-command'
+                  )
+                }
+                className="btn"
+                style={{
+                  background: '#4f46e5',
+                  color: 'white',
+                  border: '1px solid #4f46e5',
+                }}
+              >
+                <Copy size={16} />
+                {copied === 'claude-command' ? 'Copied!' : 'Copy Full Command'}
+              </button>
+
+              <button
+                onClick={() => copyToClipboard(token!, 'token-quick')}
+                className="btn"
+                style={{
+                  background: '#6b7280',
+                  color: 'white',
+                  border: '1px solid #6b7280',
+                }}
+              >
+                <Key size={16} />
+                {copied === 'token-quick' ? 'Copied!' : 'Copy Token Only'}
               </button>
             </div>
-          )}
 
-          {scopes && scopes.length > 0 && (
-            <div style={{ marginTop: '1rem' }}>
-              <h4>Granted Scopes:</h4>
-              <div
-                style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', marginTop: '0.5rem' }}
-              >
-                {scopes.map((scope, index) => (
-                  <span
-                    key={index}
+            <div
+              style={{
+                background: '#ecfdf5',
+                color: '#047857',
+                padding: '0.75rem',
+                borderRadius: '6px',
+                marginTop: '1rem',
+                fontSize: '0.9rem',
+                border: '1px solid #a7f3d0',
+              }}
+            >
+              💡 <strong>Quick tip:</strong> Run this command in your terminal to start using Claude
+              Code with this proxy immediately!
+            </div>
+          </div>
+
+          {/* Token Display */}
+          <div className="card">
+            <h2>
+              <Key size={24} style={{ marginRight: '0.5rem', verticalAlign: 'text-bottom' }} />
+              JWT Access Token
+            </h2>
+            <p>Use this token to authenticate your requests to the Bedrock API.</p>
+
+            <div className="token-display">
+              <div className="token-box">
+                <h4>Access Token</h4>
+                <div className="token-value">{token}</div>
+                <button onClick={() => copyToClipboard(token!, 'token')} className="copy-btn">
+                  <Copy size={14} />
+                  {copied === 'token' ? 'Copied!' : 'Copy Token'}
+                </button>
+              </div>
+
+              {refreshToken && refreshToken.trim() && (
+                <div className="token-box">
+                  <h4>Refresh Token</h4>
+                  <div className="token-value">{refreshToken}</div>
+                  <button
+                    onClick={() => copyToClipboard(refreshToken, 'refresh')}
+                    className="copy-btn"
+                  >
+                    <Copy size={14} />
+                    {copied === 'refresh' ? 'Copied!' : 'Copy Refresh Token'}
+                  </button>
+                </div>
+              )}
+
+              {scopes && scopes.length > 0 && (
+                <div style={{ marginTop: '1rem' }}>
+                  <h4>Granted Scopes:</h4>
+                  <div
                     style={{
-                      background: '#e2e8f0',
-                      color: '#4a5568',
-                      padding: '0.25rem 0.75rem',
-                      borderRadius: '12px',
-                      fontSize: '0.875rem',
-                      fontWeight: '500',
+                      display: 'flex',
+                      flexWrap: 'wrap',
+                      gap: '0.5rem',
+                      marginTop: '0.5rem',
                     }}
                   >
-                    {scope}
-                  </span>
-                ))}
-              </div>
+                    {scopes.map((scope, index) => (
+                      <span
+                        key={index}
+                        style={{
+                          background: '#e2e8f0',
+                          color: '#4a5568',
+                          padding: '0.25rem 0.75rem',
+                          borderRadius: '12px',
+                          fontSize: '0.875rem',
+                          fontWeight: '500',
+                        }}
+                      >
+                        {scope}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
-          )}
-        </div>
-      </div>
+          </div>
 
-      {/* Claude Code Setup Instructions */}
-      <div className="setup-section">
-        <h3>
-          <Terminal size={20} style={{ marginRight: '0.5rem', verticalAlign: 'text-bottom' }} />
-          🔧 Claude Code Setup
-        </h3>
-        <p>Use your JWT token to authenticate API requests to this Bedrock proxy:</p>
+          {/* Claude Code Setup Instructions */}
+          <div className="setup-section">
+            <h3>
+              <Terminal size={20} style={{ marginRight: '0.5rem', verticalAlign: 'text-bottom' }} />
+              🔧 Claude Code Setup
+            </h3>
+            <p>Use your JWT token to authenticate API requests to this Bedrock proxy:</p>
 
-        <div
-          style={{
-            background: '#fff3cd',
-            padding: '1rem',
-            borderRadius: '8px',
-            marginBottom: '1rem',
-            border: '1px solid #ffeaa7',
-          }}
-        >
-          <strong>⚠️ Important:</strong> This is a custom proxy server, not the official Claude Code
-          integration. For standard AWS Bedrock usage with Claude Code, see the{' '}
-          <a
-            href="https://docs.anthropic.com/en/docs/claude-code/amazon-bedrock"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            official documentation
-          </a>
-          .
-        </div>
+            <div
+              style={{
+                background: '#fff3cd',
+                padding: '1rem',
+                borderRadius: '8px',
+                marginBottom: '1rem',
+                border: '1px solid #ffeaa7',
+              }}
+            >
+              <strong>⚠️ Important:</strong> This is a custom proxy server, not the official Claude
+              Code integration. For standard AWS Bedrock usage with Claude Code, see the{' '}
+              <a
+                href="https://docs.anthropic.com/en/docs/claude-code/amazon-bedrock"
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                official documentation
+              </a>
+              .
+            </div>
 
-        <h4>API Usage</h4>
-        <p>
-          This proxy supports both Bedrock and Anthropic API formats for maximum compatibility. Use
-          the token as a Bearer token in the Authorization header:
-        </p>
-        <pre>{`Authorization: Bearer ${token?.substring(0, 30)}...`}</pre>
+            <h4>API Usage</h4>
+            <p>
+              This proxy supports both Bedrock and Anthropic API formats for maximum compatibility.
+              Use the token as a Bearer token in the Authorization header:
+            </p>
+            <pre>{`Authorization: Bearer ${token?.substring(0, 30)}...`}</pre>
 
-        <div
-          style={{
-            background: '#e8f5e8',
-            padding: '1rem',
-            borderRadius: '8px',
-            marginTop: '1rem',
-            border: '1px solid #b8d4b8',
-          }}
-        >
-          <strong>✨ New:</strong> Anthropic API format support! Use <code>/v1/messages</code> with
-          standard Anthropic request format for better compatibility with Anthropic SDKs and LLM
-          gateways.
-        </div>
+            <div
+              style={{
+                background: '#e8f5e8',
+                padding: '1rem',
+                borderRadius: '8px',
+                marginTop: '1rem',
+                border: '1px solid #b8d4b8',
+              }}
+            >
+              <strong>✨ New:</strong> Anthropic API format support! Use <code>/v1/messages</code>{' '}
+              with standard Anthropic request format for better compatibility with Anthropic SDKs
+              and LLM gateways.
+            </div>
 
-        <h4>Available Endpoints</h4>
-        <div style={{ marginBottom: '1rem' }}>
-          <strong>Health & Status:</strong>
-          <ul>
-            <li>
-              <code>GET /health</code> - Health check (no auth required)
-            </li>
-          </ul>
-        </div>
+            <h4>Available Endpoints</h4>
+            <div style={{ marginBottom: '1rem' }}>
+              <strong>Health & Status:</strong>
+              <ul>
+                <li>
+                  <code>GET /health</code> - Health check (no auth required)
+                </li>
+              </ul>
+            </div>
 
-        <div style={{ marginBottom: '1rem' }}>
-          <strong>Bedrock Format (AWS Native):</strong>
-          <ul>
-            <li>
-              <code>
-                POST /bedrock/model/{'{'}
-                {'{'}model_id{'}'}/invoke
-              </code>{' '}
-              - Standard invocation
-            </li>
-            <li>
-              <code>
-                POST /bedrock/model/{'{'}
-                {'{'}model_id{'}'}/invoke-with-response-stream
-              </code>{' '}
-              - Streaming responses
-            </li>
-          </ul>
-          <p style={{ fontSize: '0.9rem', color: '#666', margin: '0.5rem 0 0 1rem' }}>
-            Uses AWS model IDs like <code>anthropic.claude-sonnet-4-20250514-v1:0</code> in the URL
-            path
-          </p>
-        </div>
+            <div style={{ marginBottom: '1rem' }}>
+              <strong>Bedrock Format (AWS Native):</strong>
+              <ul>
+                <li>
+                  <code>
+                    POST /bedrock/model/{'{'}
+                    {'{'}model_id{'}'}/invoke
+                  </code>{' '}
+                  - Standard invocation
+                </li>
+                <li>
+                  <code>
+                    POST /bedrock/model/{'{'}
+                    {'{'}model_id{'}'}/invoke-with-response-stream
+                  </code>{' '}
+                  - Streaming responses
+                </li>
+              </ul>
+              <p style={{ fontSize: '0.9rem', color: '#666', margin: '0.5rem 0 0 1rem' }}>
+                Uses AWS model IDs like <code>anthropic.claude-sonnet-4-20250514-v1:0</code> in the
+                URL path
+              </p>
+            </div>
 
-        <div style={{ marginBottom: '1rem' }}>
-          <strong>Anthropic Format (Standard API):</strong>
-          <ul>
-            <li>
-              <code>POST /anthropic/v1/messages</code> - Standard Anthropic API (supports streaming)
-            </li>
-          </ul>
-          <p style={{ fontSize: '0.9rem', color: '#666', margin: '0.5rem 0 0 1rem' }}>
-            Uses standard model names like <code>claude-sonnet-4-20250514</code> in the request body
-          </p>
-        </div>
+            <div style={{ marginBottom: '1rem' }}>
+              <strong>Anthropic Format (Standard API):</strong>
+              <ul>
+                <li>
+                  <code>POST /anthropic/v1/messages</code> - Standard Anthropic API (supports
+                  streaming)
+                </li>
+              </ul>
+              <p style={{ fontSize: '0.9rem', color: '#666', margin: '0.5rem 0 0 1rem' }}>
+                Uses standard model names like <code>claude-sonnet-4-20250514</code> in the request
+                body
+              </p>
+            </div>
 
-        <h4>Claude Code Integration (LLM Gateway)</h4>
-        <p>Configure Claude Code to use this proxy as an LLM gateway:</p>
+            <h4>Claude Code Integration (LLM Gateway)</h4>
+            <p>Configure Claude Code to use this proxy as an LLM gateway:</p>
 
-        <h5>Method 1: Standard Anthropic API</h5>
-        <pre>{`export ANTHROPIC_AUTH_TOKEN="${token?.substring(0, 20)}..."
+            <h5>Method 1: Standard Anthropic API</h5>
+            <pre>{`export ANTHROPIC_AUTH_TOKEN="${token?.substring(0, 20)}..."
 export ANTHROPIC_BASE_URL="${currentDomain}/anthropic"`}</pre>
 
-        <h5>Method 2: Bedrock Gateway Mode</h5>
-        <pre>{`export ANTHROPIC_BEDROCK_BASE_URL="${currentDomain}"
+            <h5>Method 2: Bedrock Gateway Mode</h5>
+            <pre>{`export ANTHROPIC_BEDROCK_BASE_URL="${currentDomain}"
 export ANTHROPIC_AUTH_TOKEN="${token?.substring(0, 20)}..."
 export CLAUDE_CODE_SKIP_BEDROCK_AUTH=1
 export CLAUDE_CODE_USE_BEDROCK=1`}</pre>
 
-        <div
-          style={{
-            background: '#d1ecf1',
-            padding: '1rem',
-            borderRadius: '8px',
-            marginTop: '1rem',
-            border: '1px solid #bee5eb',
-          }}
-        >
-          <strong>💡 Tip:</strong> For official AWS Bedrock support, use{' '}
-          <code>export CLAUDE_CODE_USE_BEDROCK=1</code>
-          and configure AWS credentials instead. This requires proper AWS IAM permissions and
-          enabled Claude models.
-        </div>
-      </div>
+            <div
+              style={{
+                background: '#d1ecf1',
+                padding: '1rem',
+                borderRadius: '8px',
+                marginTop: '1rem',
+                border: '1px solid #bee5eb',
+              }}
+            >
+              <strong>💡 Tip:</strong> For official AWS Bedrock support, use{' '}
+              <code>export CLAUDE_CODE_USE_BEDROCK=1</code>
+              and configure AWS credentials instead. This requires proper AWS IAM permissions and
+              enabled Claude models.
+            </div>
+          </div>
 
-      {/* Testing Section */}
-      <div className="card">
-        <h3>
-          <Shield size={20} style={{ marginRight: '0.5rem', verticalAlign: 'text-bottom' }} />
-          🧪 Test Your Setup
-        </h3>
-        <p>
-          Verify your authentication is working with test requests. Choose your preferred API
-          format:
-        </p>
+          {/* Testing Section */}
+          <div className="card">
+            <h3>
+              <Shield size={20} style={{ marginRight: '0.5rem', verticalAlign: 'text-bottom' }} />
+              🧪 Test Your Setup
+            </h3>
+            <p>
+              Verify your authentication is working with test requests. Choose your preferred API
+              format:
+            </p>
 
-        <div style={{ display: 'grid', gap: '1.5rem', marginTop: '1rem' }}>
-          {/* Bedrock Format Example */}
-          <div>
-            <h4>Bedrock Format (AWS Native):</h4>
-            <pre>{`curl -X POST "${currentDomain}/bedrock/model/anthropic.claude-sonnet-4-20250514-v1:0/invoke" \\
+            <div style={{ display: 'grid', gap: '1.5rem', marginTop: '1rem' }}>
+              {/* Bedrock Format Example */}
+              <div>
+                <h4>Bedrock Format (AWS Native):</h4>
+                <pre>{`curl -X POST "${currentDomain}/bedrock/model/anthropic.claude-sonnet-4-20250514-v1:0/invoke" \\
   -H "Authorization: Bearer ${token?.substring(0, 30)}..." \\
   -H "Content-Type: application/json" \\
   -d '{
@@ -481,12 +611,12 @@ export CLAUDE_CODE_USE_BEDROCK=1`}</pre>
     "max_tokens": 1000,
     "messages": [{"role": "user", "content": "Hello!"}]
   }'`}</pre>
-          </div>
+              </div>
 
-          {/* Anthropic Format Example */}
-          <div>
-            <h4>Anthropic Format (Standard API):</h4>
-            <pre>{`curl -X POST "${currentDomain}/anthropic/v1/messages" \\
+              {/* Anthropic Format Example */}
+              <div>
+                <h4>Anthropic Format (Standard API):</h4>
+                <pre>{`curl -X POST "${currentDomain}/anthropic/v1/messages" \\
   -H "Authorization: Bearer ${token?.substring(0, 30)}..." \\
   -H "Content-Type: application/json" \\
   -d '{
@@ -494,12 +624,12 @@ export CLAUDE_CODE_USE_BEDROCK=1`}</pre>
     "max_tokens": 1000,
     "messages": [{"role": "user", "content": "Hello!"}]
   }'`}</pre>
-          </div>
+              </div>
 
-          {/* Anthropic Streaming Example */}
-          <div>
-            <h4>Anthropic Format (Streaming):</h4>
-            <pre>{`curl -X POST "${currentDomain}/anthropic/v1/messages" \\
+              {/* Anthropic Streaming Example */}
+              <div>
+                <h4>Anthropic Format (Streaming):</h4>
+                <pre>{`curl -X POST "${currentDomain}/anthropic/v1/messages" \\
   -H "Authorization: Bearer ${token?.substring(0, 30)}..." \\
   -H "Content-Type: application/json" \\
   -d '{
@@ -508,108 +638,129 @@ export CLAUDE_CODE_USE_BEDROCK=1`}</pre>
     "messages": [{"role": "user", "content": "Hello!"}],
     "stream": true
   }'`}</pre>
-          </div>
-        </div>
-
-        <h4 style={{ marginTop: '1.5rem' }}>Using Claude Code:</h4>
-        <p>
-          With ANTHROPIC_BEDROCK_BASE_URL configured, Claude Code will automatically use the
-          Anthropic format:
-        </p>
-        <pre>claude-code &quot;Hello, can you help me test this setup?&quot;</pre>
-
-        <div style={{ marginTop: '1rem', display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
-          <button
-            onClick={() =>
-              copyToClipboard(
-                `curl -X POST "${currentDomain}/bedrock/model/anthropic.claude-sonnet-4-20250514-v1:0/invoke" -H "Authorization: Bearer ${token}" -H "Content-Type: application/json" -d '{"anthropic_version": "bedrock-2023-05-31", "max_tokens": 1000, "messages": [{"role": "user", "content": "Hello!"}]}'`,
-                'curl-bedrock'
-              )
-            }
-            className="btn btn-secondary"
-          >
-            <Copy size={16} />
-            {copied === 'curl-bedrock' ? 'Copied!' : 'Copy Bedrock Command'}
-          </button>
-
-          <button
-            onClick={() =>
-              copyToClipboard(
-                `curl -X POST "${currentDomain}/anthropic/v1/messages" -H "Authorization: Bearer ${token}" -H "Content-Type: application/json" -d '{"model": "claude-sonnet-4-20250514", "max_tokens": 1000, "messages": [{"role": "user", "content": "Hello!"}]}'`,
-                'curl-anthropic'
-              )
-            }
-            className="btn btn-secondary"
-          >
-            <Copy size={16} />
-            {copied === 'curl-anthropic' ? 'Copied!' : 'Copy Anthropic Command'}
-          </button>
-
-          <a href="/health" target="_blank" rel="noopener noreferrer" className="btn btn-primary">
-            <ExternalLink size={16} />
-            Test Health Endpoint
-          </a>
-        </div>
-      </div>
-
-      {/* Documentation Section */}
-      <div className="card">
-        <h3>
-          <FileText size={20} style={{ marginRight: '0.5rem', verticalAlign: 'text-bottom' }} />
-          📚 Documentation & Support
-        </h3>
-        <p>Need more help? Check out these resources:</p>
-
-        <div style={{ display: 'grid', gap: '1rem', marginTop: '1rem' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-            <div style={{ flex: 1 }}>
-              <strong>API Documentation</strong>
-              <p style={{ margin: '0.25rem 0', color: '#666' }}>
-                Complete API reference for all endpoints
-              </p>
+              </div>
             </div>
-            <a href="#" className="btn btn-secondary">
-              View Docs
-            </a>
+
+            <h4 style={{ marginTop: '1.5rem' }}>Using Claude Code:</h4>
+            <p>
+              With ANTHROPIC_BEDROCK_BASE_URL configured, Claude Code will automatically use the
+              Anthropic format:
+            </p>
+            <pre>claude-code &quot;Hello, can you help me test this setup?&quot;</pre>
+
+            <div style={{ marginTop: '1rem', display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
+              <button
+                onClick={() =>
+                  copyToClipboard(
+                    `curl -X POST "${currentDomain}/bedrock/model/anthropic.claude-sonnet-4-20250514-v1:0/invoke" -H "Authorization: Bearer ${token}" -H "Content-Type: application/json" -d '{"anthropic_version": "bedrock-2023-05-31", "max_tokens": 1000, "messages": [{"role": "user", "content": "Hello!"}]}'`,
+                    'curl-bedrock'
+                  )
+                }
+                className="btn btn-secondary"
+              >
+                <Copy size={16} />
+                {copied === 'curl-bedrock' ? 'Copied!' : 'Copy Bedrock Command'}
+              </button>
+
+              <button
+                onClick={() =>
+                  copyToClipboard(
+                    `curl -X POST "${currentDomain}/anthropic/v1/messages" -H "Authorization: Bearer ${token}" -H "Content-Type: application/json" -d '{"model": "claude-sonnet-4-20250514", "max_tokens": 1000, "messages": [{"role": "user", "content": "Hello!"}]}'`,
+                    'curl-anthropic'
+                  )
+                }
+                className="btn btn-secondary"
+              >
+                <Copy size={16} />
+                {copied === 'curl-anthropic' ? 'Copied!' : 'Copy Anthropic Command'}
+              </button>
+
+              <a
+                href="/health"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="btn btn-primary"
+              >
+                <ExternalLink size={16} />
+                Test Health Endpoint
+              </a>
+            </div>
           </div>
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-            <div style={{ flex: 1 }}>
-              <strong>Claude Code Guide</strong>
-              <p style={{ margin: '0.25rem 0', color: '#666' }}>
-                Learn how to use Claude Code effectively
-              </p>
-            </div>
-            <a
-              href="https://docs.anthropic.com/en/docs/claude-code"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="btn btn-secondary"
-            >
-              <ExternalLink size={16} />
-              Visit Guide
-            </a>
-          </div>
+          {/* Documentation Section */}
+          <div className="card">
+            <h3>
+              <FileText size={20} style={{ marginRight: '0.5rem', verticalAlign: 'text-bottom' }} />
+              📚 Documentation & Support
+            </h3>
+            <p>Need more help? Check out these resources:</p>
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-            <div style={{ flex: 1 }}>
-              <strong>Server Health</strong>
-              <p style={{ margin: '0.25rem 0', color: '#666' }}>
-                Check server status and configuration
-              </p>
+            <div style={{ display: 'grid', gap: '1rem', marginTop: '1rem' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                <div style={{ flex: 1 }}>
+                  <strong>API Documentation</strong>
+                  <p style={{ margin: '0.25rem 0', color: '#666' }}>
+                    Complete API reference for all endpoints
+                  </p>
+                </div>
+                <a href="#" className="btn btn-secondary">
+                  View Docs
+                </a>
+              </div>
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                <div style={{ flex: 1 }}>
+                  <strong>Claude Code Guide</strong>
+                  <p style={{ margin: '0.25rem 0', color: '#666' }}>
+                    Learn how to use Claude Code effectively
+                  </p>
+                </div>
+                <a
+                  href="https://docs.anthropic.com/en/docs/claude-code"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="btn btn-secondary"
+                >
+                  <ExternalLink size={16} />
+                  Visit Guide
+                </a>
+              </div>
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                <div style={{ flex: 1 }}>
+                  <strong>Server Health</strong>
+                  <p style={{ margin: '0.25rem 0', color: '#666' }}>
+                    Check server status and configuration
+                  </p>
+                </div>
+                <a
+                  href="/health"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="btn btn-secondary"
+                >
+                  <ExternalLink size={16} />
+                  Health Check
+                </a>
+              </div>
             </div>
-            <a
-              href="/health"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="btn btn-secondary"
-            >
-              <ExternalLink size={16} />
-              Health Check
-            </a>
           </div>
+        </>
+      )}
+
+      {/* API Keys Tab */}
+      {activeTab === 'api-keys' && (
+        <div>
+          <ApiKeyManagement />
         </div>
-      </div>
+      )}
+
+      {/* Usage Tracking Tab */}
+      {activeTab === 'usage' && (
+        <div>
+          <UsageTracking />
+        </div>
+      )}
     </div>
   );
 }
