@@ -4,14 +4,18 @@ export interface UsageRecord {
   id: number;
   user_id: number;
   model_id: string;
+  endpoint_type: string;
+  region: string;
+  request_time: string;
   input_tokens: number;
   output_tokens: number;
+  cache_write_tokens: number | null;
+  cache_read_tokens: number | null;
   total_tokens: number;
-  request_timestamp: string;
-  response_timestamp?: string;
+  response_time_ms: number;
   success: boolean;
-  error_message?: string;
-  cost_cents?: number;
+  error_message?: string | null;
+  cost_usd?: string | null;
 }
 
 export interface UsageStats {

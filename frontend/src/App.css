@@ -333,10 +333,8 @@ body {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 1rem;
   background: #f7fafc;
   border-radius: 8px;
-  margin-bottom: 1.5rem;
 }
 
 .user-details h3 {

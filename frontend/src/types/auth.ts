@@ -60,6 +60,8 @@ export interface CreateApiKeyResponse {
 export interface ApiKeyInfo {
   id: number;
   name: string;
+  key_hash: string;
+  hint: string;
   created_at: string;
   expires_at?: string;
   revoked_at?: string;

@@ -199,7 +199,7 @@ export function UsageTracking() {
             <Activity size={24} />
             Usage Tracking
           </h2>
-          <p style={{ margin: '0.5rem 0 0 0', color: '#6c757d' }}>
+          <p style={{ margin: '0.5rem 0 0 0', color: '#374151', fontWeight: '500' }}>
             Monitor your API usage, token consumption, and costs
           </p>
         </div>

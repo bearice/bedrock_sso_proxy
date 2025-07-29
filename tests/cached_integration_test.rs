@@ -299,6 +299,7 @@ async fn test_type_safety_with_different_entities() {
         key_hash: "hash123".to_string(),
         user_id: 1,
         name: "Test Key".to_string(),
+        hint: "".to_string(),
         created_at: Utc::now(),
         last_used: None,
         expires_at: None,

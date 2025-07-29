@@ -1,6 +1,6 @@
 // Re-export API key structures and functions from database entities
 pub use crate::database::entities::api_keys::{
-    ApiKeyInfo, Model as ApiKey, hash_api_key, validate_api_key_format,
+    Model as ApiKey, hash_api_key, validate_api_key_format,
 };
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
@@ -86,12 +86,4 @@ mod tests {
         assert!(future_key.is_valid());
     }
 
-    #[test]
-    fn test_api_key_info_conversion() {
-        let (api_key, _) = ApiKey::new(1, "test".to_string(), None);
-        let info: ApiKeyInfo = api_key.into();
-
-        assert_eq!(info.name, "test");
-        assert!(info.revoked_at.is_none());
-    }
 }

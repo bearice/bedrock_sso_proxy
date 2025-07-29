@@ -67,24 +67,12 @@ export function UsageRecords({
     });
   };
 
-  const formatDuration = (startTime: string, endTime?: string) => {
-    if (!endTime) return 'N/A';
-    const start = new Date(startTime).getTime();
-    const end = new Date(endTime).getTime();
-    const duration = end - start;
 
-    if (duration < 1000) {
-      return `${duration}ms`;
-    } else if (duration < 60000) {
-      return `${(duration / 1000).toFixed(1)}s`;
-    } else {
-      return `${(duration / 60000).toFixed(1)}m`;
-    }
-  };
-
-  const formatCurrency = (cents?: number) => {
-    if (cents === undefined || cents === null) return 'N/A';
-    return `$${(cents / 100).toFixed(4)}`;
+  const formatCurrency = (costUsd?: string | null) => {
+    if (costUsd === undefined || costUsd === null) return 'N/A';
+    const cost = parseFloat(costUsd);
+    if (isNaN(cost)) return 'N/A';
+    return `$${cost.toFixed(4)}`;
   };
 
   const getStatusIcon = (success: boolean) => {
@@ -294,7 +282,7 @@ export function UsageRecords({
                   >
                     <DollarSign size={14} style={{ color: '#16a34a' }} />
                     <span style={{ fontSize: '0.875rem', fontWeight: 500 }}>
-                      {formatCurrency(record.cost_cents)}
+                      {formatCurrency(record.cost_usd)}
                     </span>
                   </div>
                 </div>
@@ -311,14 +299,14 @@ export function UsageRecords({
                   >
                     <Clock size={14} style={{ color: '#7c3aed' }} />
                     <span style={{ fontSize: '0.875rem' }}>
-                      {formatDuration(record.request_timestamp, record.response_timestamp)}
+                      {record.response_time_ms ? `${record.response_time_ms}ms` : 'N/A'}
                     </span>
                   </div>
                 </div>
 
                 {/* Timestamp */}
                 <div style={{ textAlign: 'right', fontSize: '0.75rem', color: '#6c757d' }}>
-                  {formatDate(record.request_timestamp)}
+                  {formatDate(record.request_time)}
                 </div>
 
                 {/* Toggle Button */}
@@ -372,16 +360,14 @@ export function UsageRecords({
                     </div>
                     <div>
                       <strong style={{ color: '#374151' }}>Request Time:</strong>
-                      <div style={{ color: '#6c757d' }}>{formatDate(record.request_timestamp)}</div>
+                      <div style={{ color: '#6c757d' }}>{formatDate(record.request_time)}</div>
                     </div>
-                    {record.response_timestamp && (
-                      <div>
-                        <strong style={{ color: '#374151' }}>Response Time:</strong>
-                        <div style={{ color: '#6c757d' }}>
-                          {formatDate(record.response_timestamp)}
-                        </div>
+                    <div>
+                      <strong style={{ color: '#374151' }}>Response Time:</strong>
+                      <div style={{ color: '#6c757d' }}>
+                        {record.response_time_ms ? `${record.response_time_ms}ms` : 'N/A'}
                       </div>
-                    )}
+                    </div>
                   </div>
 
                   {/* Error Message */}

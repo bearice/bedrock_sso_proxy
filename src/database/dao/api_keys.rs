@@ -24,6 +24,7 @@ impl ApiKeysDao {
             key_hash: Set(api_key.key_hash.clone()),
             user_id: Set(api_key.user_id),
             name: Set(api_key.name.clone()),
+            hint: Set(api_key.hint.clone()),
             created_at: Set(api_key.created_at),
             last_used: Set(api_key.last_used),
             expires_at: Set(api_key.expires_at),

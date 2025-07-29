@@ -108,6 +108,39 @@ export const authApi = {
   async healthCheck(): Promise<{ status: string }> {
     return fetchApi<{ status: string }>('/health');
   },
+
+  // Get current user info (requires JWT authentication)
+  async getCurrentUser(token: string): Promise<any> {
+    return fetchApi<any>('/auth/me', createAuthenticatedRequest(token));
+  },
+
+  // Validate token and handle 401 responses with redirect
+  async validateToken(token: string): Promise<any | null> {
+    try {
+      const response = await fetch('/auth/me', {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      if (response.status === 401) {
+        // Token is invalid, redirect to login
+        window.location.href = '/login';
+        return null;
+      }
+
+      if (response.ok) {
+        return await response.json();
+      }
+
+      // Other errors (500, etc.) - don't redirect, just return null
+      console.error('Token validation failed:', response.status, response.statusText);
+      return null;
+    } catch (error) {
+      console.error('Token validation error:', error);
+      return null;
+    }
+  },
 };
 
 export const apiKeyApi = {
@@ -128,9 +161,9 @@ export const apiKeyApi = {
   },
 
   // Revoke an API key
-  async revokeApiKey(token: string, keyId: string): Promise<{ message: string; key: string }> {
-    return fetchApi<{ message: string; key: string }>(
-      `/api/keys/${keyId}`,
+  async revokeApiKey(token: string, keyHash: string): Promise<{ message: string; key_hash: string }> {
+    return fetchApi<{ message: string; key_hash: string }>(
+      `/api/keys/${keyHash}`,
       createAuthenticatedRequest(token, {
         method: 'DELETE',
       })

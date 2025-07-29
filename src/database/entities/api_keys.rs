@@ -21,6 +21,7 @@ pub struct Model {
     pub key_hash: String,
     pub user_id: i32,
     pub name: String,
+    pub hint: String,
     pub created_at: DateTime<Utc>,
     pub last_used: Option<DateTime<Utc>>,
     pub expires_at: Option<DateTime<Utc>>,
@@ -32,57 +33,18 @@ pub enum Relation {}
 
 impl ActiveModelBehavior for ActiveModel {}
 
-/// API key info without the actual key or hash
-#[derive(Debug, Serialize, Deserialize)]
-pub struct ApiKeyInfo {
-    pub id: i32,
-    pub name: String,
-    pub hint: String,
-    pub created_at: DateTime<Utc>,
-    pub last_used: Option<DateTime<Utc>>,
-    pub expires_at: Option<DateTime<Utc>>,
-    pub revoked_at: Option<DateTime<Utc>>,
-}
-
-impl ApiKeyInfo {
-    /// Create ApiKeyInfo from Model with original API key for hint generation
-    pub fn from_model_with_hint(key: Model, original_key: &str) -> Self {
-        Self {
-            id: key.id,
-            name: key.name,
-            hint: create_key_hint(original_key),
-            created_at: key.created_at,
-            last_used: key.last_used,
-            expires_at: key.expires_at,
-            revoked_at: key.revoked_at,
-        }
-    }
-}
-
-impl From<Model> for ApiKeyInfo {
-    fn from(key: Model) -> Self {
-        Self {
-            id: key.id,
-            name: key.name,
-            hint: "****".to_string(), // Fallback when original key not available
-            created_at: key.created_at,
-            last_used: key.last_used,
-            expires_at: key.expires_at,
-            revoked_at: key.revoked_at,
-        }
-    }
-}
-
 impl Model {
     /// Create a new API key
     pub fn new(user_id: i32, name: String, expires_at: Option<DateTime<Utc>>) -> (Self, String) {
         let raw_key = generate_api_key(API_KEY_PREFIX, API_KEY_LENGTH);
         let key_hash = hash_api_key(&raw_key);
+        let hint = create_key_hint(&raw_key);
         let api_key = Self {
             id: 0, // Will be set by database
             key_hash,
             user_id,
             name,
+            hint,
             created_at: Utc::now(),
             last_used: None,
             expires_at,
@@ -207,23 +169,4 @@ mod tests {
         assert_eq!(hint, "SSOK_****");
     }
 
-    #[test]
-    fn test_api_key_info_with_hint() {
-        let key = Model {
-            id: 1,
-            key_hash: "hash123".to_string(),
-            user_id: 1,
-            name: "Test Key".to_string(),
-            created_at: Utc::now(),
-            last_used: None,
-            expires_at: None,
-            revoked_at: None,
-        };
-
-        let original_key = "SSOK_abcd1234efgh5678ijkl9012mnop3456";
-        let info = ApiKeyInfo::from_model_with_hint(key, original_key);
-
-        assert_eq!(info.hint, "SSOK_abcd****3456");
-        assert_eq!(info.name, "Test Key");
-    }
 }

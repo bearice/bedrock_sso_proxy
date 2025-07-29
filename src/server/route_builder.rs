@@ -107,6 +107,7 @@ pub mod middleware_factories {
         let is_api_route = path.starts_with("/bedrock")
             || path.starts_with("/anthropic")
             || path.starts_with("/auth")
+            || path.starts_with("/api")
             || path.starts_with("/health");
 
         if is_api_route {

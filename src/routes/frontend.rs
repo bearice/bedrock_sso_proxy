@@ -8,7 +8,7 @@ use axum::{
 use rust_embed::RustEmbed;
 use std::path::PathBuf;
 use tokio::fs;
-use tracing::{debug, trace, warn};
+use tracing::{trace, warn};
 
 // Production assets
 #[cfg(not(test))]
@@ -43,7 +43,6 @@ async fn serve_static_file(
     Path(path): Path<String>,
     config: crate::server::config::FrontendConfig,
 ) -> impl IntoResponse {
-    debug!("Serving static file: {}", path);
 
     // Security: prevent path traversal attacks
     if path.contains("..") || path.contains("\\") || path.starts_with('/') {
@@ -53,11 +52,9 @@ async fn serve_static_file(
 
     if let Some(frontend_path) = config.path {
         // Serve from filesystem directory
-        trace!("Serving from filesystem: {}", frontend_path);
         serve_from_filesystem(&path, &frontend_path).await
     } else {
         // Serve from embedded assets
-        trace!("Serving from embedded assets");
         serve_from_embedded(&path).await
     }
 }

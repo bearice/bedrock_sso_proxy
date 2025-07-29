@@ -27,6 +27,7 @@ impl MigrationTrait for Migration {
                     )
                     .col(ColumnDef::new(ApiKeys::UserId).integer().not_null())
                     .col(ColumnDef::new(ApiKeys::Name).string().not_null())
+                    .col(ColumnDef::new(ApiKeys::Hint).string().not_null())
                     .col(
                         ColumnDef::new(ApiKeys::CreatedAt)
                             .timestamp_with_time_zone()

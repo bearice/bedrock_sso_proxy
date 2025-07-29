@@ -132,6 +132,7 @@ pub enum ApiKeys {
     KeyHash,
     UserId,
     Name,
+    Hint,
     CreatedAt,
     LastUsed,
     ExpiresAt,

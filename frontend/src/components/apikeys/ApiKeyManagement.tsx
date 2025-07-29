@@ -50,9 +50,13 @@ export function ApiKeyManagement() {
         const response: CreateApiKeyResponse = await apiKeyApi.createApiKey(token, request);
 
         // Add the new key to the list (without the actual key value)
+        // We need to create a placeholder hint since we don't have the hash from creation response
+        const keyHint = `SSOK_${response.key.slice(5, 9)}****${response.key.slice(-4)}`;
         const newKeyInfo: ApiKeyInfo = {
           id: response.id,
           name: response.name,
+          key_hash: '', // Not provided in creation response
+          hint: keyHint,
           created_at: response.created_at,
           expires_at: response.expires_at,
         };
@@ -82,10 +86,14 @@ export function ApiKeyManagement() {
       try {
         setError(null);
 
-        // Find the key to get its name for the success message
+        // Find the key to get its name and hash for the API call
         const keyToRevoke = apiKeys.find((key) => key.id === keyId);
+        if (!keyToRevoke) {
+          setError('API key not found');
+          return;
+        }
 
-        await apiKeyApi.revokeApiKey(token, keyId.toString());
+        await apiKeyApi.revokeApiKey(token, keyToRevoke.key_hash);
 
         // Update the key in the list to show it as revoked
         setApiKeys((prev) =>
@@ -99,7 +107,7 @@ export function ApiKeyManagement() {
           setNewlyCreatedKey(null);
         }
 
-        setSuccess(`API key "${keyToRevoke?.name || 'Unknown'}" revoked successfully!`);
+        setSuccess(`API key "${keyToRevoke.name}" revoked successfully!`);
 
         // Clear success message after 3 seconds
         setTimeout(() => setSuccess(null), 3000);
@@ -141,7 +149,7 @@ export function ApiKeyManagement() {
             <Key size={24} />
             API Key Management
           </h2>
-          <p style={{ margin: '0.5rem 0 0 0', color: '#6c757d' }}>
+          <p style={{ margin: '0.5rem 0 0 0', color: '#374151', fontWeight: '500' }}>
             Create and manage API keys for programmatic access to the Bedrock proxy
           </p>
         </div>

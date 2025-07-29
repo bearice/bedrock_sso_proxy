@@ -1,7 +1,6 @@
 use crate::{
     auth::{
-        api_key::{ApiKey, ApiKeyInfo, CreateApiKeyRequest, CreateApiKeyResponse},
-        hash_api_key,
+        api_key::{ApiKey, CreateApiKeyRequest, CreateApiKeyResponse},
         middleware::UserExtractor,
     },
     error::AppError,
@@ -89,7 +88,7 @@ pub async fn create_api_key(
 pub async fn list_api_keys(
     State(server): State<Server>,
     UserExtractor(user): UserExtractor,
-) -> Result<Json<Vec<ApiKeyInfo>>, AppError> {
+) -> Result<Json<Vec<ApiKey>>, AppError> {
     let api_keys = server
         .database
         .api_keys()
@@ -97,7 +96,7 @@ pub async fn list_api_keys(
         .await
         .map_err(|e| AppError::Internal(format!("Failed to get API keys: {}", e)))?;
 
-    let api_key_infos: Vec<ApiKeyInfo> = api_keys.into_iter().map(|key| key.into()).collect();
+    let api_key_infos: Vec<ApiKey> = api_keys.into_iter().collect();
 
     Ok(Json(api_key_infos))
 }
@@ -106,9 +105,8 @@ pub async fn list_api_keys(
 pub async fn revoke_api_key(
     State(server): State<Server>,
     UserExtractor(user): UserExtractor,
-    Path(key_str): Path<String>,
+    Path(key_hash): Path<String>,
 ) -> Result<Json<serde_json::Value>, AppError> {
-    let key_hash = hash_api_key(&key_str);
     let key = server
         .database
         .api_keys()
@@ -130,7 +128,7 @@ pub async fn revoke_api_key(
 
     Ok(Json(serde_json::json!({
         "message": "API key revoked successfully",
-        "key": key_str
+        "key_hash": key_hash
     })))
 }
 
@@ -238,7 +236,7 @@ mod tests {
         let body = axum::body::to_bytes(response.into_body(), usize::MAX)
             .await
             .unwrap();
-        let api_keys: Vec<ApiKeyInfo> = serde_json::from_slice(&body).unwrap();
+        let api_keys: Vec<ApiKey> = serde_json::from_slice(&body).unwrap();
 
         assert_eq!(api_keys.len(), 1);
         assert_eq!(api_keys[0].name, "Test Key");

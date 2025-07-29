@@ -143,24 +143,22 @@ export function ApiKeyCard({ apiKey, onRevoke, newlyCreatedKey }: ApiKeyCardProp
         </div>
       </div>
 
-      {/* Key Display (only for newly created keys) */}
-      {newlyCreatedKey && (
-        <div
-          style={{
-            background: '#1f2937',
-            color: '#f9fafb',
-            padding: '0.75rem',
-            borderRadius: '6px',
-            marginBottom: '0.75rem',
-            fontFamily: 'monospace',
-            fontSize: '0.875rem',
-            wordBreak: 'break-all',
-            border: '1px solid #374151',
-          }}
-        >
-          {newlyCreatedKey}
-        </div>
-      )}
+      {/* Key Display */}
+      <div
+        style={{
+          background: '#1f2937',
+          color: '#f9fafb',
+          padding: '0.75rem',
+          borderRadius: '6px',
+          marginBottom: '0.75rem',
+          fontFamily: 'monospace',
+          fontSize: '0.875rem',
+          wordBreak: 'break-all',
+          border: '1px solid #374151',
+        }}
+      >
+        {newlyCreatedKey || apiKey.hint}
+      </div>
 
       {/* Metadata */}
       <div
