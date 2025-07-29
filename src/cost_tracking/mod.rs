@@ -26,6 +26,43 @@ impl CostTrackingService {
     pub fn new(database: Arc<dyn DatabaseManager>) -> Self {
         Self { database }
     }
+
+    /// Initialize model costs at application startup
+    /// This should be called at startup to populate initial cost data
+    pub async fn initialize_model_costs(&self) -> Result<(), AppError> {
+        tracing::info!("Initializing model costs from fallback data");
+
+        // Check if we already have cost data
+        let existing_costs = self.database.model_costs().get_all().await.map_err(|e| {
+            AppError::Internal(format!("Failed to check existing model costs: {}", e))
+        })?;
+
+        if existing_costs.is_empty() {
+            tracing::info!("No existing model costs found, populating with embedded fallback data");
+
+            // Initialize with embedded data only (not AWS API during startup)
+            match self.initialize_model_costs_from_embedded().await {
+                Ok(result) => {
+                    tracing::info!(
+                        "Successfully initialized {} model costs from embedded data",
+                        result.total_processed
+                    );
+                }
+                Err(e) => {
+                    tracing::warn!("Failed to initialize costs from embedded data: {}", e);
+                    tracing::info!("Model costs will be populated on first usage or manual update");
+                }
+            }
+        } else {
+            tracing::info!(
+                "Found {} existing model costs, skipping initialization",
+                existing_costs.len()
+            );
+        }
+
+        Ok(())
+    }
+
     /// Initialize model costs from embedded CSV data (only if database is empty)
     pub async fn initialize_model_costs_from_embedded(
         &self,

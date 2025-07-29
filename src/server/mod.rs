@@ -194,9 +194,10 @@ impl Server {
         );
 
         // Initialize model costs in the background (now that migrations are complete)
-        let model_service_clone = model_service_with_streaming.clone();
+        let database_clone = self.database.clone();
         let background_task = tokio::spawn(async move {
-            if let Err(e) = model_service_clone.initialize_model_costs().await {
+            let cost_service = crate::cost_tracking::CostTrackingService::new(database_clone);
+            if let Err(e) = cost_service.initialize_model_costs().await {
                 tracing::warn!("Failed to initialize model costs: {}", e);
             }
         });
