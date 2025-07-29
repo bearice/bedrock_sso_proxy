@@ -1,7 +1,5 @@
 use crate::{
-    cost_tracking::{CostTrackingService, UpdateCostsResult},
-    database::entities::StoredModelCost,
-    error::AppError,
+    cost_tracking::UpdateCostsResult, database::entities::StoredModelCost, error::AppError,
 };
 use axum::{
     Router,
@@ -21,7 +19,10 @@ pub fn create_admin_cost_routes() -> Router<crate::server::Server> {
         .route("/admin/costs", get(get_all_model_costs))
         .route("/admin/costs", post(update_all_model_costs))
         .route("/admin/costs/{region}/{model_id}", put(upsert_model_cost))
-        .route("/admin/costs/{region}/{model_id}", delete(delete_model_cost))
+        .route(
+            "/admin/costs/{region}/{model_id}",
+            delete(delete_model_cost),
+        )
         .route("/admin/costs/{region}/{model_id}", get(get_model_cost))
 }
 
@@ -57,7 +58,12 @@ async fn get_model_cost(
         .model_costs()
         .find_by_region_and_model(&region, &model_id)
         .await?
-        .ok_or_else(|| AppError::NotFound(format!("Model cost not found: {} in region {}", model_id, region)))?;
+        .ok_or_else(|| {
+            AppError::NotFound(format!(
+                "Model cost not found: {} in region {}",
+                model_id, region
+            ))
+        })?;
 
     Ok(Json(cost))
 }
@@ -78,9 +84,11 @@ async fn upsert_model_cost(
             .unwrap_or_default(),
         output_cost_per_1k_tokens: Decimal::from_f64_retain(request.output_cost_per_1k_tokens)
             .unwrap_or_default(),
-        cache_write_cost_per_1k_tokens: request.cache_write_cost_per_1k_tokens
+        cache_write_cost_per_1k_tokens: request
+            .cache_write_cost_per_1k_tokens
             .map(|c| Decimal::from_f64_retain(c).unwrap_or_default()),
-        cache_read_cost_per_1k_tokens: request.cache_read_cost_per_1k_tokens
+        cache_read_cost_per_1k_tokens: request
+            .cache_read_cost_per_1k_tokens
             .map(|c| Decimal::from_f64_retain(c).unwrap_or_default()),
         updated_at: Utc::now(),
     };
@@ -96,7 +104,11 @@ async fn delete_model_cost(
 ) -> Result<StatusCode, AppError> {
     // Admin permissions already checked by middleware
 
-    server.database.model_costs().delete_by_region_and_model(&region, &model_id).await?;
+    server
+        .database
+        .model_costs()
+        .delete_by_region_and_model(&region, &model_id)
+        .await?;
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -115,12 +127,11 @@ async fn update_all_model_costs(
         ));
     }
 
-    // Create cost tracking service with us-east-1 region for pricing data
-    let cost_service = CostTrackingService::new(server.database.clone());
-
     // Process the provided CSV content
-    let result = cost_service.batch_update_from_csv_content(&body).await?;
+    let result = server
+        .cost_service
+        .batch_update_from_csv_content(&body)
+        .await?;
 
     Ok(Json(result))
 }
-

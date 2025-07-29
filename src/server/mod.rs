@@ -19,9 +19,7 @@ use crate::{
         create_frontend_router, create_health_routes, create_protected_auth_routes,
     },
     shutdown::{
-        BackgroundTaskShutdown, CacheShutdown, DatabaseShutdown, HttpServerShutdown,
-        ShutdownCoordinator, ShutdownManager, StreamingConnectionManager, StreamingShutdown,
-        TokenTrackingShutdown,
+        ShutdownCoordinator, ShutdownManager, StreamingConnectionManager,
     },
     usage_tracking::{create_admin_usage_routes, create_user_usage_routes},
     cost_tracking::routes::create_admin_cost_routes,
@@ -50,35 +48,13 @@ pub struct Server {
     pub database: Arc<dyn DatabaseManager>,
     pub cache: Arc<dyn CacheManager>,
     pub streaming_manager: Arc<StreamingConnectionManager>,
+    pub shutdown_coordinator: Arc<ShutdownCoordinator>,
+    pub cost_service: Arc<crate::cost_tracking::CostTrackingService>,
 }
 
 impl Server {
-    /// Create a new server with dependency injection for testing
-    pub fn new_with_dependencies(
-        config: Arc<Config>,
-        jwt_service: Arc<dyn JwtService>,
-        model_service: Arc<dyn ModelService>,
-        oauth_service: Arc<OAuthService>,
-        health_service: Arc<HealthService>,
-        database: Arc<dyn DatabaseManager>,
-        cache: Arc<dyn CacheManager>,
-    ) -> Self {
-        Self {
-            config,
-            jwt_service,
-            model_service,
-            oauth_service,
-            health_service,
-            database,
-            cache,
-            streaming_manager: Arc::new(StreamingConnectionManager::new(Arc::new(
-                ShutdownCoordinator::new(),
-            ))),
-        }
-    }
 
     pub async fn new(config: Config) -> Result<Self, AppError> {
-        let config = Arc::new(config);
         // Initialize metrics if enabled
         let _metrics_handle = if config.metrics.enabled {
             match metrics::init_metrics_with_port(config.metrics.port) {
@@ -120,17 +96,23 @@ impl Server {
         );
         let database: Arc<dyn DatabaseManager> = database_impl.clone();
 
-        let bedrock = Arc::new(BedrockRuntimeImpl::new(config.aws.clone()));
-        // Initialize model service
+        let bedrock_impl = Arc::new(BedrockRuntimeImpl::new(config.aws.clone()));
+        let bedrock: Arc<dyn crate::aws::bedrock::BedrockRuntime> = bedrock_impl.clone();
+
+        // Initialize shutdown coordinator and streaming manager
+        let shutdown_coordinator = Arc::new(ShutdownCoordinator::new());
+        let streaming_manager = Arc::new(StreamingConnectionManager::new(shutdown_coordinator.clone()));
+
+        // Initialize model service with streaming manager
         let model_service: Arc<dyn ModelService> = Arc::new(ModelServiceImpl::new(
             bedrock.clone(),
             database.clone(),
-            (*config).clone(),
-        ));
+            config.clone(),
+        ).with_streaming_manager(streaming_manager.clone()));
 
         // Initialize OAuth service (needs concrete cache type)
         let oauth_service = Arc::new(OAuthService::new(
-            (*config).clone(),
+            config.clone(),
             jwt_service.clone(),
             database.clone(),
             cache_impl.clone(),
@@ -144,7 +126,7 @@ impl Server {
 
         health_service.register(cache_impl).await;
         health_service.register(database_impl).await;
-        health_service.register(bedrock.health_checker()).await;
+        health_service.register(bedrock_impl.health_checker()).await;
         health_service
             .register(jwt_service_impl.health_checker())
             .await;
@@ -152,6 +134,10 @@ impl Server {
             .register(oauth_service.health_checker())
             .await;
 
+        // Initialize cost service
+        let cost_service = Arc::new(crate::cost_tracking::CostTrackingService::new(database.clone()));
+
+        let config = Arc::new(config);
         Ok(Self {
             config,
             jwt_service,
@@ -160,9 +146,9 @@ impl Server {
             health_service,
             database,
             cache,
-            streaming_manager: Arc::new(StreamingConnectionManager::new(Arc::new(
-                ShutdownCoordinator::new(),
-            ))),
+            streaming_manager,
+            shutdown_coordinator,
+            cost_service,
         })
     }
 
@@ -172,49 +158,22 @@ impl Server {
         self.database.migrate().await.map_err(AppError::Database)?;
         info!("Database migrations completed successfully");
 
-        // Initialize shutdown coordinator
-        let shutdown_coordinator = ShutdownCoordinator::new();
+        // Initialize shutdown manager
         let mut shutdown_manager = ShutdownManager::new(Duration::from_secs(30));
 
-        // Update streaming manager with the correct shutdown coordinator
-        let streaming_manager = Arc::new(StreamingConnectionManager::new(Arc::new(
-            shutdown_coordinator.clone(),
-        )));
-
-        // Update model service with streaming manager for proper tracking
-        let model_service_with_streaming: Arc<dyn ModelService> = Arc::new(
-            ModelServiceImpl::new(
-                Arc::new(crate::aws::bedrock::BedrockRuntimeImpl::new(
-                    self.config.aws.clone(),
-                )),
-                self.database.clone(),
-                (*self.config).clone(),
-            )
-            .with_streaming_manager(streaming_manager.clone()),
-        );
-
         // Initialize model costs in the background (now that migrations are complete)
-        let database_clone = self.database.clone();
-        let background_task = tokio::spawn(async move {
-            let cost_service = crate::cost_tracking::CostTrackingService::new(database_clone);
+        let cost_service = self.cost_service.clone();
+        let cost_init = tokio::spawn(async move {
             if let Err(e) = cost_service.initialize_model_costs().await {
                 tracing::warn!("Failed to initialize model costs: {}", e);
             }
         });
 
-        // Register components for graceful shutdown (order matters: token tracking first, then streaming, then cache, then database)
-        shutdown_manager.register(TokenTrackingShutdown::new(
-            model_service_with_streaming.clone(),
-        ));
-        shutdown_manager.register(StreamingShutdown::new(streaming_manager.clone()));
-        shutdown_manager.register(CacheShutdown::new(self.cache.clone()));
-        shutdown_manager.register(DatabaseShutdown::new(self.database.clone()));
-        shutdown_manager.register(BackgroundTaskShutdown::new(
-            "Model Cost Initialization".to_string(),
-            background_task,
-        ));
+        // Register all server components for shutdown
+        shutdown_manager.register_server_components(self);
+        shutdown_manager.register_background_task(cost_init, "cost init");
 
-        let app = self.create_app_with_model_service(model_service_with_streaming.clone());
+        let app = self.create_app();
 
         let addr = SocketAddr::from(([0, 0, 0, 0], self.config.server.port));
         let listener = TcpListener::bind(addr)
@@ -223,17 +182,14 @@ impl Server {
 
         info!("Server listening on http://{}", addr);
 
-        // Register HTTP server for graceful shutdown
-        shutdown_manager.register(HttpServerShutdown::new("HTTP Server".to_string()));
-
         // Spawn shutdown signal handler
-        let shutdown_coordinator_clone = shutdown_coordinator.clone();
+        let shutdown_coordinator_clone = self.shutdown_coordinator.clone();
         tokio::spawn(async move {
             shutdown_coordinator_clone.wait_for_shutdown_signal().await;
         });
 
         // Run server with graceful shutdown
-        let shutdown_rx = shutdown_coordinator.subscribe();
+        let shutdown_rx = self.shutdown_coordinator.subscribe();
         let serve_future = axum::serve(
             listener,
             // Use socket addresses in the app
@@ -262,40 +218,6 @@ impl Server {
 
     // Creates an application router
     pub fn create_app(&self) -> Router {
-        self.create_app_internal()
-    }
-
-    // Creates an application router with streaming manager
-    pub fn create_app_with_streaming_manager(
-        &self,
-        streaming_manager: Arc<StreamingConnectionManager>,
-    ) -> Router {
-        self.create_app_internal_with_streaming(streaming_manager)
-    }
-
-    // Creates an application router with custom model service
-    pub fn create_app_with_model_service(&self, model_service: Arc<dyn ModelService>) -> Router {
-        self.create_app_internal_with_model_service(model_service)
-    }
-
-    // Internal method that actually creates the application router
-    fn create_app_internal(&self) -> Router {
-        self.create_app_internal_with_streaming(self.streaming_manager.clone())
-    }
-
-    // Internal method that creates the application router with streaming manager
-    fn create_app_internal_with_streaming(
-        &self,
-        _streaming_manager: Arc<StreamingConnectionManager>,
-    ) -> Router {
-        self.create_app_internal_with_model_service(self.model_service.clone())
-    }
-
-    // Internal method that creates the application router with custom model service
-    fn create_app_internal_with_model_service(
-        &self,
-        model_service: Arc<dyn ModelService>,
-    ) -> Router {
         let mut app = Router::new()
             // OAuth authentication routes (no auth required)
             .nest(
@@ -363,7 +285,7 @@ impl Server {
             .nest(
                 "/bedrock",
                 create_bedrock_routes()
-                    .with_state(model_service.clone())
+                    .with_state(self.model_service.clone())
                     .layer(DefaultBodyLimit::max(MAX_BODY_SIZE))
                     .layer(middleware::from_fn_with_state(
                         self.clone(),
@@ -374,7 +296,7 @@ impl Server {
             .nest(
                 "/anthropic",
                 create_anthropic_routes()
-                    .with_state(model_service.clone())
+                    .with_state(self.model_service.clone())
                     .layer(DefaultBodyLimit::max(MAX_BODY_SIZE))
                     .layer(middleware::from_fn_with_state(
                         self.clone(),

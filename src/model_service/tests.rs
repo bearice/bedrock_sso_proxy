@@ -102,39 +102,6 @@ async fn test_extract_usage_metadata_from_response_body() {
     assert_eq!(metadata.region, "us-east-1");
 }
 
-#[tokio::test]
-async fn test_collect_streaming_events_with_real_data() {
-    let (server, config) = create_test_server().await;
-    let database = server.database.clone();
-    let bedrock = Arc::new(BedrockRuntimeImpl::new_test());
-    let model_service = ModelServiceImpl::new(bedrock, database.clone(), config);
-
-    // Use the real AWS binary fixture instead of SSE format
-    let binary_data = include_bytes!("../../tests/fixtures/stream-out.bin");
-    let stream = futures_util::stream::iter(
-        vec![Bytes::from(binary_data.as_slice())]
-            .into_iter()
-            .map(Ok::<_, reqwest::Error>),
-    );
-    let boxed_stream = Box::new(stream);
-
-    let (collected_data, usage_metadata) = model_service
-        .collect_streaming_events(boxed_stream, 250)
-        .await
-        .unwrap();
-
-    // Verify token extraction from binary AWS Event Stream format
-    assert_eq!(usage_metadata.input_tokens, 17);
-    assert_eq!(usage_metadata.output_tokens, 322);
-    assert_eq!(usage_metadata.cache_write_tokens, Some(0)); // From message_start event
-    assert_eq!(usage_metadata.cache_read_tokens, Some(0)); // From message_start event
-    assert_eq!(usage_metadata.response_time_ms, 250);
-    assert_eq!(usage_metadata.region, "us-east-1");
-
-    // Verify that all streaming data was collected
-    assert!(!collected_data.is_empty());
-    assert_eq!(collected_data.len(), binary_data.len());
-}
 
 #[tokio::test]
 async fn test_calculate_cost() {
@@ -314,8 +281,6 @@ fn test_event_stream_parser_chunked_data() {
 
 #[tokio::test]
 async fn test_stream_integration_with_fixture() {
-    let (model_service, _database) = create_test_setup().await;
-
     // Load the binary fixture
     let binary_data = include_bytes!("../../tests/fixtures/stream-out.bin");
 
@@ -412,38 +377,7 @@ async fn test_stream_integration_with_fixture() {
         "Should transform some events to Anthropic format"
     );
 
-    // Test 5: End-to-End Stream Processing with binary data
-    let stream = futures_util::stream::iter(
-        vec![Bytes::from(binary_data.to_vec())]
-            .into_iter()
-            .map(Ok::<_, reqwest::Error>),
-    );
-    let boxed_stream = Box::new(stream);
-
-    // Test 5: End-to-End Stream Processing - just verify we can parse the stream
-
-    let start_time = std::time::Instant::now();
-    let response_time_ms = start_time.elapsed().as_millis() as u32;
-    let (_, usage_metadata) = model_service
-        .collect_streaming_events(boxed_stream, response_time_ms)
-        .await
-        .unwrap();
-
-    // Verify usage tracking worked
-    assert!(
-        usage_metadata.input_tokens > 0,
-        "Should track input tokens from stream"
-    );
-    assert!(
-        usage_metadata.output_tokens > 0,
-        "Should track output tokens from stream"
-    );
-
     println!("✅ Stream integration test passed!");
-    println!(
-        "Final usage metadata: {} input, {} output tokens",
-        usage_metadata.input_tokens, usage_metadata.output_tokens
-    );
 }
 
 #[tokio::test]

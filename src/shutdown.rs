@@ -8,9 +8,7 @@ use std::{
     time::Duration,
 };
 use tokio::{
-    signal,
-    sync::{RwLock, watch},
-    time::timeout,
+    signal, sync::{watch, RwLock}, task::JoinHandle, time::timeout
 };
 use tracing::{error, info};
 
@@ -131,6 +129,22 @@ impl ShutdownManager {
         self.components.push(Box::new(component));
     }
 
+    /// Register all server components for shutdown in the correct order
+    pub fn register_server_components(&mut self, server: &crate::server::Server) {
+        // Register components in shutdown order (order matters: token tracking first, then streaming, then cache, then database)
+        self.register(TokenTrackingShutdown::new(server.model_service.clone()));
+        self.register(StreamingShutdown::new(server.streaming_manager.clone()));
+        self.register(CacheShutdown::new(server.cache.clone()));
+        self.register(DatabaseShutdown::new(server.database.clone()));
+        self.register(HttpServerShutdown::new("HTTP Server".to_string()));
+    }
+
+    pub fn register_background_task(&mut self, task: JoinHandle<()>, name: &str){
+        self.register(BackgroundTaskShutdown::new(
+            name.to_string(),
+            task,
+        ));
+    }
     /// Shutdown all registered components
     pub async fn shutdown_all(&self) {
         info!("Shutting down {} components...", self.components.len());

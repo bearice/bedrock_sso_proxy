@@ -135,7 +135,7 @@ impl TestServerBuilder {
 
         // Initialize model service with mock AWS client
         let model_service: Arc<dyn crate::model_service::ModelService> = Arc::new(
-            ModelServiceImpl::new_with_trait(bedrock.clone(), database.clone(), (*config).clone()),
+            ModelServiceImpl::new(bedrock.clone(), database.clone(), (*config).clone()),
         );
 
         // Initialize OAuth service
@@ -164,7 +164,10 @@ impl TestServerBuilder {
             .register(oauth_service.health_checker())
             .await;
 
-        Ok(Server::new_with_dependencies(
+        let shutdown_coordinator = Arc::new(crate::shutdown::ShutdownCoordinator::new());
+        let cost_service = Arc::new(crate::cost_tracking::CostTrackingService::new(database.clone()));
+        
+        Ok(Server {
             config,
             jwt_service,
             model_service,
@@ -172,7 +175,10 @@ impl TestServerBuilder {
             health_service,
             database,
             cache,
-        ))
+            streaming_manager: Arc::new(crate::shutdown::StreamingConnectionManager::new(shutdown_coordinator.clone())),
+            shutdown_coordinator,
+            cost_service,
+        })
     }
 }
 

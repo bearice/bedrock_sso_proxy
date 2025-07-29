@@ -1,10 +1,8 @@
-use crate::aws::bedrock::{BedrockRuntime, BedrockRuntimeImpl};
+use crate::aws::bedrock::BedrockRuntime;
 use crate::{
     config::Config, database::DatabaseManager, error::AppError,
 };
 use async_trait::async_trait;
-use bytes::Bytes;
-use futures_util::{Stream, StreamExt};
 use std::collections::HashMap;
 use std::{sync::Arc, time::Instant};
 use tokio::sync::RwLock;
@@ -32,12 +30,6 @@ pub trait ModelService: Send + Sync {
         request: ModelRequest,
     ) -> Result<ModelStreamResponse, AppError>;
 
-    /// Collect streaming events and extract token usage
-    async fn collect_streaming_events(
-        &self,
-        stream: Box<dyn Stream<Item = Result<Bytes, reqwest::Error>> + Send + Unpin>,
-        response_time_ms: u32,
-    ) -> Result<(Vec<u8>, UsageMetadata), AppError>;
 
     /// Create a ModelMapper from the current configuration
     fn create_model_mapper(&self) -> crate::anthropic::model_mapping::ModelMapper;
@@ -91,22 +83,6 @@ impl std::fmt::Debug for ModelServiceImpl {
 
 impl ModelServiceImpl {
     pub fn new(
-        bedrock: Arc<BedrockRuntimeImpl>,
-        database: Arc<dyn DatabaseManager>,
-        config: Config,
-    ) -> Self {
-        Self {
-            bedrock,
-            database,
-            config,
-            token_tracking_tasks: Arc::new(RwLock::new(HashMap::new())),
-            task_counter: Arc::new(std::sync::atomic::AtomicU64::new(0)),
-            streaming_manager: None,
-        }
-    }
-
-    /// Create a new ModelService with a trait object (for testing with mocks)
-    pub fn new_with_trait(
         bedrock: Arc<dyn BedrockRuntime>,
         database: Arc<dyn DatabaseManager>,
         config: Config,
@@ -263,67 +239,6 @@ impl ModelService for ModelServiceImpl {
         Ok(response)
     }
 
-    /// Collect streaming events and extract token usage using EventStreamParser
-    async fn collect_streaming_events(
-        &self,
-        mut stream: Box<
-            dyn futures_util::Stream<Item = Result<Bytes, reqwest::Error>> + Send + Unpin,
-        >,
-        response_time_ms: u32,
-    ) -> Result<(Vec<u8>, UsageMetadata), AppError> {
-        let mut all_data = Vec::new();
-        let mut parser = streaming::EventStreamParser::new();
-
-        // Collect all streaming chunks and parse them
-        while let Some(chunk) = stream.next().await {
-            match chunk {
-                Ok(bytes) => {
-                    all_data.extend_from_slice(&bytes);
-
-                    // Parse the binary chunk using EventStreamParser
-                    if let Ok(events) = parser.parse_chunk(&bytes) {
-                        // Events are parsed but we only need the usage metrics
-                        // The parser automatically extracts usage from message_start and message_stop events
-                        for event in events {
-                            if let Some(data) = &event.data {
-                                if let Some(event_type) = data.get("type").and_then(|t| t.as_str())
-                                {
-                                    tracing::debug!("Parsed streaming event: {}", event_type);
-                                }
-                            }
-                        }
-                    }
-                }
-                Err(e) => {
-                    tracing::warn!("Error reading streaming chunk: {}", e);
-                    // Continue processing other chunks
-                }
-            }
-        }
-
-        // Get usage metrics from the parser
-        let usage_metrics = parser.get_usage_metrics();
-
-        // Create usage metadata
-        let usage_metadata = UsageMetadata {
-            input_tokens: usage_metrics.input_tokens,
-            output_tokens: usage_metrics.output_tokens,
-            cache_write_tokens: usage_metrics.cache_write_tokens,
-            cache_read_tokens: usage_metrics.cache_read_tokens,
-            region: self.config.aws.region.clone(),
-            response_time_ms,
-        };
-
-        tracing::info!(
-            "Extracted streaming usage: input={}, output={}, cache_write={:?}, cache_read={:?}",
-            usage_metadata.input_tokens,
-            usage_metadata.output_tokens,
-            usage_metadata.cache_write_tokens,
-            usage_metadata.cache_read_tokens
-        );
-
-        Ok((all_data, usage_metadata))
-    }
 
     /// Get the AWS client for direct access if needed (returns trait object)
     fn bedrock(&self) -> &dyn BedrockRuntime {
