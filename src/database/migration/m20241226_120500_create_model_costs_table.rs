@@ -19,16 +19,8 @@ impl MigrationTrait for Migration {
                             .auto_increment()
                             .primary_key(),
                     )
-                    .col(
-                        ColumnDef::new(ModelCosts::ModelId)
-                            .string()
-                            .not_null()
-                    )
-                    .col(
-                        ColumnDef::new(ModelCosts::Region)
-                            .string()
-                            .not_null()
-                    )
+                    .col(ColumnDef::new(ModelCosts::ModelId).string().not_null())
+                    .col(ColumnDef::new(ModelCosts::Region).string().not_null())
                     .col(
                         ColumnDef::new(Alias::new("input_cost_per_1k_tokens"))
                             .decimal_len(10, 6)

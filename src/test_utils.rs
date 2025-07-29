@@ -24,7 +24,7 @@ impl TestServerBuilder {
             use_memory_db: true,    // Default to memory for tests
             use_memory_cache: true, // Default to memory for tests
             jwt_secret: Some("test-secret".to_string()),
-            use_mock_aws: false,    // Default to real AWS client for backward compatibility
+            use_mock_aws: false, // Default to real AWS client for backward compatibility
         }
     }
 
@@ -88,7 +88,7 @@ impl TestServerBuilder {
         } else {
             Server::new(config).await.unwrap()
         };
-        
+
         server.database.migrate().await.unwrap();
         server
     }
@@ -96,7 +96,10 @@ impl TestServerBuilder {
     /// Build server with mock AWS client for security testing
     async fn build_with_mock_aws_static(config: Config) -> Result<Server, crate::error::AppError> {
         use crate::{
-            auth::{jwt::{parse_algorithm, JwtServiceImpl}, oauth::OAuthService},
+            auth::{
+                jwt::{JwtServiceImpl, parse_algorithm},
+                oauth::OAuthService,
+            },
             aws::mock::MockBedrockRuntime,
             cache::CacheManagerImpl,
             database::DatabaseManagerImpl,
@@ -127,14 +130,13 @@ impl TestServerBuilder {
         let database: Arc<dyn DatabaseManager> = database_impl.clone();
 
         // Use mock AWS client for security tests
-        let bedrock: Arc<dyn crate::aws::bedrock::BedrockRuntime> = Arc::new(MockBedrockRuntime::for_security_tests());
+        let bedrock: Arc<dyn crate::aws::bedrock::BedrockRuntime> =
+            Arc::new(MockBedrockRuntime::for_security_tests());
 
         // Initialize model service with mock AWS client
-        let model_service: Arc<dyn crate::model_service::ModelService> = Arc::new(ModelServiceImpl::new_with_trait(
-            bedrock.clone(),
-            database.clone(),
-            (*config).clone(),
-        ));
+        let model_service: Arc<dyn crate::model_service::ModelService> = Arc::new(
+            ModelServiceImpl::new_with_trait(bedrock.clone(), database.clone(), (*config).clone()),
+        );
 
         // Initialize OAuth service
         let oauth_service = Arc::new(OAuthService::new(
@@ -151,12 +153,16 @@ impl TestServerBuilder {
         health_service.register(cache_impl).await;
         health_service.register(database_impl).await;
         health_service.register(bedrock.health_checker()).await;
-        
+
         // Create concrete JWT service for health registration
         let jwt_service_impl = JwtServiceImpl::new(config.jwt.secret.clone(), jwt_algorithm)?;
-        health_service.register(jwt_service_impl.health_checker()).await;
-        
-        health_service.register(oauth_service.health_checker()).await;
+        health_service
+            .register(jwt_service_impl.health_checker())
+            .await;
+
+        health_service
+            .register(oauth_service.health_checker())
+            .await;
 
         Ok(Server::new_with_dependencies(
             config,

@@ -735,8 +735,7 @@ impl ModelService for ModelServiceImpl {
     async fn initialize_model_costs(&self) -> Result<(), AppError> {
         tracing::info!("Initializing model costs from fallback data");
 
-        let cost_service =
-            CostTrackingService::new(self.database.clone());
+        let cost_service = CostTrackingService::new(self.database.clone());
 
         // Check if we already have cost data
         let existing_costs = self.database.model_costs().get_all().await.map_err(|e| {
@@ -1172,7 +1171,11 @@ mod tests {
             cache_read_cost_per_1k_tokens: Some(Decimal::new(3, 4)), // 0.0003 exactly
             updated_at: Utc::now(),
         };
-        database.model_costs().upsert_many(&[model_cost]).await.unwrap();
+        database
+            .model_costs()
+            .upsert_many(&[model_cost])
+            .await
+            .unwrap();
 
         // Calculate cost for 100 input tokens, 50 output tokens, no cache tokens
         let cost = model_service

@@ -17,7 +17,11 @@ impl ModelCostsDao {
     }
 
     /// Get model cost by region and model ID
-    pub async fn find_by_region_and_model(&self, region: &str, model_id: &str) -> DatabaseResult<Option<StoredModelCost>> {
+    pub async fn find_by_region_and_model(
+        &self,
+        region: &str,
+        model_id: &str,
+    ) -> DatabaseResult<Option<StoredModelCost>> {
         let cost = model_costs::Entity::find()
             .filter(model_costs::Column::Region.eq(region))
             .filter(model_costs::Column::ModelId.eq(model_id))
@@ -61,15 +65,16 @@ impl ModelCostsDao {
             })
             .collect();
 
-        let on_conflict = OnConflict::columns([model_costs::Column::Region, model_costs::Column::ModelId])
-            .update_columns([
-                model_costs::Column::InputCostPer1kTokens,
-                model_costs::Column::OutputCostPer1kTokens,
-                model_costs::Column::CacheWriteCostPer1kTokens,
-                model_costs::Column::CacheReadCostPer1kTokens,
-                model_costs::Column::UpdatedAt,
-            ])
-            .to_owned();
+        let on_conflict =
+            OnConflict::columns([model_costs::Column::Region, model_costs::Column::ModelId])
+                .update_columns([
+                    model_costs::Column::InputCostPer1kTokens,
+                    model_costs::Column::OutputCostPer1kTokens,
+                    model_costs::Column::CacheWriteCostPer1kTokens,
+                    model_costs::Column::CacheReadCostPer1kTokens,
+                    model_costs::Column::UpdatedAt,
+                ])
+                .to_owned();
 
         for model in active_models {
             trace!("Processing {:?}", model.model_id);
@@ -95,7 +100,11 @@ impl ModelCostsDao {
     }
 
     /// Delete model cost by region and model ID
-    pub async fn delete_by_region_and_model(&self, region: &str, model_id: &str) -> DatabaseResult<()> {
+    pub async fn delete_by_region_and_model(
+        &self,
+        region: &str,
+        model_id: &str,
+    ) -> DatabaseResult<()> {
         model_costs::Entity::delete_many()
             .filter(model_costs::Column::Region.eq(region))
             .filter(model_costs::Column::ModelId.eq(model_id))

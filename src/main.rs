@@ -8,7 +8,7 @@ use tracing::{error, info};
 struct Cli {
     #[arg(short, long, help = "Path to configuration file")]
     config: Option<String>,
-    
+
     #[command(subcommand)]
     command: Option<Commands>,
 }
@@ -28,7 +28,12 @@ enum MigrateAction {
     Up,
     /// Rollback the last migration
     Down {
-        #[arg(short, long, help = "Number of migrations to rollback", default_value = "1")]
+        #[arg(
+            short,
+            long,
+            help = "Number of migrations to rollback",
+            default_value = "1"
+        )]
         steps: u32,
     },
     /// Show migration status
@@ -81,10 +86,13 @@ async fn main() {
     }
 }
 
-async fn handle_migrate_command(action: MigrateAction, config: &Config) -> Result<(), Box<dyn std::error::Error>> {
-    use bedrock_sso_proxy::database::{DatabaseManagerImpl, DatabaseManager};
-    use bedrock_sso_proxy::database::migration::Migrator;
+async fn handle_migrate_command(
+    action: MigrateAction,
+    config: &Config,
+) -> Result<(), Box<dyn std::error::Error>> {
     use bedrock_sso_proxy::cache::CacheManagerImpl;
+    use bedrock_sso_proxy::database::migration::Migrator;
+    use bedrock_sso_proxy::database::{DatabaseManager, DatabaseManagerImpl};
     use sea_orm_migration::MigratorTrait;
     use std::sync::Arc;
 

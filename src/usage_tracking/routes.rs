@@ -281,7 +281,7 @@ async fn create_model_cost(
     // Admin permissions already checked by middleware
 
     let cost = StoredModelCost {
-        id: 0, // Will be set by database
+        id: 0,                           // Will be set by database
         region: "us-east-1".to_string(), // Default region for manual cost updates
         model_id: request.model_id,
         input_cost_per_1k_tokens: Decimal::from_f64_retain(request.input_cost_per_1k_tokens)
@@ -314,7 +314,7 @@ async fn update_model_cost(
         .ok_or_else(|| AppError::NotFound(format!("Model cost not found: {}", model_id)))?;
 
     let cost = StoredModelCost {
-        id: 0, // Will be set by database
+        id: 0,                           // Will be set by database
         region: "us-east-1".to_string(), // Default region for manual cost updates
         model_id: model_id.clone(),
         input_cost_per_1k_tokens: Decimal::from_f64_retain(request.input_cost_per_1k_tokens)

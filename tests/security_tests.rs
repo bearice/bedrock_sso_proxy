@@ -35,7 +35,7 @@ async fn test_security_sql_injection_attempts() {
             .unwrap();
 
         let response = harness.make_request(request).await;
-        
+
         // With mock AWS: Authentication must succeed first
         assert_ne!(
             response.status(),
@@ -73,7 +73,7 @@ async fn test_security_xss_attempts() {
         let request = RequestBuilder::invoke_model_with_auth("test-model", &token, payload);
 
         let response = harness.make_request(request).await;
-        
+
         // Authentication must succeed first
         assert_ne!(
             response.status(),
@@ -484,7 +484,9 @@ async fn test_security_rate_limiting_simulation() {
 async fn test_security_api_key_sql_injection() {
     let harness = TestHarness::new_for_security_tests().await;
     let created_user_id = harness.create_test_user("apikey@example.com").await;
-    let api_key = harness.create_test_api_key(created_user_id, "Security Test Key").await;
+    let api_key = harness
+        .create_test_api_key(created_user_id, "Security Test Key")
+        .await;
 
     // Test SQL injection attempts in model ID with API key authentication
     let malicious_model_ids = vec![
@@ -495,16 +497,16 @@ async fn test_security_api_key_sql_injection() {
 
     for model_id in malicious_model_ids {
         let encoded_model_id = urlencoding::encode(model_id);
-        
+
         // Test with X-API-Key header
         let request = RequestBuilder::invoke_model_with_api_key_header(
-            &encoded_model_id, 
-            &api_key, 
-            r#"{"messages": []}"#
+            &encoded_model_id,
+            &api_key,
+            r#"{"messages": []}"#,
         );
 
         let response = harness.make_request(request).await;
-        
+
         // API key authentication must succeed first
         assert_ne!(
             response.status(),
@@ -527,7 +529,9 @@ async fn test_security_api_key_sql_injection() {
 async fn test_security_api_key_bearer_auth() {
     let harness = TestHarness::new_for_security_tests().await;
     let created_user_id = harness.create_test_user("bearer@example.com").await;
-    let api_key = harness.create_test_api_key(created_user_id, "Bearer Test Key").await;
+    let api_key = harness
+        .create_test_api_key(created_user_id, "Bearer Test Key")
+        .await;
 
     // Test malicious payloads with Bearer token format for API keys
     let xss_payloads = vec![
@@ -537,14 +541,11 @@ async fn test_security_api_key_bearer_auth() {
 
     for payload in xss_payloads {
         // Test with Authorization Bearer header (API key in Bearer format)
-        let request = RequestBuilder::invoke_model_with_api_key_bearer(
-            "test-model",
-            &api_key,
-            payload
-        );
+        let request =
+            RequestBuilder::invoke_model_with_api_key_bearer("test-model", &api_key, payload);
 
         let response = harness.make_request(request).await;
-        
+
         // API key authentication must succeed first
         assert_ne!(
             response.status(),
@@ -579,11 +580,11 @@ async fn test_security_invalid_api_key() {
         let request = RequestBuilder::invoke_model_with_api_key_header(
             "test-model",
             fake_key,
-            r#"{"messages": []}"#
+            r#"{"messages": []}"#,
         );
 
         let response = harness.make_request(request).await;
-        
+
         // Invalid API keys should be rejected at authentication layer
         assert_eq!(
             response.status(),

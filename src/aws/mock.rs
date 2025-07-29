@@ -52,23 +52,31 @@ impl MockBedrockRuntime {
     /// Generate mock response based on model ID and security patterns
     fn generate_response(&self, model_id: &str, body: &[u8]) -> BedrockResponse {
         let (status, response_body) = match &self.response_mode {
-            MockResponseMode::AlwaysSuccess => {
-                (StatusCode::OK, br#"{"message": "Mock success response"}"#.to_vec())
-            }
+            MockResponseMode::AlwaysSuccess => (
+                StatusCode::OK,
+                br#"{"message": "Mock success response"}"#.to_vec(),
+            ),
             MockResponseMode::FixedStatus(status) => {
                 (*status, br#"{"error": "Mock error response"}"#.to_vec())
             }
-            MockResponseMode::SecurityError => {
-                (StatusCode::BAD_REQUEST, br#"{"error": "Security validation failed"}"#.to_vec())
-            }
+            MockResponseMode::SecurityError => (
+                StatusCode::BAD_REQUEST,
+                br#"{"error": "Security validation failed"}"#.to_vec(),
+            ),
             MockResponseMode::PatternBased => {
                 // Analyze model ID for security patterns
                 if self.is_malicious_model_id(model_id) {
                     // For security tests: malicious model IDs should be rejected by AWS
-                    (StatusCode::BAD_REQUEST, br#"{"error": "Invalid model ID format"}"#.to_vec())
+                    (
+                        StatusCode::BAD_REQUEST,
+                        br#"{"error": "Invalid model ID format"}"#.to_vec(),
+                    )
                 } else if self.is_malicious_body(body) {
                     // For security tests: malicious payloads should be rejected
-                    (StatusCode::BAD_REQUEST, br#"{"error": "Invalid request format"}"#.to_vec())
+                    (
+                        StatusCode::BAD_REQUEST,
+                        br#"{"error": "Invalid request format"}"#.to_vec(),
+                    )
                 } else {
                     // Normal requests succeed
                     (StatusCode::OK, br#"{"message": "Mock response", "content": [{"text": "Hello from mock AWS"}]}"#.to_vec())
@@ -78,7 +86,10 @@ impl MockBedrockRuntime {
 
         let mut headers = HeaderMap::new();
         headers.insert("content-type", HeaderValue::from_static("application/json"));
-        headers.insert("x-amzn-requestid", HeaderValue::from_static("mock-request-id"));
+        headers.insert(
+            "x-amzn-requestid",
+            HeaderValue::from_static("mock-request-id"),
+        );
 
         BedrockResponse {
             status,
@@ -149,7 +160,7 @@ impl BedrockRuntime for MockBedrockRuntime {
     ) -> Result<BedrockResponse, AppError> {
         // Simulate AWS processing time
         tokio::time::sleep(tokio::time::Duration::from_millis(10)).await;
-        
+
         Ok(self.generate_response(model_id, &body))
     }
 
@@ -163,17 +174,15 @@ impl BedrockRuntime for MockBedrockRuntime {
     ) -> Result<BedrockStreamResponse, AppError> {
         // Generate base response to determine status
         let base_response = self.generate_response(model_id, &body);
-        
+
         if base_response.status != StatusCode::OK {
             // Return error response as stream
-            let error_data = vec![
-                Bytes::from(format!(
-                    "data: {{\"type\":\"error\",\"error\":{{\"message\":\"{}\"}}}}\n\n",
-                    String::from_utf8_lossy(&base_response.body)
-                ))
-            ];
+            let error_data = vec![Bytes::from(format!(
+                "data: {{\"type\":\"error\",\"error\":{{\"message\":\"{}\"}}}}\n\n",
+                String::from_utf8_lossy(&base_response.body)
+            ))];
             let error_stream = stream::iter(error_data.into_iter().map(Ok::<_, reqwest::Error>));
-            
+
             return Ok(BedrockStreamResponse {
                 status: base_response.status,
                 headers: base_response.headers,
@@ -184,13 +193,18 @@ impl BedrockRuntime for MockBedrockRuntime {
         // Success streaming response
         let mock_data = vec![
             Bytes::from("data: {\"type\":\"message_start\",\"message\":{\"id\":\"msg_mock\"}}\n\n"),
-            Bytes::from("data: {\"type\":\"content_block_delta\",\"delta\":{\"text\":\"Mock AWS response\"}}\n\n"),
+            Bytes::from(
+                "data: {\"type\":\"content_block_delta\",\"delta\":{\"text\":\"Mock AWS response\"}}\n\n",
+            ),
             Bytes::from("data: {\"type\":\"message_stop\"}\n\n"),
         ];
 
         let mock_stream = stream::iter(mock_data.into_iter().map(Ok::<_, reqwest::Error>));
         let mut headers = HeaderMap::new();
-        headers.insert("content-type", HeaderValue::from_static("text/event-stream"));
+        headers.insert(
+            "content-type",
+            HeaderValue::from_static("text/event-stream"),
+        );
 
         Ok(BedrockStreamResponse {
             status: StatusCode::OK,
@@ -243,18 +257,21 @@ mod tests {
     #[test]
     fn test_mock_client_with_status() {
         let client = MockBedrockRuntime::with_status(StatusCode::FORBIDDEN);
-        matches!(client.response_mode, MockResponseMode::FixedStatus(StatusCode::FORBIDDEN));
+        matches!(
+            client.response_mode,
+            MockResponseMode::FixedStatus(StatusCode::FORBIDDEN)
+        );
     }
 
     #[test]
     fn test_malicious_model_id_detection() {
         let client = MockBedrockRuntime::for_security_tests();
-        
+
         assert!(client.is_malicious_model_id("'; DROP TABLE users; --"));
         assert!(client.is_malicious_model_id("1' OR '1'='1"));
         assert!(client.is_malicious_model_id("../../../etc/passwd"));
         assert!(client.is_malicious_model_id("<script>alert('xss')</script>"));
-        
+
         assert!(!client.is_malicious_model_id("anthropic.claude-v2"));
         assert!(!client.is_malicious_model_id("normal-model-id"));
     }
@@ -262,11 +279,11 @@ mod tests {
     #[test]
     fn test_malicious_body_detection() {
         let client = MockBedrockRuntime::for_security_tests();
-        
+
         assert!(client.is_malicious_body(b"<script>alert('xss')</script>"));
         assert!(client.is_malicious_body(b"javascript:alert('xss')"));
         assert!(client.is_malicious_body(b"<img src=x onerror=alert('xss')>"));
-        
+
         assert!(!client.is_malicious_body(b"{\"messages\": []}"));
         assert!(!client.is_malicious_body(b"normal request body"));
     }
@@ -274,7 +291,7 @@ mod tests {
     #[tokio::test]
     async fn test_mock_invoke_model_success() {
         let client = MockBedrockRuntime::new();
-        
+
         let response = client
             .invoke_model(
                 "anthropic.claude-v2",
@@ -284,7 +301,7 @@ mod tests {
             )
             .await
             .unwrap();
-        
+
         assert_eq!(response.status, StatusCode::OK);
         assert!(!response.body.is_empty());
     }
@@ -292,7 +309,7 @@ mod tests {
     #[tokio::test]
     async fn test_mock_invoke_model_malicious_id() {
         let client = MockBedrockRuntime::for_security_tests();
-        
+
         let response = client
             .invoke_model(
                 "'; DROP TABLE users; --",
@@ -302,7 +319,7 @@ mod tests {
             )
             .await
             .unwrap();
-        
+
         assert_eq!(response.status, StatusCode::BAD_REQUEST);
         assert!(String::from_utf8_lossy(&response.body).contains("Invalid model ID"));
     }
@@ -310,7 +327,7 @@ mod tests {
     #[tokio::test]
     async fn test_mock_invoke_model_malicious_body() {
         let client = MockBedrockRuntime::for_security_tests();
-        
+
         let response = client
             .invoke_model(
                 "anthropic.claude-v2",
@@ -320,7 +337,7 @@ mod tests {
             )
             .await
             .unwrap();
-        
+
         assert_eq!(response.status, StatusCode::BAD_REQUEST);
         assert!(String::from_utf8_lossy(&response.body).contains("Invalid request"));
     }
@@ -329,7 +346,7 @@ mod tests {
     async fn test_mock_streaming_success() {
         let client = MockBedrockRuntime::new();
         let headers = HeaderMap::new();
-        
+
         let response = client
             .invoke_model_with_response_stream(
                 "anthropic.claude-v2",
@@ -340,16 +357,19 @@ mod tests {
             )
             .await
             .unwrap();
-        
+
         assert_eq!(response.status, StatusCode::OK);
-        assert_eq!(response.headers.get("content-type").unwrap(), "text/event-stream");
+        assert_eq!(
+            response.headers.get("content-type").unwrap(),
+            "text/event-stream"
+        );
     }
 
     #[tokio::test]
     async fn test_mock_streaming_error() {
         let client = MockBedrockRuntime::for_security_tests();
         let headers = HeaderMap::new();
-        
+
         let response = client
             .invoke_model_with_response_stream(
                 "'; DROP TABLE users; --",
@@ -360,7 +380,7 @@ mod tests {
             )
             .await
             .unwrap();
-        
+
         assert_eq!(response.status, StatusCode::BAD_REQUEST);
     }
 }

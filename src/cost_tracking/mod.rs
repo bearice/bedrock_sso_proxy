@@ -3,13 +3,16 @@ mod parser;
 use chrono::Utc;
 pub use parser::*;
 
-use crate::{database::{entities::StoredModelCost, DatabaseManager}, error::AppError};
+use crate::{
+    database::{DatabaseManager, entities::StoredModelCost},
+    error::AppError,
+};
 use rust_decimal::{Decimal, prelude::ToPrimitive};
 use std::sync::Arc;
-use tracing::{info, debug};
+use tracing::{debug, info};
 
 /// Cached embedded pricing data parsed from CSV
-pub static EMBEDDED_PRICING_CSV : &str = include_str!("../../bedrock_pricing.csv");
+pub static EMBEDDED_PRICING_CSV: &str = include_str!("../../bedrock_pricing.csv");
 
 /// Cost tracking service for AWS Bedrock models
 pub struct CostTrackingService {
@@ -18,9 +21,7 @@ pub struct CostTrackingService {
 
 impl CostTrackingService {
     pub fn new(database: Arc<dyn DatabaseManager>) -> Self {
-        Self {
-            database,
-        }
+        Self { database }
     }
     /// Initialize model costs from embedded CSV data (only if database is empty)
     pub async fn initialize_model_costs_from_embedded(
@@ -29,7 +30,8 @@ impl CostTrackingService {
         info!("Initializing model costs from embedded CSV pricing data");
 
         // Just use the batch update method for initialization
-        self.batch_update_from_csv_content(EMBEDDED_PRICING_CSV).await
+        self.batch_update_from_csv_content(EMBEDDED_PRICING_CSV)
+            .await
     }
 
     /// Batch update costs from CSV content
@@ -39,9 +41,7 @@ impl CostTrackingService {
     ) -> Result<UpdateCostsResult, AppError> {
         debug!("Starting batch cost update from provided CSV content");
 
-        let mut result = UpdateCostsResult {
-            total_processed: 0,
-        };
+        let mut result = UpdateCostsResult { total_processed: 0 };
 
         // Parse CSV content
         let all_pricing = parser::parse_csv_pricing_data(csv_content);
@@ -52,21 +52,17 @@ impl CostTrackingService {
             all_pricing.len()
         );
 
-        let stored_cost:Vec<_> = all_pricing
+        let stored_cost: Vec<_> = all_pricing
             .iter()
             .map(|pricing| {
                 StoredModelCost {
                     id: 0, // Will be set by database
                     region: pricing.region_id.clone(),
                     model_id: pricing.model_id.clone(),
-                    input_cost_per_1k_tokens: Decimal::from_f64_retain(
-                        pricing.input_price,
-                    )
-                    .unwrap_or_default(),
-                    output_cost_per_1k_tokens: Decimal::from_f64_retain(
-                        pricing.output_price,
-                    )
-                    .unwrap_or_default(),
+                    input_cost_per_1k_tokens: Decimal::from_f64_retain(pricing.input_price)
+                        .unwrap_or_default(),
+                    output_cost_per_1k_tokens: Decimal::from_f64_retain(pricing.output_price)
+                        .unwrap_or_default(),
                     cache_write_cost_per_1k_tokens: pricing
                         .cache_write_price
                         .map(|c| Decimal::from_f64_retain(c).unwrap_or_default()),
@@ -78,7 +74,10 @@ impl CostTrackingService {
             })
             .collect();
 
-        self.database.model_costs().upsert_many(&stored_cost).await?;
+        self.database
+            .model_costs()
+            .upsert_many(&stored_cost)
+            .await?;
 
         info!(
             "Batch cost update from CSV content completed: {} total",
@@ -87,7 +86,7 @@ impl CostTrackingService {
 
         Ok(result)
     }
-    
+
     /// Get cost summary for all models
     pub async fn get_cost_summary(&self) -> Result<CostSummary, AppError> {
         let all_costs = self
@@ -118,7 +117,6 @@ impl CostTrackingService {
 
         Ok(summary)
     }
-
 }
 
 /// Result of updating model costs

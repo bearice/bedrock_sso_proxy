@@ -169,9 +169,15 @@ impl TestHarness {
     #[allow(dead_code)]
     pub async fn create_test_api_key(&self, user_id: i32, name: &str) -> String {
         use bedrock_sso_proxy::auth::api_key::ApiKey;
-        
+
         let (api_key, key_string) = ApiKey::new(user_id, name.to_string(), None);
-        let _key_id = self.server.database.api_keys().store(&api_key).await.unwrap();
+        let _key_id = self
+            .server
+            .database
+            .api_keys()
+            .store(&api_key)
+            .await
+            .unwrap();
         key_string
     }
 }
@@ -266,7 +272,11 @@ impl RequestBuilder {
 
     /// Model invoke with API key via X-API-Key header
     #[allow(dead_code)]
-    pub fn invoke_model_with_api_key_header(model_id: &str, api_key: &str, body: &str) -> Request<Body> {
+    pub fn invoke_model_with_api_key_header(
+        model_id: &str,
+        api_key: &str,
+        body: &str,
+    ) -> Request<Body> {
         Request::builder()
             .uri(format!("/bedrock/model/{}/invoke", model_id))
             .method("POST")
@@ -278,7 +288,11 @@ impl RequestBuilder {
 
     /// Model invoke with API key via Authorization Bearer header
     #[allow(dead_code)]
-    pub fn invoke_model_with_api_key_bearer(model_id: &str, api_key: &str, body: &str) -> Request<Body> {
+    pub fn invoke_model_with_api_key_bearer(
+        model_id: &str,
+        api_key: &str,
+        body: &str,
+    ) -> Request<Body> {
         Request::builder()
             .uri(format!("/bedrock/model/{}/invoke", model_id))
             .method("POST")

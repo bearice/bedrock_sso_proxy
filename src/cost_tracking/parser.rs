@@ -1,6 +1,5 @@
-use serde::{Deserialize};
-use tracing::{debug};
-
+use serde::Deserialize;
+use tracing::debug;
 
 /// CSV record structure for pricing data
 #[derive(Debug, Deserialize)]
