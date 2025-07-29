@@ -230,7 +230,9 @@ cargo test                    # All tests (unit + integration + security)
 cargo test auth               # Authentication tests only
 cargo test security           # Security vulnerability tests
 cargo test --test jwt_integration_tests # JWT integration tests
+cargo test --test api_key_integration_tests # API key integration tests
 cargo test --test cached_integration_test # Cached DAO tests
+cargo test --test cost_tracking_integration_tests # Cost tracking integration tests
 cargo test --test usage_tracking_integration_tests # Usage tracking tests
 ```
 
@@ -443,13 +445,16 @@ quality and consistency.
 
 ## Testing Architecture
 
-- **Unit Tests**: 100 tests covering all modules including OAuth functionality
-- **Integration Tests**: 7 tests with real JWT token validation
-- **Security Tests**: 10 comprehensive security attack simulations
-- **Total Test Coverage**: 117 tests passing (100 unit + 7 integration + 10
-  security)
-- **Test Coverage**: Authentication, OAuth, routing, streaming, error handling,
-  security vulnerabilities
+- **Unit Tests**: 221 tests covering all modules including OAuth functionality
+- **Integration Tests**: 49 tests across 5 test files
+  - JWT integration tests: 7 tests
+  - API key integration tests: 6 tests
+  - Cached DAO tests: 8 tests  
+  - Cost tracking integration tests: 10 tests
+  - Usage tracking integration tests: 8 tests
+- **Security Tests**: 13 comprehensive security attack simulations
+- **Total Test Coverage**: 285 tests passing (221 unit + 49 integration + 13 security + 1 doc)
+- **Test Coverage**: Authentication, OAuth, routing, streaming, error handling, security vulnerabilities, caching, cost tracking, usage tracking
 
 ## Security Features
 

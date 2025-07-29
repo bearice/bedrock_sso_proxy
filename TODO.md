@@ -105,23 +105,31 @@
 ### Current Structure:
 ```
 tests/
-├── jwt_integration_tests.rs    # JWT-specific integration tests
-├── security_tests.rs           # Security vulnerability tests
-└── common/                     # Shared test utilities
+├── jwt_integration_tests.rs           # JWT authentication integration (7 tests)
+├── api_key_integration_tests.rs       # API key authentication integration (6 tests)
+├── cached_integration_test.rs         # Cached DAO integration (8 tests)
+├── cost_tracking_integration_tests.rs # Cost tracking integration (10 tests)
+├── usage_tracking_integration_tests.rs # Usage tracking integration (8 tests)
+├── security_tests.rs                  # Security vulnerability tests (13 tests)
+└── common/                            # Shared test utilities
     └── mod.rs
 ```
 
-### Recommended Structure:
+### Recommended Additional Tests:
 ```
 tests/
-├── jwt_integration_tests.rs           # JWT authentication integration
-├── oauth_integration_tests.rs         # OAuth flow integration
-├── api_integration_tests.rs           # API endpoint integration
-├── service_integration_tests.rs       # Service layer integration
-├── e2e_integration_tests.rs           # End-to-end workflows
-├── config_integration_tests.rs        # Configuration integration
-├── migration_integration_tests.rs     # Database migration integration
-├── security_tests.rs                  # Security vulnerability tests
+├── jwt_integration_tests.rs           # ✅ JWT authentication integration
+├── api_key_integration_tests.rs       # ✅ API key authentication integration
+├── cached_integration_test.rs         # ✅ Cached DAO integration
+├── cost_tracking_integration_tests.rs # ✅ Cost tracking integration
+├── usage_tracking_integration_tests.rs # ✅ Usage tracking integration
+├── oauth_integration_tests.rs         # ❌ OAuth flow integration (NEEDED)
+├── api_integration_tests.rs           # ❌ API endpoint integration (NEEDED)
+├── service_integration_tests.rs       # ❌ Service layer integration (NEEDED)
+├── e2e_integration_tests.rs           # ❌ End-to-end workflows (NEEDED)
+├── config_integration_tests.rs        # ❌ Configuration integration (NEEDED)
+├── migration_integration_tests.rs     # ❌ Database migration integration (NEEDED)
+├── security_tests.rs                  # ✅ Security vulnerability tests
 └── common/                            # Shared test utilities
     ├── mod.rs
     ├── oauth_helpers.rs              # OAuth test utilities
@@ -132,18 +140,19 @@ tests/
 ## Test Metrics
 
 ### Current Test Coverage:
-- **Total Tests**: 269 (248 unit + 7 JWT integration + 13 security + 1 doc)
-- **Unit Tests**: 248 tests in `src/` modules
-- **Integration Tests**: 7 tests (JWT-focused)
+- **Total Tests**: 285 (221 unit + 49 integration + 13 security + 1 doc)
+- **Unit Tests**: 221 tests in `src/` modules
+- **Integration Tests**: 49 tests across 5 test files
 - **Security Tests**: 13 tests
 - **Success Rate**: 100% (all tests passing)
 
 ### Integration Test Distribution:
-- **JWT Integration**: 7 tests
-- **API Key Integration**: 6 tests (in unit test files)
-- **Cached DAO Integration**: 20+ tests (in unit test files)
-- **Usage Tracking Integration**: Multiple tests (in unit test files)
-- **Cost Tracking Integration**: 10 tests (in unit test files)
+- **JWT Integration**: 7 tests (in `tests/jwt_integration_tests.rs`)
+- **API Key Integration**: 6 tests (in `tests/api_key_integration_tests.rs`)
+- **Cached DAO Integration**: 8 tests (in `tests/cached_integration_test.rs`)
+- **Usage Tracking Integration**: 8 tests (in `tests/usage_tracking_integration_tests.rs`)
+- **Cost Tracking Integration**: 10 tests (in `tests/cost_tracking_integration_tests.rs`)
+- **Security Tests**: 13 tests (in `tests/security_tests.rs`)
 
 ## Implementation Notes
 
@@ -172,6 +181,9 @@ tests/
 - [x] Verified all existing tests still pass
 - [x] Analyzed current integration test coverage
 - [x] Identified missing integration test areas
+- [x] Reverted problematic commit d06eaf0 that moved integration tests to src/
+- [x] Restored proper Rust testing structure with integration tests in tests/
+- [x] Updated documentation to reflect correct test structure and counts
 
 ## Next Steps:
 1. Implement OAuth integration tests (highest priority)
