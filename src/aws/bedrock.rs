@@ -1,4 +1,5 @@
 use crate::aws::config::AwsConfig;
+use crate::aws::model_id_mapping::RegionalModelMapping;
 use crate::error::AppError;
 use crate::health::{HealthCheckResult, HealthChecker};
 use async_trait::async_trait;
@@ -19,6 +20,7 @@ pub struct BedrockRuntimeImpl {
     client: Client,
     config: AwsConfig,
     base_url: String,
+    model_mapping: RegionalModelMapping,
 }
 
 #[derive(Debug)]
@@ -46,11 +48,13 @@ impl BedrockRuntimeImpl {
     pub fn new(config: AwsConfig) -> Self {
         let client = Client::new();
         let base_url = format!("https://bedrock-runtime.{}.amazonaws.com", config.region);
+        let model_mapping = RegionalModelMapping::new();
 
         Self {
             client,
             config,
             base_url,
+            model_mapping,
         }
     }
 
@@ -66,6 +70,11 @@ impl BedrockRuntimeImpl {
         Self::new(config)
     }
 
+    /// Get the regional model mapping for external access
+    pub fn model_mapping(&self) -> &RegionalModelMapping {
+        &self.model_mapping
+    }
+
     /// Invoke a Bedrock model using direct HTTP calls
     pub async fn invoke_model(
         &self,
@@ -74,7 +83,9 @@ impl BedrockRuntimeImpl {
         accept: Option<&str>,
         body: Vec<u8>,
     ) -> Result<BedrockResponse, AppError> {
-        let path = format!("/model/{}/invoke", model_id);
+        // Add regional prefix to model ID if not already present
+        let regionalized_model_id = self.model_mapping.add_regional_prefix(model_id, &self.config.region);
+        let path = format!("/model/{}/invoke", regionalized_model_id);
         let url = format!("{}{}", self.base_url, path);
 
         // Prepare headers
@@ -134,7 +145,9 @@ impl BedrockRuntimeImpl {
         accept: Option<&str>,
         body: Vec<u8>,
     ) -> Result<BedrockStreamResponse, AppError> {
-        let path = format!("/model/{}/invoke-with-response-stream", model_id);
+        // Add regional prefix to model ID if not already present
+        let regionalized_model_id = self.model_mapping.add_regional_prefix(model_id, &self.config.region);
+        let path = format!("/model/{}/invoke-with-response-stream", regionalized_model_id);
         let url = format!("{}{}", self.base_url, path);
 
         let mut processed_headers = Self::process_headers_for_aws(headers);
@@ -429,6 +442,9 @@ pub trait BedrockRuntime: Send + Sync {
     ) -> Result<BedrockStreamResponse, AppError>;
 
     fn health_checker(&self) -> Arc<dyn crate::health::HealthChecker>;
+
+    /// Get access to the regional model mapping for prefix handling
+    fn model_mapping(&self) -> &RegionalModelMapping;
 }
 
 // Implement the trait for the real AWS client
@@ -459,6 +475,10 @@ impl BedrockRuntime for BedrockRuntimeImpl {
 
     fn health_checker(&self) -> Arc<dyn crate::health::HealthChecker> {
         BedrockRuntimeImpl::health_checker(self)
+    }
+
+    fn model_mapping(&self) -> &RegionalModelMapping {
+        BedrockRuntimeImpl::model_mapping(self)
     }
 }
 

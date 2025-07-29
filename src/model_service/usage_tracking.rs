@@ -3,6 +3,7 @@ use chrono::Utc;
 use rust_decimal::Decimal;
 
 use crate::{
+    aws::model_id_mapping::RegionalModelMapping,
     config::Config,
     database::DatabaseManager,
     error::AppError,
@@ -14,11 +15,16 @@ use serde::{Deserialize, Serialize};
 pub struct UsageTrackingService {
     config: Config,
     database: std::sync::Arc<dyn DatabaseManager>,
+    model_mapping: RegionalModelMapping,
 }
 
 impl UsageTrackingService {
     pub fn new(config: Config, database: std::sync::Arc<dyn DatabaseManager>) -> Self {
-        Self { config, database }
+        Self { 
+            config, 
+            database,
+            model_mapping: RegionalModelMapping::new(),
+        }
     }
 
     /// Extract usage metadata from AWS response body and headers
@@ -93,10 +99,13 @@ impl UsageTrackingService {
         cache_write_tokens: Option<u32>,
         cache_read_tokens: Option<u32>,
     ) -> Option<Decimal> {
+        // Strip regional prefix from model ID for cost lookup
+        let normalized_model_id = self.model_mapping.strip_regional_prefix(model_id);
+        
         match self
             .database
             .model_costs()
-            .find_by_region_and_model(region, model_id)
+            .find_by_region_and_model(region, &normalized_model_id)
             .await
         {
             Ok(Some(cost_data)) => {
@@ -126,7 +135,7 @@ impl UsageTrackingService {
                 Some(input_cost + output_cost + cache_write_cost + cache_read_cost)
             }
             Ok(None) => {
-                tracing::debug!("No cost data found for model: {}", model_id);
+                tracing::debug!("No cost data found for model: {} (normalized: {})", model_id, normalized_model_id);
                 None
             }
             Err(e) => {
@@ -144,11 +153,14 @@ impl UsageTrackingService {
     ) -> Result<(), AppError> {
         let user_id = request.user_id;
 
+        // Strip regional prefix from model ID for consistent storage and cost calculation
+        let normalized_model_id = self.model_mapping.strip_regional_prefix(&request.model_id);
+
         // Calculate cost if model pricing is available
         let cost_usd = self
             .calculate_cost(
                 &usage_metadata.region,
-                &request.model_id,
+                &request.model_id, // Use original model_id for cost calculation
                 usage_metadata.input_tokens,
                 usage_metadata.output_tokens,
                 usage_metadata.cache_write_tokens,
@@ -160,7 +172,7 @@ impl UsageTrackingService {
         let usage_record = crate::database::entities::usage_records::Model {
             id: 0, // Will be set by database
             user_id,
-            model_id: request.model_id.clone(),
+            model_id: normalized_model_id, // Store normalized model ID
             endpoint_type: request.endpoint_type.clone(),
             region: usage_metadata.region.clone(),
             request_time: Utc::now(),

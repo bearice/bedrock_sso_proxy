@@ -1,4 +1,5 @@
 use crate::aws::bedrock::{BedrockResponse, BedrockRuntime, BedrockStreamResponse};
+use crate::aws::model_id_mapping::RegionalModelMapping;
 use crate::error::AppError;
 use crate::health::{HealthCheckResult, HealthChecker};
 use async_trait::async_trait;
@@ -13,6 +14,8 @@ use std::sync::Arc;
 pub struct MockBedrockRuntime {
     /// Controls the response behavior for different model IDs
     pub response_mode: MockResponseMode,
+    /// Regional model mapping for testing prefix handling
+    model_mapping: RegionalModelMapping,
 }
 
 #[derive(Clone, Debug)]
@@ -32,6 +35,7 @@ impl MockBedrockRuntime {
     pub fn new() -> Self {
         Self {
             response_mode: MockResponseMode::AlwaysSuccess,
+            model_mapping: RegionalModelMapping::new(),
         }
     }
 
@@ -39,6 +43,7 @@ impl MockBedrockRuntime {
     pub fn with_status(status: StatusCode) -> Self {
         Self {
             response_mode: MockResponseMode::FixedStatus(status),
+            model_mapping: RegionalModelMapping::new(),
         }
     }
 
@@ -46,6 +51,7 @@ impl MockBedrockRuntime {
     pub fn for_security_tests() -> Self {
         Self {
             response_mode: MockResponseMode::PatternBased,
+            model_mapping: RegionalModelMapping::new(),
         }
     }
 
@@ -215,6 +221,10 @@ impl BedrockRuntime for MockBedrockRuntime {
 
     fn health_checker(&self) -> Arc<dyn HealthChecker> {
         Arc::new(MockHealthChecker)
+    }
+
+    fn model_mapping(&self) -> &RegionalModelMapping {
+        &self.model_mapping
     }
 }
 
