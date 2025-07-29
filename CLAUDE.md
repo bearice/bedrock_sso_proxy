@@ -9,17 +9,54 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Architecture
 
 ```
-[Client with JWT] → [Proxy Server] → [AWS Bedrock API]
-                    ↑ JWT Auth      ↑ AWS Signature V4
+[Client] → [Proxy Server with Service Layer] → [AWS Bedrock API]
+           ↑ Dual Auth + TypedCache        ↑ BedrockRuntime + Usage Tracking
+```
+
+**Service-Based Architecture:**
+```
+┌─────────────────┐    ┌──────────────────┐    ┌─────────────────┐
+│   Web Client    │    │  API Client      │    │  Admin Client   │
+│ (OAuth + JWT)   │    │ (API Keys)       │    │ (Email-based)   │
+└─────────┬───────┘    └────────┬─────────┘    └─────────┬───────┘
+          │                     │                        │
+          └─────────────────────┼────────────────────────┘
+                                │
+                    ┌───────────▼───────────┐
+                    │    Router Layer       │
+                    │  (Auth Middleware)    │
+                    └───────────┬───────────┘
+                                │
+                ┌───────────────▼───────────────┐
+                │       Service Layer           │
+                │ • ModelService (Usage Track) │
+                │ • HealthService (Monitoring) │
+                │ • OAuthService (Auth Flow)   │
+                │ • JwtService (Token Mgmt)    │
+                └───────────────┬───────────────┘
+                                │
+            ┌───────────────────▼───────────────────┐
+            │        Infrastructure Layer           │
+            │ • TypedCache (Structural Hashing)    │
+            │ • Database (SeaORM + Migrations)     │
+            │ • BedrockRuntime (AWS Integration)   │
+            │ • CostTracking (CSV + Batch Ops)     │
+            └───────────────────┬───────────────────┘
+                                │
+                    ┌───────────▼───────────┐
+                    │     AWS Bedrock       │
+                    │   (Signature V4)      │
+                    └───────────────────────┘
 ```
 
 ### Core Components
 
-- **`src/server.rs`**: Axum-based HTTP server with health checks and JWT-protected routes
-- **`src/auth.rs`**: JWT authentication middleware with HS256 validation
-- **`src/aws_http.rs`**: Direct HTTP client for AWS Bedrock with Signature V4 signing
-- **`src/config.rs`**: Configuration management using YAML files and environment variables
-- **`src/error.rs`**: Comprehensive error handling with proper HTTP status mapping
+- **`src/server/mod.rs`**: Service-based HTTP server with dependency injection
+- **`src/auth/`**: Multi-strategy authentication (JWT, OAuth, API keys)
+- **`src/model_service/`**: Model invocation with usage tracking and cost monitoring
+- **`src/database/`**: SeaORM-based data access with cached DAOs
+- **`src/cache/`**: TypedCache system with Redis/memory backends
+- **`src/aws/bedrock.rs`**: AWS Bedrock runtime with health checks
 
 ### Key Routes
 
@@ -126,7 +163,7 @@ cargo build                   # Build project (debug mode with unminified fronte
 cargo build --release         # Production build (minified frontend + source maps)
 cargo build --features frontend # Force frontend build in dev mode
 cargo run --bin bedrock_proxy # Run server
-cargo test                    # Run all tests (71 total)
+cargo test                    # Run all tests (117 total)
 cargo clippy                  # Lint code (required before commit)
 cargo fmt                     # Format code (required before commit)
 cargo clean                   # Clean Rust build artifacts only
@@ -154,10 +191,10 @@ npm run type-check            # TypeScript type checking
 ### E2E Testing
 ```bash
 # Build and run the test client
-cargo build --bin e2e
-cargo run --bin e2e -- health         # Health check
-cargo run --bin e2e -- chat           # Interactive chat
-cargo run --bin e2e -- message --text "Hello" # Single message
+cargo build --example e2e_client
+cargo run --example e2e_client -- health         # Health check
+cargo run --example e2e_client -- chat           # Interactive chat
+cargo run --example e2e_client -- message --text "Hello" # Single message
 ```
 
 ### Testing
@@ -166,7 +203,66 @@ cargo test                    # All tests (unit + integration + security)
 cargo test auth               # Authentication tests only
 cargo test security           # Security vulnerability tests
 cargo test --test integration # Integration tests only
+cargo test --test cached_integration_test # Cached DAO tests
+cargo test --test usage_tracking_integration_tests # Usage tracking tests
 ```
+
+### CLI Commands
+```bash
+# Database migration commands
+cargo run --bin bedrock_proxy -- migrate up       # Run all pending migrations
+cargo run --bin bedrock_proxy -- migrate down     # Rollback last migration
+cargo run --bin bedrock_proxy -- migrate status   # Show migration status
+```
+
+## Service Layer Architecture
+
+The proxy uses a service-based architecture with dependency injection for testability and modularity:
+
+### Core Services
+
+**ModelService** (`src/model_service/`):
+- Model invocation with usage tracking and cost monitoring
+- Handles both Bedrock and Anthropic API formats
+- Streams responses with connection management
+- Tracks token usage and costs per request
+
+**AuthService Layer** (`src/auth/`):
+- **JwtService**: Token generation, validation, and refresh
+- **OAuthService**: Multi-provider OAuth flow management
+- **ApiKeyService**: API key generation, validation, and revocation
+- **Middleware**: Unified authentication (JWT or API keys)
+
+**DatabaseManager** (`src/database/`):
+- **Cached DAOs**: Users, API keys with TypedCache integration
+- **Direct DAOs**: Usage tracking, audit logs, refresh tokens
+- **Migration management**: Automated schema updates
+
+**CacheManager** (`src/cache/`):
+- **TypedCache**: Structural hashing with automatic invalidation
+- **Backend abstraction**: Memory (dev) or Redis (prod)
+- **Health monitoring**: Connection status and performance metrics
+
+### Service Dependencies
+
+Services are injected through the `Server` struct:
+```rust
+pub struct Server {
+    pub config: Arc<Config>,
+    pub jwt_service: Arc<dyn JwtService>,
+    pub model_service: Arc<dyn ModelService>,
+    pub oauth_service: Arc<OAuthService>,
+    pub health_service: Arc<HealthService>,
+    pub database: Arc<dyn DatabaseManager>,
+    pub cache: Arc<dyn CacheManager>,
+}
+```
+
+This enables:
+- **Easy testing**: Services can be mocked individually
+- **Health monitoring**: Each service provides health checks
+- **Graceful shutdown**: Services coordinate shutdown sequence
+- **Configuration**: Services share configuration through dependency injection
 
 ## Key Dependencies
 
@@ -176,6 +272,8 @@ cargo test --test integration # Integration tests only
 - **`jsonwebtoken ^9.0`** - JWT validation (HS256 only)
 - **`aws-sigv4 ^1.0`** - AWS request signing
 - **`config ^0.15`** - Configuration management
+- **`sea-orm ^1.1`** - Database ORM with migrations
+- **`redis ^0.32`** - Redis client for distributed caching
 
 ## Configuration
 
@@ -321,4 +419,82 @@ npm run type-check # TypeScript validation
 
 ## Development Workflow
 
+### Service Testing
+For testing individual services, use the `test_utils::TestServerBuilder`:
+
+```rust
+// Create test server with all services
+let server = TestServerBuilder::new().build().await;
+
+// Test with mocked services
+let server = TestServerBuilder::new()
+    .with_jwt_service(mock_jwt_service)
+    .with_model_service(mock_model_service)
+    .build().await;
+```
+
+### Working with TypedCache
+The TypedCache system provides automatic cache invalidation:
+
+```rust
+// Define cached object
+#[derive(CachedObject)]
+struct User {
+    id: String,
+    email: String,
+}
+
+// Get typed cache
+let cache = cache_manager.get_typed_cache::<User>();
+
+// Operations are type-safe and auto-invalidate
+cache.set("user_123", &user).await?;
+```
+
+### Running Specific Tests
+```bash
+# Run specific test file
+cargo test --test integration_tests
+
+# Run specific test function
+cargo test test_jwt_validation
+
+# Run tests with output
+cargo test -- --nocapture
+
+# Run single test module
+cargo test auth::tests::
+```
+
+### Database Development
+```bash
+# Create new migration
+sea-orm-cli migrate generate create_new_table
+
+# Reset database (dev only)
+rm data/bedrock_sso.db
+cargo run --bin bedrock_proxy -- migrate up
+```
+
+### Background Process Note
 - If you need to run a test server, ask user to do it, you can not spawn background process.
+
+## Important Project Notes
+
+### Architecture Decision Records
+- **Service-based design**: All major functionality is isolated in services with dependency injection
+- **TypedCache**: Structural hashing prevents cache invalidation bugs
+- **Dual authentication**: JWT for web clients, API keys for programmatic access
+- **Graceful shutdown**: Services coordinate shutdown in proper order (tokens → streaming → cache → database)
+
+### Key Patterns
+- **Health checks**: All services implement `HealthChecker` trait for monitoring
+- **Error handling**: Consistent error types across layers with proper HTTP status mapping
+- **Configuration**: Hierarchical loading (defaults → YAML → env vars)
+- **Testing**: `TestServerBuilder` for integration tests with service mocking
+
+### Performance Considerations
+- **Streaming**: Long-lived connections are tracked and properly closed during shutdown
+- **Caching**: TypedCache with structural hashing for efficient invalidation
+- **Database**: SeaORM with connection pooling and async operations
+- **Memory**: Request body size limited to 10MB to prevent DoS attacks
