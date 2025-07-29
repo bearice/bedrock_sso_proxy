@@ -1,6 +1,6 @@
 mod parser;
 
-use chrono::{DateTime, Utc};
+use chrono::Utc;
 pub use parser::{
     CsvParseError, CsvParsingError, PricingData, PricingRecord, parse_csv_pricing_data,
 };
@@ -124,10 +124,8 @@ impl CostTrackingService {
         let stored_cost: Vec<_> = all_pricing
             .iter()
             .map(|pricing| {
-                // Parse timestamp from CSV, fallback to current time if parsing fails
-                let updated_at = DateTime::parse_from_rfc3339(&pricing.timestamp)
-                    .map(|dt| dt.with_timezone(&Utc))
-                    .unwrap_or_else(|_| Utc::now());
+                // Use parsed timestamp or current time if None
+                let updated_at = pricing.timestamp.unwrap_or_else(Utc::now);
 
                 StoredModelCost {
                     id: 0, // Will be set by database

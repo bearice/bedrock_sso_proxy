@@ -1,6 +1,11 @@
 use std::path::Path;
 use std::process::Command;
 
+#[cfg(windows)]
+const NPM_CMD: &str = "npm.cmd";
+#[cfg(not(windows))]
+const NPM_CMD: &str = "npm";
+
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     build_frontend();
@@ -32,7 +37,7 @@ fn build_frontend() {
     println!("cargo:info=Building frontend in {} mode...", build_mode);
 
     // Check if npm is available
-    let npm_check = Command::new("npm").arg("--version").output();
+    let npm_check = Command::new(NPM_CMD).arg("--version").output();
 
     if npm_check.is_err() {
         println!("cargo:warning=npm not found, skipping frontend build");
@@ -42,7 +47,7 @@ fn build_frontend() {
     // Install dependencies if node_modules doesn't exist
     if !frontend_dir.join("node_modules").exists() {
         println!("cargo:warning=Installing frontend dependencies...");
-        let install_result = Command::new("npm")
+        let install_result = Command::new(NPM_CMD)
             .arg("install")
             .current_dir(frontend_dir)
             .status();
@@ -63,7 +68,7 @@ fn build_frontend() {
     );
     let build_command = if is_debug { "build:debug" } else { "build" };
 
-    let build_result = Command::new("npm")
+    let build_result = Command::new(NPM_CMD)
         .arg("run")
         .arg(build_command)
         .current_dir(frontend_dir)

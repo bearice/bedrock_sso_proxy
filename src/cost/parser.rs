@@ -1,5 +1,5 @@
-use chrono::DateTime;
-use serde::Deserialize;
+use chrono::{DateTime, Utc};
+use serde::{Deserialize, Deserializer};
 use tracing::{debug, error, warn};
 
 /// CSV record structure for pricing data
@@ -20,7 +20,8 @@ use tracing::{debug, error, warn};
 /// ```
 ///
 /// ## Flexibility:
-/// - **Optional fields**: Can be empty (batch_input_price, batch_output_price, cache_write_price, cache_read_price)
+/// - **Optional fields**: Can be empty (batch_input_price, batch_output_price, cache_write_price, cache_read_price, timestamp)
+/// - **Timestamp formats**: Supports RFC3339, Unix timestamps, ISO8601 with/without timezone (parsing fails if invalid)
 /// - **Type conversion**: Basic string-to-number conversion
 ///
 /// ## Limitations:
@@ -41,7 +42,8 @@ pub struct PricingRecord {
     pub batch_output_price: Option<f64>,
     pub cache_write_price: Option<f64>,
     pub cache_read_price: Option<f64>,
-    pub timestamp: String,
+    #[serde(deserialize_with = "deserialize_optional_flexible_timestamp")]
+    pub timestamp: Option<DateTime<Utc>>,
 }
 
 /// Type alias for pricing data structure
@@ -99,7 +101,7 @@ impl std::error::Error for CsvParsingError {}
 /// # Example
 /// ```rust
 /// use bedrock_sso_proxy::cost::parse_csv_pricing_data;
-/// let csv_data = "region_id,model_id,model_name,provider,input_price,output_price,batch_input_price,batch_output_price,cache_write_price,cache_read_price,timestamp\nus-east-1,claude-3-sonnet,Claude 3 Sonnet,Anthropic,0.003,0.015,,,0.0018,0.00036,2024-01-15T10:30:00Z";
+/// let csv_data = "region_id,model_id,model_name,provider,input_price,output_price,batch_input_price,batch_output_price,cache_write_price,cache_read_price,timestamp\nus-east-1,claude-3-sonnet,Claude 3 Sonnet,Anthropic,0.003,0.015,,,0.0018,0.00036,2024-01-15T10:30:00";
 /// match parse_csv_pricing_data(csv_data) {
 ///     Ok(pricing) => println!("Successfully parsed {} records", pricing.len()),
 ///     Err(e) => println!("Parse failed: {}", e),
@@ -352,20 +354,70 @@ fn validate_record(record: &PricingRecord) -> Result<(), String> {
         }
     }
 
-    // Validate timestamp format
-    if record.timestamp.trim().is_empty() {
-        return Err("timestamp cannot be empty".to_string());
-    }
-
-    // Try to parse timestamp to validate format
-    if let Err(e) = DateTime::parse_from_rfc3339(&record.timestamp) {
-        return Err(format!(
-            "invalid timestamp format '{}': {}",
-            record.timestamp, e
-        ));
-    }
+    // Timestamp is now parsed automatically during deserialization
 
     Ok(())
+}
+
+/// Custom deserializer for optional flexible timestamp formats
+fn deserialize_optional_flexible_timestamp<'de, D>(deserializer: D) -> Result<Option<DateTime<Utc>>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let timestamp_str = String::deserialize(deserializer)?;
+    
+    // Handle empty strings
+    if timestamp_str.trim().is_empty() {
+        return Ok(None);
+    }
+    
+    // Try RFC 3339 format first
+    if let Ok(dt) = DateTime::parse_from_rfc3339(&timestamp_str) {
+        return Ok(Some(dt.with_timezone(&Utc)));
+    }
+    
+    // Try RFC 3339 format with Z appended (for naive timestamps)
+    let timestamp_with_z = if timestamp_str.ends_with('Z') {
+        timestamp_str.clone()
+    } else {
+        format!("{}Z", timestamp_str)
+    };
+    
+    if let Ok(dt) = DateTime::parse_from_rfc3339(&timestamp_with_z) {
+        return Ok(Some(dt.with_timezone(&Utc)));
+    }
+    
+    // Try Unix timestamp (integer seconds)
+    if let Ok(timestamp) = timestamp_str.parse::<i64>() {
+        if let Some(dt) = DateTime::from_timestamp(timestamp, 0) {
+            return Ok(Some(dt));
+        }
+    }
+    
+    // Try Unix timestamp (float seconds)
+    if let Ok(timestamp) = timestamp_str.parse::<f64>() {
+        let secs = timestamp.floor() as i64;
+        let nanos = ((timestamp - timestamp.floor()) * 1_000_000_000.0) as u32;
+        if let Some(dt) = DateTime::from_timestamp(secs, nanos) {
+            return Ok(Some(dt));
+        }
+    }
+    
+    // Try ISO 8601 format without timezone (assume UTC)
+    if let Ok(naive_dt) = chrono::NaiveDateTime::parse_from_str(&timestamp_str, "%Y-%m-%dT%H:%M:%S") {
+        return Ok(Some(naive_dt.and_utc()));
+    }
+    
+    // Try ISO 8601 format with microseconds without timezone (assume UTC)
+    if let Ok(naive_dt) = chrono::NaiveDateTime::parse_from_str(&timestamp_str, "%Y-%m-%dT%H:%M:%S%.f") {
+        return Ok(Some(naive_dt.and_utc()));
+    }
+    
+    // If all parsing fails, return error
+    Err(serde::de::Error::custom(format!(
+        "invalid timestamp format '{}': expected RFC3339, Unix timestamp, or ISO8601", 
+        timestamp_str
+    )))
 }
 
 /// Get raw line content for error reporting

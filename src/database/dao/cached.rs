@@ -182,7 +182,7 @@ where
                 tracing::warn!("Failed to invalidate cache key {}: {}", key, cache_error);
                 // Continue with other keys on error
             } else {
-                tracing::debug!("Invalidated cache key: {}", key);
+                tracing::trace!("Flushed cache key: {}", key);
             }
         }
         Ok(())
