@@ -35,14 +35,14 @@ export function DashboardPage() {
   useEffect(() => {
     const fetchUserInfo = async () => {
       if (!token) return;
-      
+
       try {
         const response = await fetch('/auth/me', {
           headers: {
-            'Authorization': `Bearer ${token}`,
+            Authorization: `Bearer ${token}`,
           },
         });
-        
+
         if (response.ok) {
           const data = await response.json();
           setUserInfo(data);
@@ -189,42 +189,58 @@ export function DashboardPage() {
       </div>
 
       {/* Claude Code Quick Start */}
-      <div className="card" style={{ background: '#f8fafc', border: '2px solid #4f46e5', borderRadius: '12px' }}>
+      <div
+        className="card"
+        style={{ background: '#f8fafc', border: '2px solid #4f46e5', borderRadius: '12px' }}
+      >
         <h2 style={{ color: '#4f46e5', fontSize: '1.5rem', marginBottom: '1rem' }}>
           <Terminal size={24} style={{ marginRight: '0.5rem', verticalAlign: 'text-bottom' }} />
           🚀 Use with Claude Code
         </h2>
-        <p style={{ fontSize: '1.1rem', marginBottom: '1.5rem', color: '#374151', fontWeight: '500' }}>
+        <p
+          style={{
+            fontSize: '1.1rem',
+            marginBottom: '1.5rem',
+            color: '#374151',
+            fontWeight: '500',
+          }}
+        >
           Ready to use! Copy this command to use Claude Code with your authenticated proxy:
         </p>
 
-        <div style={{
-          background: '#1f2937',
-          color: '#f9fafb',
-          padding: '1rem',
-          borderRadius: '8px',
-          marginBottom: '1rem',
-          fontFamily: 'monospace',
-          fontSize: '0.9rem',
-          wordBreak: 'break-all',
-          border: '1px solid #374151'
-        }}>
-          export ANTHROPIC_AUTH_TOKEN={token?.substring(0, 40)}...<br />
-          export ANTHROPIC_BASE_URL={currentDomain}/anthropic<br />
+        <div
+          style={{
+            background: '#1f2937',
+            color: '#f9fafb',
+            padding: '1rem',
+            borderRadius: '8px',
+            marginBottom: '1rem',
+            fontFamily: 'monospace',
+            fontSize: '0.9rem',
+            wordBreak: 'break-all',
+            border: '1px solid #374151',
+          }}
+        >
+          export ANTHROPIC_AUTH_TOKEN={token?.substring(0, 40)}...
+          <br />
+          export ANTHROPIC_BASE_URL={currentDomain}/anthropic
+          <br />
           claude
         </div>
 
         <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
           <button
-            onClick={() => copyToClipboard(
-              `export ANTHROPIC_AUTH_TOKEN=${token}\nexport ANTHROPIC_BASE_URL=${currentDomain}/anthropic\nclaude`,
-              'claude-command'
-            )}
+            onClick={() =>
+              copyToClipboard(
+                `export ANTHROPIC_AUTH_TOKEN=${token}\nexport ANTHROPIC_BASE_URL=${currentDomain}/anthropic\nclaude`,
+                'claude-command'
+              )
+            }
             className="btn"
             style={{
               background: '#4f46e5',
               color: 'white',
-              border: '1px solid #4f46e5'
+              border: '1px solid #4f46e5',
             }}
           >
             <Copy size={16} />
@@ -237,7 +253,7 @@ export function DashboardPage() {
             style={{
               background: '#6b7280',
               color: 'white',
-              border: '1px solid #6b7280'
+              border: '1px solid #6b7280',
             }}
           >
             <Key size={16} />
@@ -245,16 +261,19 @@ export function DashboardPage() {
           </button>
         </div>
 
-        <div style={{
-          background: '#ecfdf5',
-          color: '#047857',
-          padding: '0.75rem',
-          borderRadius: '6px',
-          marginTop: '1rem',
-          fontSize: '0.9rem',
-          border: '1px solid #a7f3d0'
-        }}>
-          💡 <strong>Quick tip:</strong> Run this command in your terminal to start using Claude Code with this proxy immediately!
+        <div
+          style={{
+            background: '#ecfdf5',
+            color: '#047857',
+            padding: '0.75rem',
+            borderRadius: '6px',
+            marginTop: '1rem',
+            fontSize: '0.9rem',
+            border: '1px solid #a7f3d0',
+          }}
+        >
+          💡 <strong>Quick tip:</strong> Run this command in your terminal to start using Claude
+          Code with this proxy immediately!
         </div>
       </div>
 

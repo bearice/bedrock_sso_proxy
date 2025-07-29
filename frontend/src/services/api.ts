@@ -61,7 +61,7 @@ function createAuthenticatedRequest(token: string, options: RequestInit = {}): R
   return {
     ...options,
     headers: {
-      'Authorization': `Bearer ${token}`,
+      Authorization: `Bearer ${token}`,
       ...options.headers,
     },
   };
@@ -139,10 +139,14 @@ export const usageApi = {
     if (query?.model) params.append('model', query.model);
     if (query?.start_date) params.append('start_date', query.start_date);
     if (query?.end_date) params.append('end_date', query.end_date);
-    if (query?.success_only !== undefined) params.append('success_only', query.success_only.toString());
+    if (query?.success_only !== undefined)
+      params.append('success_only', query.success_only.toString());
 
     const queryString = params.toString() ? `?${params.toString()}` : '';
-    return fetchApi<UsageRecordsResponse>(`/api/usage/records${queryString}`, createAuthenticatedRequest(token));
+    return fetchApi<UsageRecordsResponse>(
+      `/api/usage/records${queryString}`,
+      createAuthenticatedRequest(token)
+    );
   },
 
   // Get user's usage statistics
@@ -152,7 +156,10 @@ export const usageApi = {
     if (query?.end_date) params.append('end_date', query.end_date);
 
     const queryString = params.toString() ? `?${params.toString()}` : '';
-    return fetchApi<UsageStats>(`/api/usage/stats${queryString}`, createAuthenticatedRequest(token));
+    return fetchApi<UsageStats>(
+      `/api/usage/stats${queryString}`,
+      createAuthenticatedRequest(token)
+    );
   },
 
   // Admin endpoints (for future use)
@@ -163,10 +170,14 @@ export const usageApi = {
     if (query?.model) params.append('model', query.model);
     if (query?.start_date) params.append('start_date', query.start_date);
     if (query?.end_date) params.append('end_date', query.end_date);
-    if (query?.success_only !== undefined) params.append('success_only', query.success_only.toString());
+    if (query?.success_only !== undefined)
+      params.append('success_only', query.success_only.toString());
 
     const queryString = params.toString() ? `?${params.toString()}` : '';
-    return fetchApi<UsageRecordsResponse>(`/api/admin/usage/records${queryString}`, createAuthenticatedRequest(token));
+    return fetchApi<UsageRecordsResponse>(
+      `/api/admin/usage/records${queryString}`,
+      createAuthenticatedRequest(token)
+    );
   },
 
   async getSystemUsageStats(token: string, query?: UsageStatsQuery): Promise<UsageStats> {
@@ -175,7 +186,10 @@ export const usageApi = {
     if (query?.end_date) params.append('end_date', query.end_date);
 
     const queryString = params.toString() ? `?${params.toString()}` : '';
-    return fetchApi<UsageStats>(`/api/admin/usage/stats${queryString}`, createAuthenticatedRequest(token));
+    return fetchApi<UsageStats>(
+      `/api/admin/usage/stats${queryString}`,
+      createAuthenticatedRequest(token)
+    );
   },
 
   async getTopModels(token: string, query?: UsageStatsQuery): Promise<TopModelsResponse> {
@@ -184,7 +198,58 @@ export const usageApi = {
     if (query?.end_date) params.append('end_date', query.end_date);
 
     const queryString = params.toString() ? `?${params.toString()}` : '';
-    return fetchApi<TopModelsResponse>(`/api/admin/usage/top-models${queryString}`, createAuthenticatedRequest(token));
+    return fetchApi<TopModelsResponse>(
+      `/api/admin/usage/top-models${queryString}`,
+      createAuthenticatedRequest(token)
+    );
+  },
+
+  // Convenience methods with new names for backward compatibility
+  async getUsageRecords(token: string, query?: UsageQuery): Promise<UsageRecordsResponse> {
+    return this.getUserUsageRecords(token, query);
+  },
+
+  async getUsageStats(token: string, query?: UsageStatsQuery): Promise<UsageStats> {
+    return this.getUserUsageStats(token, query);
+  },
+
+  async getAvailableModels(_token: string): Promise<string[]> {
+    // For now, return common model IDs - in a real implementation this would be an API call
+    return [
+      'anthropic.claude-3-haiku-20240307-v1:0',
+      'anthropic.claude-3-sonnet-20240229-v1:0',
+      'anthropic.claude-3-opus-20240229-v1:0',
+      'anthropic.claude-sonnet-4-20250514-v1:0',
+    ];
+  },
+
+  async exportUsageData(
+    token: string,
+    query: {
+      start_date?: string;
+      end_date?: string;
+      model?: string;
+      success?: boolean;
+      format: 'csv';
+    }
+  ): Promise<Blob> {
+    const params = new URLSearchParams();
+    if (query.start_date) params.append('start_date', query.start_date);
+    if (query.end_date) params.append('end_date', query.end_date);
+    if (query.model) params.append('model', query.model);
+    if (query.success !== undefined) params.append('success', query.success.toString());
+    params.append('format', query.format);
+
+    const queryString = params.toString() ? `?${params.toString()}` : '';
+    const response = await fetch(`${API_BASE}/api/usage/export${queryString}`, {
+      ...createAuthenticatedRequest(token),
+    });
+
+    if (!response.ok) {
+      throw new ApiError(response.status, `Export failed: ${response.statusText}`);
+    }
+
+    return response.blob();
   },
 };
 

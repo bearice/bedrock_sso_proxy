@@ -22,7 +22,6 @@ export interface TokenResponse {
   scope: string;
 }
 
-
 export interface TokenRequest {
   provider: string;
   authorization_code: string;

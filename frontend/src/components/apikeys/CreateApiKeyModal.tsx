@@ -9,7 +9,12 @@ interface CreateApiKeyModalProps {
   isCreating: boolean;
 }
 
-export function CreateApiKeyModal({ isOpen, onClose, onCreate, isCreating }: CreateApiKeyModalProps) {
+export function CreateApiKeyModal({
+  isOpen,
+  onClose,
+  onCreate,
+  isCreating,
+}: CreateApiKeyModalProps) {
   const [name, setName] = useState('');
   const [expiresInDays, setExpiresInDays] = useState<number | undefined>(90);
   const [errors, setErrors] = useState<{ name?: string; expiresInDays?: string }>({});
@@ -31,27 +36,30 @@ export function CreateApiKeyModal({ isOpen, onClose, onCreate, isCreating }: Cre
     return Object.keys(newErrors).length === 0;
   }, [name, expiresInDays]);
 
-  const handleSubmit = useCallback(async (e: React.FormEvent) => {
-    e.preventDefault();
-    
-    if (!validateForm()) {
-      return;
-    }
+  const handleSubmit = useCallback(
+    async (e: React.FormEvent) => {
+      e.preventDefault();
 
-    try {
-      await onCreate({
-        name: name.trim(),
-        expires_in_days: expiresInDays,
-      });
-      
-      // Reset form on success
-      setName('');
-      setExpiresInDays(90);
-      setErrors({});
-    } catch (error) {
-      console.error('Failed to create API key:', error);
-    }
-  }, [name, expiresInDays, onCreate, validateForm]);
+      if (!validateForm()) {
+        return;
+      }
+
+      try {
+        await onCreate({
+          name: name.trim(),
+          expires_in_days: expiresInDays,
+        });
+
+        // Reset form on success
+        setName('');
+        setExpiresInDays(90);
+        setErrors({});
+      } catch (error) {
+        console.error('Failed to create API key:', error);
+      }
+    },
+    [name, expiresInDays, onCreate, validateForm]
+  );
 
   const handleClose = useCallback(() => {
     if (!isCreating) {
@@ -65,37 +73,43 @@ export function CreateApiKeyModal({ isOpen, onClose, onCreate, isCreating }: Cre
   if (!isOpen) return null;
 
   return (
-    <div style={{
-      position: 'fixed',
-      top: 0,
-      left: 0,
-      right: 0,
-      bottom: 0,
-      backgroundColor: 'rgba(0, 0, 0, 0.5)',
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-      zIndex: 1000,
-    }}>
-      <div style={{
-        backgroundColor: 'white',
-        borderRadius: '8px',
-        padding: '1.5rem',
-        width: '90%',
-        maxWidth: '500px',
-        maxHeight: '90vh',
-        overflowY: 'auto',
-        boxShadow: '0 10px 25px rgba(0, 0, 0, 0.2)',
-      }}>
+    <div
+      style={{
+        position: 'fixed',
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        backgroundColor: 'rgba(0, 0, 0, 0.5)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        zIndex: 1000,
+      }}
+    >
+      <div
+        style={{
+          backgroundColor: 'white',
+          borderRadius: '8px',
+          padding: '1.5rem',
+          width: '90%',
+          maxWidth: '500px',
+          maxHeight: '90vh',
+          overflowY: 'auto',
+          boxShadow: '0 10px 25px rgba(0, 0, 0, 0.2)',
+        }}
+      >
         {/* Header */}
-        <div style={{
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          marginBottom: '1.5rem',
-          paddingBottom: '1rem',
-          borderBottom: '1px solid #e9ecef'
-        }}>
+        <div
+          style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            marginBottom: '1.5rem',
+            paddingBottom: '1rem',
+            borderBottom: '1px solid #e9ecef',
+          }}
+        >
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
             <Key size={24} style={{ color: '#4f46e5' }} />
             <h2 style={{ margin: 0, fontSize: '1.5rem' }}>Create API Key</h2>
@@ -118,12 +132,15 @@ export function CreateApiKeyModal({ isOpen, onClose, onCreate, isCreating }: Cre
         <form onSubmit={handleSubmit}>
           {/* Name Field */}
           <div style={{ marginBottom: '1.5rem' }}>
-            <label htmlFor="api-key-name" style={{
-              display: 'block',
-              marginBottom: '0.5rem',
-              fontWeight: '500',
-              fontSize: '0.875rem'
-            }}>
+            <label
+              htmlFor="api-key-name"
+              style={{
+                display: 'block',
+                marginBottom: '0.5rem',
+                fontWeight: '500',
+                fontSize: '0.875rem',
+              }}
+            >
               API Key Name *
             </label>
             <input
@@ -145,36 +162,46 @@ export function CreateApiKeyModal({ isOpen, onClose, onCreate, isCreating }: Cre
               }}
             />
             {errors.name && (
-              <div style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '0.25rem',
-                color: '#dc3545',
-                fontSize: '0.875rem',
-                marginTop: '0.25rem'
-              }}>
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.25rem',
+                  color: '#dc3545',
+                  fontSize: '0.875rem',
+                  marginTop: '0.25rem',
+                }}
+              >
                 <AlertCircle size={14} />
                 {errors.name}
               </div>
             )}
-            <div style={{
-              fontSize: '0.75rem',
-              color: '#6c757d',
-              marginTop: '0.25rem'
-            }}>
+            <div
+              style={{
+                fontSize: '0.75rem',
+                color: '#6c757d',
+                marginTop: '0.25rem',
+              }}
+            >
               Choose a descriptive name to identify this key&apos;s purpose
             </div>
           </div>
 
           {/* Expiration Field */}
           <div style={{ marginBottom: '1.5rem' }}>
-            <label htmlFor="api-key-expiration" style={{
-              display: 'block',
-              marginBottom: '0.5rem',
-              fontWeight: '500',
-              fontSize: '0.875rem'
-            }}>
-              <Calendar size={16} style={{ marginRight: '0.25rem', verticalAlign: 'text-bottom' }} />
+            <label
+              htmlFor="api-key-expiration"
+              style={{
+                display: 'block',
+                marginBottom: '0.5rem',
+                fontWeight: '500',
+                fontSize: '0.875rem',
+              }}
+            >
+              <Calendar
+                size={16}
+                style={{ marginRight: '0.25rem', verticalAlign: 'text-bottom' }}
+              />
               Expiration
             </label>
             <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
@@ -182,7 +209,9 @@ export function CreateApiKeyModal({ isOpen, onClose, onCreate, isCreating }: Cre
                 id="api-key-expiration"
                 type="number"
                 value={expiresInDays || ''}
-                onChange={(e) => setExpiresInDays(e.target.value ? parseInt(e.target.value) : undefined)}
+                onChange={(e) =>
+                  setExpiresInDays(e.target.value ? parseInt(e.target.value) : undefined)
+                }
                 placeholder="90"
                 min="1"
                 max="365"
@@ -217,37 +246,42 @@ export function CreateApiKeyModal({ isOpen, onClose, onCreate, isCreating }: Cre
               </button>
             </div>
             {errors.expiresInDays && (
-              <div style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '0.25rem',
-                color: '#dc3545',
-                fontSize: '0.875rem',
-                marginTop: '0.25rem'
-              }}>
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.25rem',
+                  color: '#dc3545',
+                  fontSize: '0.875rem',
+                  marginTop: '0.25rem',
+                }}
+              >
                 <AlertCircle size={14} />
                 {errors.expiresInDays}
               </div>
             )}
-            <div style={{
-              fontSize: '0.75rem',
-              color: '#6c757d',
-              marginTop: '0.25rem'
-            }}>
-              {expiresInDays 
+            <div
+              style={{
+                fontSize: '0.75rem',
+                color: '#6c757d',
+                marginTop: '0.25rem',
+              }}
+            >
+              {expiresInDays
                 ? `Key will expire in ${expiresInDays} days`
-                : 'Key will never expire (not recommended for production)'
-              }
+                : 'Key will never expire (not recommended for production)'}
             </div>
           </div>
 
           {/* Quick Expiration Presets */}
           <div style={{ marginBottom: '1.5rem' }}>
-            <div style={{
-              fontSize: '0.875rem',
-              color: '#6c757d',
-              marginBottom: '0.5rem'
-            }}>
+            <div
+              style={{
+                fontSize: '0.875rem',
+                color: '#6c757d',
+                marginBottom: '0.5rem',
+              }}
+            >
               Quick presets:
             </div>
             <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
@@ -275,18 +309,18 @@ export function CreateApiKeyModal({ isOpen, onClose, onCreate, isCreating }: Cre
           </div>
 
           {/* Security Warning */}
-          <div style={{
-            background: '#fff3cd',
-            border: '1px solid #ffeaa7',
-            borderRadius: '6px',
-            padding: '1rem',
-            marginBottom: '1.5rem',
-            fontSize: '0.875rem',
-            color: '#856404'
-          }}>
-            <div style={{ fontWeight: '500', marginBottom: '0.5rem' }}>
-              🔐 Security Guidelines:
-            </div>
+          <div
+            style={{
+              background: '#fff3cd',
+              border: '1px solid #ffeaa7',
+              borderRadius: '6px',
+              padding: '1rem',
+              marginBottom: '1.5rem',
+              fontSize: '0.875rem',
+              color: '#856404',
+            }}
+          >
+            <div style={{ fontWeight: '500', marginBottom: '0.5rem' }}>🔐 Security Guidelines:</div>
             <ul style={{ margin: 0, paddingLeft: '1.2rem' }}>
               <li>This key will have the same permissions as your account</li>
               <li>You&apos;ll only see the full key once - copy it immediately</li>
@@ -296,13 +330,15 @@ export function CreateApiKeyModal({ isOpen, onClose, onCreate, isCreating }: Cre
           </div>
 
           {/* Actions */}
-          <div style={{
-            display: 'flex',
-            gap: '0.75rem',
-            justifyContent: 'flex-end',
-            paddingTop: '1rem',
-            borderTop: '1px solid #e9ecef'
-          }}>
+          <div
+            style={{
+              display: 'flex',
+              gap: '0.75rem',
+              justifyContent: 'flex-end',
+              paddingTop: '1rem',
+              borderTop: '1px solid #e9ecef',
+            }}
+          >
             <button
               type="button"
               onClick={handleClose}
@@ -328,8 +364,8 @@ export function CreateApiKeyModal({ isOpen, onClose, onCreate, isCreating }: Cre
                 color: 'white',
                 border: '1px solid #4f46e5',
                 padding: '0.75rem 1.5rem',
-                opacity: (isCreating || !name.trim()) ? 0.5 : 1,
-                cursor: (isCreating || !name.trim()) ? 'not-allowed' : 'pointer',
+                opacity: isCreating || !name.trim() ? 0.5 : 1,
+                cursor: isCreating || !name.trim() ? 'not-allowed' : 'pointer',
               }}
             >
               {isCreating ? 'Creating...' : 'Create API Key'}

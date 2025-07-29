@@ -37,11 +37,15 @@ export interface UsageQuery {
   start_date?: string;
   end_date?: string;
   success_only?: boolean;
+  min_tokens?: number;
+  max_tokens?: number;
 }
 
 export interface UsageStatsQuery {
   start_date?: string;
   end_date?: string;
+  model?: string;
+  success?: boolean;
 }
 
 export interface UsageRecordsResponse {

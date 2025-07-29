@@ -78,22 +78,26 @@ export function ApiKeyCard({ apiKey, onRevoke, newlyCreatedKey }: ApiKeyCardProp
 
   const getExpirationWarning = () => {
     if (!apiKey.expires_at || isRevoked) return null;
-    
+
     const expiryDate = new Date(apiKey.expires_at);
     const now = new Date();
-    const daysUntilExpiry = Math.ceil((expiryDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
-    
+    const daysUntilExpiry = Math.ceil(
+      (expiryDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)
+    );
+
     if (daysUntilExpiry <= 0) return null; // Already handled by isExpired
     if (daysUntilExpiry <= 7) {
       return (
-        <div style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: '0.25rem',
-          color: '#fd7e14',
-          fontSize: '0.875rem',
-          marginTop: '0.5rem'
-        }}>
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '0.25rem',
+            color: '#fd7e14',
+            fontSize: '0.875rem',
+            marginTop: '0.5rem',
+          }}
+        >
           <AlertTriangle size={14} />
           Expires in {daysUntilExpiry} day{daysUntilExpiry !== 1 ? 's' : ''}
         </div>
@@ -103,31 +107,37 @@ export function ApiKeyCard({ apiKey, onRevoke, newlyCreatedKey }: ApiKeyCardProp
   };
 
   return (
-    <div style={{
-      border: `2px solid ${getStatusColor()}`,
-      borderRadius: '8px',
-      padding: '1rem',
-      background: isActive ? '#ffffff' : '#f8f9fa',
-      opacity: isActive ? 1 : 0.8,
-    }}>
+    <div
+      style={{
+        border: `2px solid ${getStatusColor()}`,
+        borderRadius: '8px',
+        padding: '1rem',
+        background: isActive ? '#ffffff' : '#f8f9fa',
+        opacity: isActive ? 1 : 0.8,
+      }}
+    >
       {/* Header */}
-      <div style={{
-        display: 'flex',
-        justifyContent: 'space-between',
-        alignItems: 'flex-start',
-        marginBottom: '0.75rem'
-      }}>
+      <div
+        style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'flex-start',
+          marginBottom: '0.75rem',
+        }}
+      >
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
           <Key size={20} style={{ color: '#6c757d' }} />
           <h4 style={{ margin: 0, fontSize: '1.1rem' }}>{apiKey.name}</h4>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
           {getStatusIcon()}
-          <span style={{
-            fontSize: '0.875rem',
-            fontWeight: '500',
-            color: getStatusColor()
-          }}>
+          <span
+            style={{
+              fontSize: '0.875rem',
+              fontWeight: '500',
+              color: getStatusColor(),
+            }}
+          >
             {getStatusText()}
           </span>
         </div>
@@ -135,28 +145,38 @@ export function ApiKeyCard({ apiKey, onRevoke, newlyCreatedKey }: ApiKeyCardProp
 
       {/* Key Display (only for newly created keys) */}
       {newlyCreatedKey && (
-        <div style={{
-          background: '#1f2937',
-          color: '#f9fafb',
-          padding: '0.75rem',
-          borderRadius: '6px',
-          marginBottom: '0.75rem',
-          fontFamily: 'monospace',
-          fontSize: '0.875rem',
-          wordBreak: 'break-all',
-          border: '1px solid #374151'
-        }}>
+        <div
+          style={{
+            background: '#1f2937',
+            color: '#f9fafb',
+            padding: '0.75rem',
+            borderRadius: '6px',
+            marginBottom: '0.75rem',
+            fontFamily: 'monospace',
+            fontSize: '0.875rem',
+            wordBreak: 'break-all',
+            border: '1px solid #374151',
+          }}
+        >
           {newlyCreatedKey}
         </div>
       )}
 
       {/* Metadata */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', fontSize: '0.875rem', color: '#6c757d' }}>
+      <div
+        style={{
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '0.5rem',
+          fontSize: '0.875rem',
+          color: '#6c757d',
+        }}
+      >
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
           <Calendar size={14} />
           <span>Created: {formatDate(apiKey.created_at)}</span>
         </div>
-        
+
         {apiKey.expires_at && (
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
             <AlertTriangle size={14} />
@@ -176,13 +196,15 @@ export function ApiKeyCard({ apiKey, onRevoke, newlyCreatedKey }: ApiKeyCardProp
       {getExpirationWarning()}
 
       {/* Actions */}
-      <div style={{
-        display: 'flex',
-        gap: '0.5rem',
-        marginTop: '1rem',
-        paddingTop: '0.75rem',
-        borderTop: '1px solid #e9ecef'
-      }}>
+      <div
+        style={{
+          display: 'flex',
+          gap: '0.5rem',
+          marginTop: '1rem',
+          paddingTop: '0.75rem',
+          borderTop: '1px solid #e9ecef',
+        }}
+      >
         {newlyCreatedKey && (
           <button
             onClick={() => copyToClipboard(newlyCreatedKey)}
@@ -192,7 +214,7 @@ export function ApiKeyCard({ apiKey, onRevoke, newlyCreatedKey }: ApiKeyCardProp
               color: 'white',
               border: '1px solid #4f46e5',
               padding: '0.5rem 1rem',
-              fontSize: '0.875rem'
+              fontSize: '0.875rem',
             }}
           >
             <Copy size={14} />
@@ -209,7 +231,7 @@ export function ApiKeyCard({ apiKey, onRevoke, newlyCreatedKey }: ApiKeyCardProp
               color: 'white',
               border: '1px solid #dc3545',
               padding: '0.5rem 1rem',
-              fontSize: '0.875rem'
+              fontSize: '0.875rem',
             }}
           >
             <Trash2 size={14} />
@@ -219,9 +241,7 @@ export function ApiKeyCard({ apiKey, onRevoke, newlyCreatedKey }: ApiKeyCardProp
 
         {showRevokeConfirm && (
           <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-            <span style={{ fontSize: '0.875rem', color: '#dc3545' }}>
-              Are you sure?
-            </span>
+            <span style={{ fontSize: '0.875rem', color: '#dc3545' }}>Are you sure?</span>
             <button
               onClick={handleRevoke}
               disabled={isRevoking}
@@ -231,7 +251,7 @@ export function ApiKeyCard({ apiKey, onRevoke, newlyCreatedKey }: ApiKeyCardProp
                 color: 'white',
                 border: '1px solid #dc3545',
                 padding: '0.375rem 0.75rem',
-                fontSize: '0.75rem'
+                fontSize: '0.75rem',
               }}
             >
               {isRevoking ? 'Revoking...' : 'Yes, Revoke'}
@@ -244,7 +264,7 @@ export function ApiKeyCard({ apiKey, onRevoke, newlyCreatedKey }: ApiKeyCardProp
                 color: 'white',
                 border: '1px solid #6c757d',
                 padding: '0.375rem 0.75rem',
-                fontSize: '0.75rem'
+                fontSize: '0.75rem',
               }}
             >
               Cancel
@@ -255,16 +275,19 @@ export function ApiKeyCard({ apiKey, onRevoke, newlyCreatedKey }: ApiKeyCardProp
 
       {/* Warning for newly created keys */}
       {newlyCreatedKey && (
-        <div style={{
-          background: '#fff3cd',
-          color: '#856404',
-          padding: '0.75rem',
-          borderRadius: '6px',
-          marginTop: '0.75rem',
-          fontSize: '0.875rem',
-          border: '1px solid #ffeaa7'
-        }}>
-          <strong>⚠️ Important:</strong> This is the only time you&apos;ll see this key. Make sure to copy and store it securely!
+        <div
+          style={{
+            background: '#fff3cd',
+            color: '#856404',
+            padding: '0.75rem',
+            borderRadius: '6px',
+            marginTop: '0.75rem',
+            fontSize: '0.875rem',
+            border: '1px solid #ffeaa7',
+          }}
+        >
+          <strong>⚠️ Important:</strong> This is the only time you&apos;ll see this key. Make sure
+          to copy and store it securely!
         </div>
       )}
     </div>
