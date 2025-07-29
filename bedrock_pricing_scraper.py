@@ -4,6 +4,7 @@ import requests
 import json
 import re
 import csv
+from datetime import datetime
 # from bs4 import BeautifulSoup  # Not needed, using regex instead
 import sys
 
@@ -411,6 +412,9 @@ def main():
 
     # Create CSV data
     csv_data = []
+    
+    # Get current timestamp for all rows
+    current_timestamp = datetime.now().isoformat()
 
     # Get all unique regions from both JSON sources
     all_regions = set()
@@ -482,14 +486,15 @@ def main():
                     'batch_input_price': batch_input_price,
                     'batch_output_price': batch_output_price,
                     'cache_write_price': cache_write_price,
-                    'cache_read_price': cache_read_price
+                    'cache_read_price': cache_read_price,
+                    'timestamp': current_timestamp
                 })
 
     # Write CSV file
     output_file = 'bedrock_pricing.csv'
     with open(output_file, 'w', newline='', encoding='utf-8') as csvfile:
         fieldnames = ['region_id', 'model_id', 'model_name', 'provider', 'input_price', 'output_price',
-                      'batch_input_price', 'batch_output_price', 'cache_write_price', 'cache_read_price']
+                      'batch_input_price', 'batch_output_price', 'cache_write_price', 'cache_read_price', 'timestamp']
         writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
 
         writer.writeheader()

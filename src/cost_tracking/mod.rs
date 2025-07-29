@@ -1,7 +1,9 @@
 mod parser;
 
-use chrono::Utc;
-pub use parser::*;
+use chrono::{DateTime, Utc};
+pub use parser::{
+    CsvParseError, CsvParsingError, PricingData, PricingRecord, parse_csv_pricing_data,
+};
 
 use crate::{
     database::{DatabaseManager, entities::StoredModelCost},
@@ -44,7 +46,37 @@ impl CostTrackingService {
         let mut result = UpdateCostsResult { total_processed: 0 };
 
         // Parse CSV content
-        let all_pricing = parser::parse_csv_pricing_data(csv_content);
+        let all_pricing = match parser::parse_csv_pricing_data(csv_content) {
+            Ok(pricing) => pricing,
+            Err(parse_error) => {
+                // Create a detailed error message with specific line information
+                let mut error_details = vec![parse_error.summary.clone()];
+
+                if !parse_error.header_errors.is_empty() {
+                    error_details.push(format!(
+                        "Header errors: {}",
+                        parse_error.header_errors.join("; ")
+                    ));
+                }
+
+                if !parse_error.parse_errors.is_empty() {
+                    error_details.push("Parse errors:".to_string());
+                    for err in &parse_error.parse_errors {
+                        let line_info = if let Some(ref raw_line) = err.raw_line {
+                            format!(" (line content: {})", raw_line)
+                        } else {
+                            String::new()
+                        };
+                        error_details.push(format!(
+                            "  - Line {}: {}{}",
+                            err.line_number, err.message, line_info
+                        ));
+                    }
+                }
+
+                return Err(AppError::BadRequest(error_details.join("\n")));
+            }
+        };
 
         result.total_processed = all_pricing.len();
         debug!(
@@ -55,6 +87,11 @@ impl CostTrackingService {
         let stored_cost: Vec<_> = all_pricing
             .iter()
             .map(|pricing| {
+                // Parse timestamp from CSV, fallback to current time if parsing fails
+                let updated_at = DateTime::parse_from_rfc3339(&pricing.timestamp)
+                    .map(|dt| dt.with_timezone(&Utc))
+                    .unwrap_or_else(|_| Utc::now());
+
                 StoredModelCost {
                     id: 0, // Will be set by database
                     region: pricing.region_id.clone(),
@@ -69,7 +106,7 @@ impl CostTrackingService {
                     cache_read_cost_per_1k_tokens: pricing
                         .cache_read_price
                         .map(|c| Decimal::from_f64_retain(c).unwrap_or_default()),
-                    updated_at: Utc::now(),
+                    updated_at,
                 }
             })
             .collect();
