@@ -3,7 +3,7 @@ pub mod auth;
 pub mod aws;
 pub mod cache;
 pub mod config;
-pub mod cost_tracking;
+pub mod cost;
 pub mod database;
 pub mod error;
 pub mod health;
@@ -12,7 +12,7 @@ pub mod model_service;
 pub mod routes;
 pub mod server;
 pub mod shutdown;
-pub mod usage_tracking;
+pub mod usage;
 
 #[cfg(any(test, feature = "test-utils", debug_assertions))]
 pub mod test_utils;

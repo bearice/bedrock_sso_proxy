@@ -21,12 +21,12 @@
   - Error handling
   - Cache key building
 
-- **Usage Tracking** (tests in `src/usage_tracking/mod.rs`)
+- **Usage Tracking** (tests in `src/usage/mod.rs`)
   - Usage record creation and retrieval
   - Pagination and filtering
   - Authorization validation
 
-- **Cost Tracking** (10 tests in `src/cost_tracking/mod.rs`)
+- **Cost Tracking** (10 tests in `src/cost/mod.rs`)
   - Model cost CRUD operations
   - CSV bulk updates
   - Admin-only access control
@@ -108,8 +108,8 @@ tests/
 ├── jwt_integration_tests.rs           # JWT authentication integration (7 tests)
 ├── api_key_integration_tests.rs       # API key authentication integration (6 tests)
 ├── cached_integration_test.rs         # Cached DAO integration (8 tests)
-├── cost_tracking_integration_tests.rs # Cost tracking integration (10 tests)
-├── usage_tracking_integration_tests.rs # Usage tracking integration (8 tests)
+├── cost_integration_tests.rs          # Cost tracking integration (10 tests)
+├── usage_integration_tests.rs         # Usage tracking integration (8 tests)
 ├── security_tests.rs                  # Security vulnerability tests (13 tests)
 └── common/                            # Shared test utilities
     └── mod.rs
@@ -121,8 +121,8 @@ tests/
 ├── jwt_integration_tests.rs           # ✅ JWT authentication integration
 ├── api_key_integration_tests.rs       # ✅ API key authentication integration
 ├── cached_integration_test.rs         # ✅ Cached DAO integration
-├── cost_tracking_integration_tests.rs # ✅ Cost tracking integration
-├── usage_tracking_integration_tests.rs # ✅ Usage tracking integration
+├── cost_integration_tests.rs          # ✅ Cost tracking integration
+├── usage_integration_tests.rs         # ✅ Usage tracking integration
 ├── oauth_integration_tests.rs         # ❌ OAuth flow integration (NEEDED)
 ├── api_integration_tests.rs           # ❌ API endpoint integration (NEEDED)
 ├── service_integration_tests.rs       # ❌ Service layer integration (NEEDED)
@@ -150,8 +150,8 @@ tests/
 - **JWT Integration**: 7 tests (in `tests/jwt_integration_tests.rs`)
 - **API Key Integration**: 6 tests (in `tests/api_key_integration_tests.rs`)
 - **Cached DAO Integration**: 8 tests (in `tests/cached_integration_test.rs`)
-- **Usage Tracking Integration**: 8 tests (in `tests/usage_tracking_integration_tests.rs`)
-- **Cost Tracking Integration**: 10 tests (in `tests/cost_tracking_integration_tests.rs`)
+- **Usage Tracking Integration**: 8 tests (in `tests/usage_integration_tests.rs`)
+- **Cost Tracking Integration**: 10 tests (in `tests/cost_integration_tests.rs`)
 - **Security Tests**: 13 tests (in `tests/security_tests.rs`)
 
 ## Implementation Notes

@@ -21,8 +21,8 @@ use crate::{
     shutdown::{
         ShutdownCoordinator, ShutdownManager, StreamingConnectionManager,
     },
-    usage_tracking::{create_admin_usage_routes, create_user_usage_routes},
-    cost_tracking::routes::create_admin_cost_routes,
+    usage::{create_admin_usage_routes, create_user_usage_routes},
+    cost::routes::create_admin_cost_routes,
 };
 use axum::{
     Router,
@@ -49,7 +49,7 @@ pub struct Server {
     pub cache: Arc<dyn CacheManager>,
     pub streaming_manager: Arc<StreamingConnectionManager>,
     pub shutdown_coordinator: Arc<ShutdownCoordinator>,
-    pub cost_service: Arc<crate::cost_tracking::CostTrackingService>,
+    pub cost_service: Arc<crate::cost::CostTrackingService>,
 }
 
 impl Server {
@@ -135,7 +135,7 @@ impl Server {
             .await;
 
         // Initialize cost service
-        let cost_service = Arc::new(crate::cost_tracking::CostTrackingService::new(database.clone()));
+        let cost_service = Arc::new(crate::cost::CostTrackingService::new(database.clone()));
 
         let config = Arc::new(config);
         Ok(Self {

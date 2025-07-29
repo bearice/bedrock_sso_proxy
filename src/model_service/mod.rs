@@ -9,7 +9,7 @@ use tokio::sync::RwLock;
 
 pub mod streaming;
 pub mod types;
-pub mod usage;
+pub mod usage_tracking;
 
 #[cfg(test)]
 mod tests;
@@ -136,7 +136,7 @@ impl ModelServiceImpl {
         response_body: &[u8],
         response_time_ms: u32,
     ) -> Result<UsageMetadata, AppError> {
-        let usage_tracker = usage::UsageTrackingService::new(self.config.clone(), self.database.clone());
+        let usage_tracker = usage_tracking::UsageTrackingService::new(self.config.clone(), self.database.clone());
         usage_tracker.extract_usage_metadata(headers, response_body, response_time_ms)
     }
 
@@ -303,7 +303,7 @@ impl ModelService for ModelServiceImpl {
         request: &ModelRequest,
         usage_metadata: &UsageMetadata,
     ) -> Result<(), AppError> {
-        let usage_tracker = usage::UsageTrackingService::new(self.config.clone(), self.database.clone());
+        let usage_tracker = usage_tracking::UsageTrackingService::new(self.config.clone(), self.database.clone());
         usage_tracker.track_usage(request, usage_metadata).await
     }
 }

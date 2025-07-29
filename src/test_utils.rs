@@ -165,8 +165,8 @@ impl TestServerBuilder {
             .await;
 
         let shutdown_coordinator = Arc::new(crate::shutdown::ShutdownCoordinator::new());
-        let cost_service = Arc::new(crate::cost_tracking::CostTrackingService::new(database.clone()));
-        
+        let cost_service = Arc::new(crate::cost::CostTrackingService::new(database.clone()));
+
         Ok(Server {
             config,
             jwt_service,

@@ -126,7 +126,7 @@ async fn test_calculate_cost() {
         .unwrap();
 
     // Test cost calculation through the usage tracking service
-    let usage_service = crate::model_service::usage::UsageTrackingService::new(config, database);
+    let usage_service = crate::model_service::usage_tracking::UsageTrackingService::new(config, database);
     let cost = usage_service
         .calculate_cost("us-east-1", "test-model", 100, 50, None, None)
         .await;

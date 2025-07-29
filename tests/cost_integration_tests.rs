@@ -26,7 +26,7 @@ async fn create_test_server() -> bedrock_sso_proxy::server::Server {
 }
 
 fn create_test_router(server: &bedrock_sso_proxy::server::Server) -> Router {
-    bedrock_sso_proxy::cost_tracking::routes::create_admin_cost_routes()
+    bedrock_sso_proxy::cost::routes::create_admin_cost_routes()
         .with_state(server.clone())
         .layer(middleware::from_fn_with_state(
             server.clone(),
@@ -231,7 +231,7 @@ async fn test_delete_model_cost() {
     let admin_id = setup_test_data(server.database.as_ref()).await;
 
     let admin_token = create_test_token(server.jwt_service.as_ref(), admin_id);
-    
+
     // First create a cost to delete
     let app1 = create_test_router(&server);
     let new_cost = serde_json::json!({

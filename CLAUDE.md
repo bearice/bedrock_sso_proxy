@@ -45,7 +45,7 @@ Signature V4 signing.
             │ • TypedCache (Structural Hashing)    │
             │ • Database (SeaORM + Migrations)     │
             │ • BedrockRuntime (AWS Integration)   │
-            │ • CostTracking (CSV + Batch Ops)     │
+            │ • Cost System (CSV + Batch Ops)      │
             └───────────────────┬───────────────────┘
                                 │
                     ┌───────────▼───────────┐
@@ -232,8 +232,8 @@ cargo test security           # Security vulnerability tests
 cargo test --test jwt_integration_tests # JWT integration tests
 cargo test --test api_key_integration_tests # API key integration tests
 cargo test --test cached_integration_test # Cached DAO tests
-cargo test --test cost_tracking_integration_tests # Cost tracking integration tests
-cargo test --test usage_tracking_integration_tests # Usage tracking tests
+cargo test --test cost_integration_tests # Cost tracking integration tests
+cargo test --test usage_integration_tests # Usage tracking tests
 ```
 
 ### CLI Commands
@@ -450,8 +450,8 @@ quality and consistency.
   - JWT integration tests: 7 tests
   - API key integration tests: 6 tests
   - Cached DAO tests: 8 tests  
-  - Cost tracking integration tests: 10 tests
-  - Usage tracking integration tests: 8 tests
+  - Cost integration tests: 10 tests
+  - Usage integration tests: 8 tests
 - **Security Tests**: 13 comprehensive security attack simulations
 - **Total Test Coverage**: 285 tests passing (221 unit + 49 integration + 13 security + 1 doc)
 - **Test Coverage**: Authentication, OAuth, routing, streaming, error handling, security vulnerabilities, caching, cost tracking, usage tracking

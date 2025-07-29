@@ -31,7 +31,7 @@ fn create_test_router(server: &bedrock_sso_proxy::server::Server) -> Router {
     // Combine user and admin routes for testing
     Router::new()
         .merge(
-            bedrock_sso_proxy::usage_tracking::create_user_usage_routes()
+            bedrock_sso_proxy::usage::create_user_usage_routes()
                 .with_state(server.clone())
                 .layer(middleware::from_fn_with_state(
                     server.clone(),
@@ -39,7 +39,7 @@ fn create_test_router(server: &bedrock_sso_proxy::server::Server) -> Router {
                 )),
         )
         .merge(
-            bedrock_sso_proxy::usage_tracking::create_admin_usage_routes()
+            bedrock_sso_proxy::usage::create_admin_usage_routes()
                 .with_state(server.clone())
                 .layer(middleware::from_fn_with_state(
                     server.clone(),

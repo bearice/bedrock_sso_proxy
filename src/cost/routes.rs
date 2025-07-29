@@ -1,6 +1,4 @@
-use crate::{
-    cost_tracking::UpdateCostsResult, database::entities::StoredModelCost, error::AppError,
-};
+use crate::{cost::UpdateCostsResult, database::entities::StoredModelCost, error::AppError};
 use axum::{
     Router,
     extract::{Path, State},
