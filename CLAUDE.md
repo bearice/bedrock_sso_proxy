@@ -229,7 +229,7 @@ cargo run --example e2e_client -- message --text "Hello" # Single message
 cargo test                    # All tests (unit + integration + security)
 cargo test auth               # Authentication tests only
 cargo test security           # Security vulnerability tests
-cargo test --test integration # Integration tests only
+cargo test --test jwt_integration_tests # JWT integration tests
 cargo test --test cached_integration_test # Cached DAO tests
 cargo test --test usage_tracking_integration_tests # Usage tracking tests
 ```
@@ -510,7 +510,7 @@ cache.set("user_123", &user).await?;
 
 ```bash
 # Run specific test file
-cargo test --test integration_tests
+cargo test --test jwt_integration_tests
 
 # Run specific test function
 cargo test test_jwt_validation
