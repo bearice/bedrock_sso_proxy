@@ -18,9 +18,9 @@ use chrono::{Duration, Utc};
 /// Create API key management routes (requires JWT authentication)
 pub fn create_api_key_routes() -> Router<Server> {
     Router::new()
-        .route("/", post(create_api_key))
-        .route("/", get(list_api_keys))
-        .route("/{key}", delete(revoke_api_key))
+        .route("/keys", post(create_api_key))
+        .route("/keys", get(list_api_keys))
+        .route("/keys/{key}", delete(revoke_api_key))
 }
 
 /// Create a new API key for the authenticated user
@@ -190,7 +190,7 @@ mod tests {
         };
 
         let request = Request::builder()
-            .uri("/")
+            .uri("/keys")
             .method("POST")
             .header("Authorization", format!("Bearer {}", token))
             .header("Content-Type", "application/json")
@@ -226,7 +226,7 @@ mod tests {
         let token = create_test_jwt(server.jwt_service.as_ref(), user_id);
 
         let request = Request::builder()
-            .uri("/")
+            .uri("/keys")
             .method("GET")
             .header("Authorization", format!("Bearer {}", token))
             .body(Body::empty())
@@ -260,7 +260,7 @@ mod tests {
         };
 
         let request = Request::builder()
-            .uri("/")
+            .uri("/keys")
             .method("POST")
             .header("Authorization", format!("Bearer {}", token))
             .header("Content-Type", "application/json")
