@@ -43,7 +43,6 @@ async fn serve_static_file(
     Path(path): Path<String>,
     config: crate::server::config::FrontendConfig,
 ) -> impl IntoResponse {
-
     // Security: prevent path traversal attacks
     if path.contains("..") || path.contains("\\") || path.starts_with('/') {
         warn!("Path traversal attempt blocked: {}", path);

@@ -4,21 +4,29 @@ pub use crate::database::entities::api_keys::{
 };
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
+use utoipa::ToSchema;
 
 /// Request to create a new API key
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
 pub struct CreateApiKeyRequest {
+    /// Human-readable name for the API key
     pub name: String,
+    /// Number of days until key expires (optional)
     pub expires_in_days: Option<u32>,
 }
 
 /// Response containing the new API key
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
 pub struct CreateApiKeyResponse {
+    /// Unique key identifier
     pub id: i32,
+    /// Human-readable name
     pub name: String,
-    pub key: String, // Only returned once
+    /// The actual API key (only returned once)
+    pub key: String,
+    /// When the key was created
     pub created_at: DateTime<Utc>,
+    /// When the key expires (if applicable)
     pub expires_at: Option<DateTime<Utc>>,
 }
 
@@ -85,5 +93,4 @@ mod tests {
         let (future_key, _) = ApiKey::new(1, "future".to_string(), Some(future_date));
         assert!(future_key.is_valid());
     }
-
 }

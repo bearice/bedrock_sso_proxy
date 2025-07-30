@@ -8,14 +8,14 @@ use crate::cache::CacheManagerImpl;
 use crate::database::DatabaseResult;
 use crate::database::dao::ModelCostsDao;
 use crate::database::dao::cached::CachedDao;
-use crate::database::entities::StoredModelCost;
+use crate::database::entities::ModelCost;
 use tracing::{debug, trace};
 
 /// Cached model costs DAO with automatic cache management
 #[derive(Clone)]
 pub struct CachedModelCostsDao {
     /// Cached DAO wrapper
-    cached_dao: CachedDao<ModelCostsDao, StoredModelCost>,
+    cached_dao: CachedDao<ModelCostsDao, ModelCost>,
 }
 
 impl CachedModelCostsDao {
@@ -31,7 +31,7 @@ impl CachedModelCostsDao {
         &self,
         region: &str,
         model_id: &str,
-    ) -> DatabaseResult<Option<StoredModelCost>> {
+    ) -> DatabaseResult<Option<ModelCost>> {
         let cache_key = format!("{}:{}", region, model_id);
 
         self.cached_dao
@@ -50,7 +50,7 @@ impl CachedModelCostsDao {
 
     /// Get model cost by model ID with caching (deprecated - use find_by_region_and_model)
     /// This method uses a default region for backward compatibility
-    pub async fn find_by_model(&self, model_id: &str) -> DatabaseResult<Option<StoredModelCost>> {
+    pub async fn find_by_model(&self, model_id: &str) -> DatabaseResult<Option<ModelCost>> {
         // Use default region for backward compatibility
         let default_region = "us-east-1";
         self.find_by_region_and_model(default_region, model_id)
@@ -58,7 +58,7 @@ impl CachedModelCostsDao {
     }
 
     /// Store or update model costs with cache invalidation
-    pub async fn upsert_many(&self, costs: &[StoredModelCost]) -> DatabaseResult<()> {
+    pub async fn upsert_many(&self, costs: &[ModelCost]) -> DatabaseResult<()> {
         debug!(
             "Upserting {} model costs with cache invalidation",
             costs.len()
@@ -80,7 +80,7 @@ impl CachedModelCostsDao {
     }
 
     /// Get all model costs (not cached due to potential large size)
-    pub async fn get_all(&self) -> DatabaseResult<Vec<StoredModelCost>> {
+    pub async fn get_all(&self) -> DatabaseResult<Vec<ModelCost>> {
         debug!("Getting all model costs (bypassing cache)");
         self.cached_dao.inner().get_all().await
     }

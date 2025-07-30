@@ -360,40 +360,42 @@ fn validate_record(record: &PricingRecord) -> Result<(), String> {
 }
 
 /// Custom deserializer for optional flexible timestamp formats
-fn deserialize_optional_flexible_timestamp<'de, D>(deserializer: D) -> Result<Option<DateTime<Utc>>, D::Error>
+fn deserialize_optional_flexible_timestamp<'de, D>(
+    deserializer: D,
+) -> Result<Option<DateTime<Utc>>, D::Error>
 where
     D: Deserializer<'de>,
 {
     let timestamp_str = String::deserialize(deserializer)?;
-    
+
     // Handle empty strings
     if timestamp_str.trim().is_empty() {
         return Ok(None);
     }
-    
+
     // Try RFC 3339 format first
     if let Ok(dt) = DateTime::parse_from_rfc3339(&timestamp_str) {
         return Ok(Some(dt.with_timezone(&Utc)));
     }
-    
+
     // Try RFC 3339 format with Z appended (for naive timestamps)
     let timestamp_with_z = if timestamp_str.ends_with('Z') {
         timestamp_str.clone()
     } else {
         format!("{}Z", timestamp_str)
     };
-    
+
     if let Ok(dt) = DateTime::parse_from_rfc3339(&timestamp_with_z) {
         return Ok(Some(dt.with_timezone(&Utc)));
     }
-    
+
     // Try Unix timestamp (integer seconds)
     if let Ok(timestamp) = timestamp_str.parse::<i64>() {
         if let Some(dt) = DateTime::from_timestamp(timestamp, 0) {
             return Ok(Some(dt));
         }
     }
-    
+
     // Try Unix timestamp (float seconds)
     if let Ok(timestamp) = timestamp_str.parse::<f64>() {
         let secs = timestamp.floor() as i64;
@@ -402,20 +404,23 @@ where
             return Ok(Some(dt));
         }
     }
-    
+
     // Try ISO 8601 format without timezone (assume UTC)
-    if let Ok(naive_dt) = chrono::NaiveDateTime::parse_from_str(&timestamp_str, "%Y-%m-%dT%H:%M:%S") {
+    if let Ok(naive_dt) = chrono::NaiveDateTime::parse_from_str(&timestamp_str, "%Y-%m-%dT%H:%M:%S")
+    {
         return Ok(Some(naive_dt.and_utc()));
     }
-    
+
     // Try ISO 8601 format with microseconds without timezone (assume UTC)
-    if let Ok(naive_dt) = chrono::NaiveDateTime::parse_from_str(&timestamp_str, "%Y-%m-%dT%H:%M:%S%.f") {
+    if let Ok(naive_dt) =
+        chrono::NaiveDateTime::parse_from_str(&timestamp_str, "%Y-%m-%dT%H:%M:%S%.f")
+    {
         return Ok(Some(naive_dt.and_utc()));
     }
-    
+
     // If all parsing fails, return error
     Err(serde::de::Error::custom(format!(
-        "invalid timestamp format '{}': expected RFC3339, Unix timestamp, or ISO8601", 
+        "invalid timestamp format '{}': expected RFC3339, Unix timestamp, or ISO8601",
         timestamp_str
     )))
 }

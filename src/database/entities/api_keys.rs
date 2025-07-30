@@ -4,6 +4,7 @@ use rand::{Rng, distr::Alphanumeric};
 use sea_orm::entity::prelude::*;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
+use utoipa::ToSchema;
 
 /// API key prefix for all generated keys
 pub const API_KEY_PREFIX: &str = "SSOK_";
@@ -11,7 +12,7 @@ pub const API_KEY_PREFIX: &str = "SSOK_";
 /// API key length after prefix (32 alphanumeric characters)
 pub const API_KEY_LENGTH: usize = 32;
 
-#[derive(Clone, Debug, PartialEq, DeriveEntityModel, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, DeriveEntityModel, Eq, Serialize, Deserialize, ToSchema)]
 #[sea_orm(table_name = "api_keys")]
 #[typed_cache(ttl = 300)] // 5 minutes
 pub struct Model {
@@ -168,5 +169,4 @@ mod tests {
         let hint = create_key_hint(key);
         assert_eq!(hint, "SSOK_****");
     }
-
 }

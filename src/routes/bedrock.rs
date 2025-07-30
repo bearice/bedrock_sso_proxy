@@ -1,5 +1,6 @@
 use crate::{
-    database::entities::UserRecord, error::AppError, model_service::ModelRequest, server::Server,
+    database::entities::UserRecord, error::AppError, model_service::ModelRequest,
+    routes::ApiErrorResponse, server::Server,
 };
 use axum::{
     Router,
@@ -20,6 +21,32 @@ pub fn create_bedrock_routes() -> Router<Server> {
         )
 }
 
+#[utoipa::path(
+    post,
+    path = "/bedrock/model/{model_id}/invoke",
+    summary = "Invoke Bedrock Model",
+    description = "Invoke an AWS Bedrock model with a request payload",
+    tags = ["Bedrock Models"],
+    params(
+        ("model_id" = String, Path, description = "AWS Bedrock model identifier (e.g., anthropic.claude-sonnet-4-20250514-v1:0)")
+    ),
+    request_body(
+        content = serde_json::Value,
+        description = "Model invocation payload (varies by model)",
+        content_type = "application/json"
+    ),
+    responses(
+        (status = 200, description = "Model response", body = serde_json::Value),
+        (status = 400, description = "Bad request", body = ApiErrorResponse),
+        (status = 401, description = "Unauthorized", body = ApiErrorResponse),
+        (status = 502, description = "Bad gateway - AWS service error", body = ApiErrorResponse),
+        (status = 500, description = "Internal server error", body = ApiErrorResponse)
+    ),
+    security(
+        ("jwt_auth" = []),
+        ("api_key_auth" = [])
+    )
+)]
 async fn invoke_model(
     Path(model_id): Path<String>,
     State(server): State<Server>,
@@ -67,6 +94,32 @@ async fn invoke_model(
 }
 
 /// Handle streaming invoke model requests (Server-Sent Events)
+#[utoipa::path(
+    post,
+    path = "/bedrock/model/{model_id}/invoke-with-response-stream",
+    summary = "Invoke Bedrock Model with Streaming",
+    description = "Invoke an AWS Bedrock model with streaming response (AWS EventStream format)",
+    tags = ["Bedrock Models"],
+    params(
+        ("model_id" = String, Path, description = "AWS Bedrock model identifier (e.g., anthropic.claude-sonnet-4-20250514-v1:0)")
+    ),
+    request_body(
+        content = serde_json::Value,
+        description = "Model invocation payload (varies by model)",
+        content_type = "application/json"
+    ),
+    responses(
+        (status = 200, description = "Streaming model response", content_type = "application/vnd.amazon.eventstream"),
+        (status = 400, description = "Bad request", body = ApiErrorResponse),
+        (status = 401, description = "Unauthorized", body = ApiErrorResponse),
+        (status = 502, description = "Bad gateway - AWS service error", body = ApiErrorResponse),
+        (status = 500, description = "Internal server error", body = ApiErrorResponse)
+    ),
+    security(
+        ("jwt_auth" = []),
+        ("api_key_auth" = [])
+    )
+)]
 async fn invoke_model_with_response_stream(
     Path(model_id): Path<String>,
     State(server): State<Server>,

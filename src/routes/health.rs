@@ -1,4 +1,4 @@
-use crate::{error::AppError, server::Server};
+use crate::{error::AppError, health::HealthResponse, routes::ApiErrorResponse, server::Server};
 use axum::{
     Router,
     extract::{Query, State},
@@ -6,11 +6,12 @@ use axum::{
     routing::get,
 };
 use serde::Deserialize;
-use serde_json::Value;
+use utoipa::{IntoParams, ToSchema};
 
-#[derive(Debug, Deserialize)]
-struct HealthCheckQuery {
+#[derive(Debug, Deserialize, ToSchema, IntoParams)]
+pub struct HealthCheckQuery {
     #[serde(default)]
+    /// Filter health checks by component name
     check: Option<String>,
 }
 
@@ -23,19 +24,29 @@ pub fn create_health_routes() -> Router<Server> {
     Router::new().route("/", get(health_check))
 }
 
-async fn health_check(
+#[utoipa::path(
+    get,
+    path = "/health",
+    summary = "Health Check",
+    description = "Check the health status of the proxy server and its dependencies",
+    tags = ["Health"],
+    params(
+        HealthCheckQuery
+    ),
+    responses(
+        (status = 200, description = "Health check results", body = HealthResponse),
+        (status = 503, description = "Service unavailable", body = ApiErrorResponse)
+    )
+)]
+pub async fn health_check(
     State(server): State<Server>,
     Query(params): Query<HealthCheckQuery>,
-) -> Result<Json<Value>, AppError> {
+) -> Result<Json<HealthResponse>, AppError> {
     // Use the centralized health service
     let filter = params.check.as_deref();
     let health_response = server.health_service.check_health(filter).await;
 
-    // Convert the health response to the expected JSON format
-    let response_json = serde_json::to_value(&health_response)
-        .map_err(|e| AppError::Internal(format!("Failed to serialize health response: {}", e)))?;
-
-    Ok(Json(response_json))
+    Ok(Json(health_response))
 }
 
 #[cfg(test)]

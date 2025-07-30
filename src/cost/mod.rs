@@ -6,7 +6,7 @@ pub use parser::{
 };
 
 use crate::{
-    database::{DatabaseManager, entities::StoredModelCost},
+    database::{DatabaseManager, entities::ModelCost},
     error::AppError,
 };
 use rust_decimal::{Decimal, prelude::ToPrimitive};
@@ -127,7 +127,7 @@ impl CostTrackingService {
                 // Use parsed timestamp or current time if None
                 let updated_at = pricing.timestamp.unwrap_or_else(Utc::now);
 
-                StoredModelCost {
+                ModelCost {
                     id: 0, // Will be set by database
                     region: pricing.region_id.clone(),
                     model_id: pricing.model_id.clone(),
@@ -192,8 +192,9 @@ impl CostTrackingService {
 }
 
 /// Result of updating model costs
-#[derive(Debug, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, serde::Serialize, serde::Deserialize, utoipa::ToSchema)]
 pub struct UpdateCostsResult {
+    /// Number of model costs processed
     pub total_processed: usize,
 }
 

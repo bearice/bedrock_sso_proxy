@@ -4,6 +4,7 @@ use crate::{
         middleware::UserExtractor,
     },
     error::AppError,
+    routes::ApiErrorResponse,
     server::Server,
 };
 use axum::{
@@ -23,6 +24,23 @@ pub fn create_api_key_routes() -> Router<Server> {
 }
 
 /// Create a new API key for the authenticated user
+#[utoipa::path(
+    post,
+    path = "/api/keys",
+    summary = "Create API Key",
+    description = "Create a new API key for programmatic access to the proxy",
+    tags = ["API Keys"],
+    request_body = CreateApiKeyRequest,
+    responses(
+        (status = 200, description = "API key created successfully", body = CreateApiKeyResponse),
+        (status = 400, description = "Bad request", body = ApiErrorResponse),
+        (status = 401, description = "Unauthorized", body = ApiErrorResponse),
+        (status = 500, description = "Internal server error", body = ApiErrorResponse)
+    ),
+    security(
+        ("jwt_auth" = [])
+    )
+)]
 pub async fn create_api_key(
     State(server): State<Server>,
     UserExtractor(user): UserExtractor,
@@ -85,6 +103,21 @@ pub async fn create_api_key(
 }
 
 /// List all API keys for the authenticated user
+#[utoipa::path(
+    get,
+    path = "/api/keys",
+    summary = "List API Keys",
+    description = "Get all API keys for the authenticated user",
+    tags = ["API Keys"],
+    responses(
+        (status = 200, description = "List of API keys", body = Vec<ApiKey>),
+        (status = 401, description = "Unauthorized", body = ApiErrorResponse),
+        (status = 500, description = "Internal server error", body = ApiErrorResponse)
+    ),
+    security(
+        ("jwt_auth" = [])
+    )
+)]
 pub async fn list_api_keys(
     State(server): State<Server>,
     UserExtractor(user): UserExtractor,
@@ -102,6 +135,26 @@ pub async fn list_api_keys(
 }
 
 /// Revoke an API key (mark as revoked)
+#[utoipa::path(
+    delete,
+    path = "/api/keys/{key_hash}",
+    summary = "Revoke API Key",
+    description = "Revoke an API key, making it invalid for future requests",
+    tags = ["API Keys"],
+    params(
+        ("key_hash" = String, Path, description = "Hash of the API key to revoke")
+    ),
+    responses(
+        (status = 200, description = "API key revoked successfully", body = serde_json::Value),
+        (status = 401, description = "Unauthorized", body = ApiErrorResponse),
+        (status = 403, description = "Forbidden - not the owner", body = ApiErrorResponse),
+        (status = 404, description = "API key not found", body = ApiErrorResponse),
+        (status = 500, description = "Internal server error", body = ApiErrorResponse)
+    ),
+    security(
+        ("jwt_auth" = [])
+    )
+)]
 pub async fn revoke_api_key(
     State(server): State<Server>,
     UserExtractor(user): UserExtractor,

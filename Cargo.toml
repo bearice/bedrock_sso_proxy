@@ -62,6 +62,11 @@ sqlx = { version = "^0.8", features = ["runtime-tokio-rustls", "postgres", "sqli
 sea-orm = { version = "^1.1", features = ["sqlx-postgres", "sqlx-sqlite", "runtime-tokio-rustls", "macros", "with-chrono", "with-rust_decimal", "with-uuid"] }
 sea-orm-migration = { version = "^1.1", features = ["sqlx-postgres", "sqlx-sqlite", "runtime-tokio-rustls"] }
 
+# OpenAPI documentation dependencies
+utoipa = { version = "^5.4", features = ["axum_extras", "chrono", "uuid", "decimal"] }
+utoipa-swagger-ui = { version = "^9.0", features = ["axum"] }
+serde_yaml_ng = "^0.10"
+
 [build-dependencies]
 tokio = { version = "^1.0", features = ["full"] }
 reqwest = { version = "^0.12", features = ["json"] }

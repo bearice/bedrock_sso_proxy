@@ -5,6 +5,7 @@ use crate::{
         entities::UsageRecord,
     },
     error::AppError,
+    routes::ApiErrorResponse,
 };
 use axum::{
     Router,
@@ -14,6 +15,7 @@ use axum::{
 };
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
+use utoipa::{IntoParams, ToSchema};
 
 /// Create usage tracking API routes for regular users
 pub fn create_user_usage_routes() -> Router<crate::server::Server> {
@@ -32,45 +34,77 @@ pub fn create_admin_usage_routes() -> Router<crate::server::Server> {
 }
 
 /// Query parameters for usage records
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, ToSchema, IntoParams)]
 pub struct UsageRecordsQuery {
+    /// Maximum number of records to return (default: 50, max: 500)
     pub limit: Option<u32>,
+    /// Number of records to skip for pagination
     pub offset: Option<u32>,
+    /// Filter by specific model ID
     pub model: Option<String>,
+    /// Filter records from this date onwards
     pub start_date: Option<DateTime<Utc>>,
+    /// Filter records up to this date
     pub end_date: Option<DateTime<Utc>>,
+    /// If true, only return successful requests
     pub success_only: Option<bool>,
 }
 
 /// Query parameters for usage stats
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, ToSchema, IntoParams)]
 pub struct UsageStatsQuery {
+    /// Filter statistics from this date onwards
     pub start_date: Option<DateTime<Utc>>,
+    /// Filter statistics up to this date
     pub end_date: Option<DateTime<Utc>>,
 }
 
 /// Response for usage records endpoint
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, ToSchema)]
 pub struct UsageRecordsResponse {
+    /// List of usage records
     pub records: Vec<UsageRecord>,
+    /// Total number of records (for pagination)
     pub total: u32,
+    /// Number of records returned
     pub limit: u32,
+    /// Number of records skipped
     pub offset: u32,
 }
 
 /// Response for top models endpoint
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, ToSchema)]
 pub struct TopModelsResponse {
+    /// List of top models by usage
     pub models: Vec<ModelUsage>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, ToSchema)]
 pub struct ModelUsage {
+    /// Model identifier
     pub model_id: String,
+    /// Total tokens used for this model
     pub total_tokens: u64,
 }
 
 /// Get user's usage records
+#[utoipa::path(
+    get,
+    path = "/usage/records",
+    summary = "Get User Usage Records",
+    description = "Retrieve usage records for the authenticated user",
+    tags = ["Usage Tracking"],
+    params(UsageRecordsQuery),
+    responses(
+        (status = 200, description = "List of usage records", body = UsageRecordsResponse),
+        (status = 401, description = "Unauthorized", body = ApiErrorResponse),
+        (status = 500, description = "Internal server error", body = ApiErrorResponse)
+    ),
+    security(
+        ("jwt_auth" = []),
+        ("api_key_auth" = [])
+    )
+)]
 async fn get_user_usage_records(
     State(server): State<crate::server::Server>,
     UserExtractor(user): UserExtractor,
@@ -106,6 +140,23 @@ async fn get_user_usage_records(
 }
 
 /// Get user's usage statistics
+#[utoipa::path(
+    get,
+    path = "/usage/stats",
+    summary = "Get User Usage Statistics",
+    description = "Retrieve usage statistics for the authenticated user",
+    tags = ["Usage Tracking"],
+    params(UsageStatsQuery),
+    responses(
+        (status = 200, description = "Usage statistics", body = UsageStats),
+        (status = 401, description = "Unauthorized", body = ApiErrorResponse),
+        (status = 500, description = "Internal server error", body = ApiErrorResponse)
+    ),
+    security(
+        ("jwt_auth" = []),
+        ("api_key_auth" = [])
+    )
+)]
 async fn get_user_usage_stats(
     State(server): State<crate::server::Server>,
     UserExtractor(user): UserExtractor,
@@ -130,6 +181,23 @@ async fn get_user_usage_stats(
 }
 
 /// Get system-wide usage records (admin only)
+#[utoipa::path(
+    get,
+    path = "/admin/usage/records",
+    summary = "Get System Usage Records",
+    description = "Retrieve usage records for all users (admin only)",
+    tags = ["Admin Usage Management"],
+    params(UsageRecordsQuery),
+    responses(
+        (status = 200, description = "List of system usage records", body = UsageRecordsResponse),
+        (status = 401, description = "Unauthorized", body = ApiErrorResponse),
+        (status = 403, description = "Forbidden - admin access required", body = ApiErrorResponse),
+        (status = 500, description = "Internal server error", body = ApiErrorResponse)
+    ),
+    security(
+        ("jwt_auth" = [])
+    )
+)]
 async fn get_system_usage_records(
     State(server): State<crate::server::Server>,
     Query(params): Query<UsageRecordsQuery>,
@@ -161,6 +229,23 @@ async fn get_system_usage_records(
 }
 
 /// Get system-wide usage statistics (admin only)
+#[utoipa::path(
+    get,
+    path = "/admin/usage/stats",
+    summary = "Get System Usage Statistics",
+    description = "Retrieve usage statistics for all users (admin only)",
+    tags = ["Admin Usage Management"],
+    params(UsageStatsQuery),
+    responses(
+        (status = 200, description = "System usage statistics", body = UsageStats),
+        (status = 401, description = "Unauthorized", body = ApiErrorResponse),
+        (status = 403, description = "Forbidden - admin access required", body = ApiErrorResponse),
+        (status = 500, description = "Internal server error", body = ApiErrorResponse)
+    ),
+    security(
+        ("jwt_auth" = [])
+    )
+)]
 async fn get_system_usage_stats(
     State(server): State<crate::server::Server>,
     Query(params): Query<UsageStatsQuery>,
@@ -183,6 +268,23 @@ async fn get_system_usage_stats(
 }
 
 /// Get top models by usage (admin only)
+#[utoipa::path(
+    get,
+    path = "/admin/usage/top-models",
+    summary = "Get Top Models by Usage",
+    description = "Retrieve top models ranked by total token usage (admin only)",
+    tags = ["Admin Usage Management"],
+    params(UsageStatsQuery),
+    responses(
+        (status = 200, description = "Top models by usage", body = TopModelsResponse),
+        (status = 401, description = "Unauthorized", body = ApiErrorResponse),
+        (status = 403, description = "Forbidden - admin access required", body = ApiErrorResponse),
+        (status = 500, description = "Internal server error", body = ApiErrorResponse)
+    ),
+    security(
+        ("jwt_auth" = [])
+    )
+)]
 async fn get_top_models(
     State(server): State<crate::server::Server>,
     Query(params): Query<UsageStatsQuery>,

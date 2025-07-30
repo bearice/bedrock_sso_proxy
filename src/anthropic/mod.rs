@@ -3,6 +3,7 @@ pub mod transform;
 
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
+use utoipa::ToSchema;
 
 /// Error types specific to Anthropic API format handling
 #[derive(Error, Debug)]
@@ -21,7 +22,7 @@ pub enum AnthropicError {
 }
 
 /// Anthropic API request format
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct AnthropicRequest {
     /// The model ID in Anthropic format (e.g., "claude-sonnet-4-20250514")
     pub model: String,
@@ -87,7 +88,7 @@ pub struct AnthropicResponse {
 }
 
 /// Message object in the conversation
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, ToSchema)]
 pub struct Message {
     /// Role of the message sender ("user", "assistant", or "system")
     pub role: String,

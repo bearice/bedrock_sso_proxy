@@ -59,7 +59,7 @@ async fn setup_test_data(database: &dyn DatabaseManager) -> i32 {
 
     // Create test model costs with exact decimal values
     let model_costs = vec![
-        StoredModelCost {
+        ModelCost {
             id: 0,
             region: "us-east-1".to_string(),
             model_id: "anthropic.claude-sonnet-4-20250514-v1:0".to_string(),
@@ -69,7 +69,7 @@ async fn setup_test_data(database: &dyn DatabaseManager) -> i32 {
             cache_read_cost_per_1k_tokens: Some(Decimal::new(36, 5)), // 0.00036
             updated_at: Utc::now(),
         },
-        StoredModelCost {
+        ModelCost {
             id: 0,
             region: "us-east-1".to_string(),
             model_id: "anthropic.claude-3-haiku-20240307-v1:0".to_string(),
@@ -79,7 +79,7 @@ async fn setup_test_data(database: &dyn DatabaseManager) -> i32 {
             cache_read_cost_per_1k_tokens: None,
             updated_at: Utc::now(),
         },
-        StoredModelCost {
+        ModelCost {
             id: 0,
             region: "us-west-2".to_string(),
             model_id: "test-model".to_string(),

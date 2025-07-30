@@ -4,15 +4,16 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Instant;
 use tokio::sync::RwLock;
+use utoipa::ToSchema;
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub enum HealthStatus {
     Healthy,
     Degraded,
     Unhealthy,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct HealthCheckResult {
     pub status: HealthStatus,
     pub message: Option<String>,
@@ -95,8 +96,8 @@ pub trait HealthChecker: Send + Sync {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct OverallHealthResponse {
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct HealthResponse {
     pub status: HealthStatus,
     pub service: String,
     pub version: String,
@@ -105,7 +106,7 @@ pub struct OverallHealthResponse {
     pub summary: HealthSummary,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct HealthSummary {
     pub total_checks: usize,
     pub healthy_count: usize,
@@ -139,7 +140,7 @@ impl HealthService {
     }
 
     /// Run all health checks or specific ones based on filter
-    pub async fn check_health(&self, filter: Option<&str>) -> OverallHealthResponse {
+    pub async fn check_health(&self, filter: Option<&str>) -> HealthResponse {
         let checkers = self.checkers.read().await;
         let mut results = HashMap::new();
         let mut total_duration = 0u64;
@@ -195,7 +196,7 @@ impl HealthService {
             total_duration_ms: total_duration,
         };
 
-        OverallHealthResponse {
+        HealthResponse {
             status: overall_status,
             service: "bedrock-sso-proxy".to_string(),
             version: env!("CARGO_PKG_VERSION").to_string(),

@@ -108,7 +108,7 @@ async fn test_calculate_cost() {
     let database = server.database.clone();
 
     // Add a model cost to storage
-    let model_cost = StoredModelCost {
+    let model_cost = ModelCost {
         id: 0,
         region: "us-east-1".to_string(),
         model_id: "test-model".to_string(),

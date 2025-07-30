@@ -10,6 +10,7 @@ use crate::{
     database::entities::UserRecord,
     error::AppError,
     model_service::{ModelRequest, ModelService},
+    routes::ApiErrorResponse,
     server::Server,
 };
 use axum::{
@@ -32,6 +33,31 @@ pub fn create_anthropic_routes() -> Router<Server> {
 
 /// Handle POST /v1/messages - Anthropic API format message creation
 /// Supports both streaming and non-streaming responses based on the `stream` parameter
+#[utoipa::path(
+    post,
+    path = "/anthropic/v1/messages",
+    summary = "Create Message (Anthropic API)",
+    description = "Create a message using the standard Anthropic API format. Supports both streaming and non-streaming responses.",
+    tags = ["Anthropic API"],
+    request_body(
+        content = AnthropicRequest,
+        description = "Anthropic API message request",
+        content_type = "application/json"
+    ),
+    responses(
+        (status = 200, description = "Message response (non-streaming)", body = serde_json::Value, content_type = "application/json"),
+        (status = 200, description = "Streaming message response", content_type = "text/event-stream"),
+        (status = 400, description = "Bad request", body = ApiErrorResponse),
+        (status = 401, description = "Unauthorized", body = ApiErrorResponse),
+        (status =502, description = "Bad gateway - AWS service error", body = ApiErrorResponse),
+        (status = 500, description = "Internal server error", body = ApiErrorResponse)
+    ),
+    security(
+        ("jwt_auth" = []),
+        ("api_key_auth" = []),
+        ("x_api_key_auth" = [])
+    )
+)]
 pub async fn create_message(
     State(server): State<Server>,
     Extension(user): Extension<UserRecord>,

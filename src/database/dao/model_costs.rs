@@ -1,4 +1,4 @@
-use crate::database::entities::{StoredModelCost, model_costs};
+use crate::database::entities::{ModelCost, model_costs};
 use crate::database::{DatabaseError, DatabaseResult};
 use sea_orm::{
     ActiveValue, ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter, Set, TransactionTrait,
@@ -22,7 +22,7 @@ impl ModelCostsDao {
         &self,
         region: &str,
         model_id: &str,
-    ) -> DatabaseResult<Option<StoredModelCost>> {
+    ) -> DatabaseResult<Option<ModelCost>> {
         let cost = model_costs::Entity::find()
             .filter(model_costs::Column::Region.eq(region))
             .filter(model_costs::Column::ModelId.eq(model_id))
@@ -34,7 +34,7 @@ impl ModelCostsDao {
     }
 
     /// Store or update model cost using individual upserts for SQLite compatibility
-    pub async fn upsert_many(&self, costs: &[StoredModelCost]) -> DatabaseResult<()> {
+    pub async fn upsert_many(&self, costs: &[ModelCost]) -> DatabaseResult<()> {
         debug!("Upserting {} model_costs", costs.len());
         let tx = self
             .db
@@ -80,7 +80,7 @@ impl ModelCostsDao {
     }
 
     /// Get all model costs
-    pub async fn get_all(&self) -> DatabaseResult<Vec<StoredModelCost>> {
+    pub async fn get_all(&self) -> DatabaseResult<Vec<ModelCost>> {
         let costs = model_costs::Entity::find()
             .all(&self.db)
             .await

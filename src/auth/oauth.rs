@@ -344,7 +344,7 @@ impl OAuthService {
             db_user_id
         };
 
-        // Create OAuth JWT token (long-lived, no refresh token needed for Claude Code)
+        // Create OAuth JWT token with proper refresh token support
         let oauth_claims = OAuthClaims::new(
             db_user_id, // Use database user ID as subject
             self.config.jwt.access_token_ttl,
@@ -352,11 +352,34 @@ impl OAuthService {
 
         let access_token = self.jwt_service.create_oauth_token(&oauth_claims)?;
 
+        // Create refresh token for proper OAuth flow
+        let refresh_token = Uuid::new_v4().to_string();
+        let refresh_token_hash = self.hash_token(&refresh_token);
+        let refresh_token_data = crate::database::entities::refresh_tokens::Model {
+            id: 0, // Will be set by database
+            token_hash: refresh_token_hash,
+            user_id: format!("{}:{}", request.provider, user_id), // Composite user ID
+            provider: request.provider.clone(),
+            email: email.to_string(),
+            created_at: Utc::now(),
+            expires_at: Utc::now()
+                + chrono::Duration::seconds(self.config.jwt.refresh_token_ttl as i64),
+            rotation_count: 0,
+            revoked_at: None,
+        };
+
+        // Store refresh token
+        self.database
+            .refresh_tokens()
+            .store(&refresh_token_data)
+            .await
+            .map_err(|e| AppError::Internal(format!("Failed to store refresh token: {}", e)))?;
+
         Ok(TokenResponse {
             access_token,
             token_type: "Bearer".to_string(),
             expires_in: self.config.jwt.access_token_ttl,
-            refresh_token: String::new(), // Empty - not used for Claude Code
+            refresh_token,
             scope: provider.scopes.join(" "),
         })
     }
@@ -1014,5 +1037,71 @@ mod tests {
         assert_eq!(oauth_service.get_display_name("auth0"), "Auth0");
         assert_eq!(oauth_service.get_display_name("okta"), "Okta");
         assert_eq!(oauth_service.get_display_name("custom"), "custom");
+    }
+
+    #[tokio::test]
+    async fn test_refresh_token_creation_and_storage() {
+        let config = create_test_config();
+        let (database, cache) = create_test_components().await;
+
+        // Initialize database by running migrations
+        database.migrate().await.unwrap();
+
+        let jwt_service = Arc::new(
+            crate::auth::jwt::JwtServiceImpl::new("test-secret".to_string(), Algorithm::HS256)
+                .unwrap(),
+        );
+        let oauth_service =
+            OAuthService::new(config, jwt_service, database.clone(), cache).unwrap();
+
+        // Create a test refresh token manually to verify the database/DAO layer works
+        let test_token = crate::database::entities::refresh_tokens::Model {
+            id: 0,
+            token_hash: "test-hash".to_string(),
+            user_id: "google:123456".to_string(),
+            provider: "google".to_string(),
+            email: "test@example.com".to_string(),
+            created_at: Utc::now(),
+            expires_at: Utc::now() + chrono::Duration::seconds(86400),
+            rotation_count: 0,
+            revoked_at: None,
+        };
+
+        // Test storing refresh token
+        let store_result = database.refresh_tokens().store(&test_token).await;
+        assert!(
+            store_result.is_ok(),
+            "Failed to store refresh token: {:?}",
+            store_result
+        );
+
+        // Test retrieving refresh token
+        let retrieved_token = database
+            .refresh_tokens()
+            .find_by_hash("test-hash")
+            .await
+            .unwrap();
+        assert!(
+            retrieved_token.is_some(),
+            "Failed to retrieve stored refresh token"
+        );
+
+        let token = retrieved_token.unwrap();
+        assert_eq!(token.user_id, "google:123456");
+        assert_eq!(token.provider, "google");
+        assert_eq!(token.email, "test@example.com");
+        assert_eq!(token.rotation_count, 0);
+        assert!(token.revoked_at.is_none());
+
+        // Test the hash_token function works
+        let hash1 = oauth_service.hash_token("test-token");
+        let hash2 = oauth_service.hash_token("test-token");
+        assert_eq!(hash1, hash2, "Hash function should be deterministic");
+
+        let hash3 = oauth_service.hash_token("different-token");
+        assert_ne!(
+            hash1, hash3,
+            "Different tokens should produce different hashes"
+        );
     }
 }

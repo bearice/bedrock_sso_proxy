@@ -21,7 +21,7 @@ pub struct UsageQuery {
 }
 
 /// Usage statistics
-#[derive(Debug, serde::Serialize)]
+#[derive(Debug, serde::Serialize, utoipa::ToSchema)]
 pub struct UsageStats {
     pub total_requests: u32,
     pub total_input_tokens: u64,

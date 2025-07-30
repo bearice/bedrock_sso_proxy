@@ -10,6 +10,9 @@ secure access to AWS Bedrock APIs. It acts as an intermediary between clients
 and AWS Bedrock, handling JWT authentication and request forwarding with AWS
 Signature V4 signing.
 
+The proxy includes comprehensive OpenAPI documentation accessible at `/docs` for 
+interactive API exploration and testing.
+
 ## Architecture
 
 ```
@@ -69,6 +72,12 @@ Signature V4 signing.
 **Health & Status:**
 
 - `GET /health` - Public health check endpoint
+
+**API Documentation:**
+
+- `GET /docs` - Interactive Swagger UI documentation
+- `GET /openapi.yaml` - OpenAPI specification in YAML format  
+- `GET /openapi.json` - OpenAPI specification in JSON format
 
 **Bedrock Format (AWS Native):**
 

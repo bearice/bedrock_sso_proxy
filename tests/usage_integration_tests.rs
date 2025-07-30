@@ -149,7 +149,7 @@ async fn setup_test_data(database: &dyn DatabaseManager) -> (i32, i32) {
 
     let costs: Vec<_> = model_costs
         .into_iter()
-        .map(|(model_id, input_cost, output_cost)| StoredModelCost {
+        .map(|(model_id, input_cost, output_cost)| ModelCost {
             id: 0,
             region: "us-east-1".to_string(),
             model_id: model_id.to_string(),
