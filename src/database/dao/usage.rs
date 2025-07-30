@@ -31,7 +31,10 @@ pub struct UsageStats {
     pub success_rate: f32,
     pub total_cost: Option<Decimal>,
     pub unique_models: u32,
-    pub date_range: (DateTime<Utc>, DateTime<Utc>),
+    /// Start date of the statistics period
+    pub start_date: DateTime<Utc>,
+    /// End date of the statistics period  
+    pub end_date: DateTime<Utc>,
 }
 
 /// Usage DAO for database operations
@@ -150,7 +153,8 @@ impl UsageDao {
                 success_rate: 0.0,
                 total_cost: None,
                 unique_models: 0,
-                date_range: (Utc::now(), Utc::now()),
+                start_date: Utc::now(),
+                end_date: Utc::now(),
             });
         }
 
@@ -217,7 +221,8 @@ impl UsageDao {
                 None
             },
             unique_models,
-            date_range: (min_date, max_date),
+            start_date: min_date,
+            end_date: max_date,
         })
     }
 

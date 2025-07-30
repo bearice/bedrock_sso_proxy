@@ -170,8 +170,8 @@ export function UsageStats({ stats, isLoading, error }: UsageStatsProps) {
           textAlign: 'center',
         }}
       >
-        Usage statistics from {new Date(Array.isArray(stats.date_range) ? stats.date_range[0] : stats.date_range?.start).toLocaleDateString()} to{' '}
-        {new Date(Array.isArray(stats.date_range) ? stats.date_range[1] : stats.date_range?.end).toLocaleDateString()}
+        Usage statistics from {new Date(stats.start_date).toLocaleDateString()} to{' '}
+        {new Date(stats.end_date).toLocaleDateString()}
       </div>
 
       {/* Stats Grid */}

@@ -29,10 +29,8 @@ export interface UsageStats {
   total_cost_cents: number;
   total_cost?: number; // For backwards compatibility
   unique_models: number;
-  date_range: {
-    start: string;
-    end: string;
-  } | [string, string]; // Allow both object and array format
+  start_date: string;
+  end_date: string;
 }
 
 export interface UsageQuery {
