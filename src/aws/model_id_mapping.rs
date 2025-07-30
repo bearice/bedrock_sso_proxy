@@ -24,6 +24,26 @@ impl RegionalModelMapping {
         }
     }
 
+    /// Create a new regional model mapping with custom prefix mappings
+    pub fn new_with_custom_mappings(custom_mappings: HashMap<String, String>) -> Self {
+        let mut prefix_to_region = HashMap::new();
+
+        // Start with built-in default mappings
+        prefix_to_region.insert("us".to_string(), "us-east-1".to_string());
+        prefix_to_region.insert("apac".to_string(), "ap-northeast-1".to_string());
+        prefix_to_region.insert("eu".to_string(), "eu-west-1".to_string());
+
+        // Override with custom mappings
+        for (prefix, region) in custom_mappings {
+            prefix_to_region.insert(prefix, region);
+        }
+
+        Self {
+            region_to_prefix: HashMap::new(),
+            prefix_to_region,
+        }
+    }
+
     /// Add or update a region-to-prefix mapping
     pub fn add_mapping(&mut self, region: String, prefix: String) {
         self.region_to_prefix.insert(region, prefix);
@@ -299,5 +319,36 @@ mod tests {
         let stripped = mapping.strip_regional_prefix(&with_prefix);
 
         assert_eq!(stripped, original_model_id);
+    }
+
+    #[test]
+    fn test_new_with_custom_mappings() {
+        let mut custom_mappings = HashMap::new();
+        custom_mappings.insert("eu".to_string(), "eu-central-1".to_string());
+        custom_mappings.insert("custom".to_string(), "us-west-2".to_string());
+
+        let mapping = RegionalModelMapping::new_with_custom_mappings(custom_mappings);
+
+        // Test that defaults are still present
+        assert_eq!(
+            mapping.get_region_for_prefix("us"),
+            Some("us-east-1".to_string())
+        );
+        assert_eq!(
+            mapping.get_region_for_prefix("apac"),
+            Some("ap-northeast-1".to_string())
+        );
+
+        // Test that custom override works
+        assert_eq!(
+            mapping.get_region_for_prefix("eu"),
+            Some("eu-central-1".to_string())
+        );
+
+        // Test that custom addition works
+        assert_eq!(
+            mapping.get_region_for_prefix("custom"),
+            Some("us-west-2".to_string())
+        );
     }
 }

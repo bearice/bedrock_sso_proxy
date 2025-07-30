@@ -21,6 +21,7 @@ fn create_test_config() -> Config {
             secret_access_key: Some("test-secret".to_string()),
             profile: None,
             bearer_token: None,
+            region_prefix_mappings: std::collections::HashMap::new(),
         },
         ..Default::default()
     }
@@ -48,7 +49,7 @@ async fn create_test_setup() -> (
 async fn test_model_service_creation() {
     let (server, config) = create_test_server().await;
     let database = server.database.clone();
-    let bedrock = Arc::new(BedrockRuntimeImpl::new_test());
+    let bedrock = Arc::new(BedrockRuntimeImpl::new_test().await);
     let model_service = ModelServiceImpl::new(bedrock, database.clone(), config);
 
     // Verify service was created successfully
@@ -59,7 +60,7 @@ async fn test_model_service_creation() {
 async fn test_extract_usage_metadata() {
     let (server, config) = create_test_server().await;
     let database = server.database.clone();
-    let bedrock = Arc::new(BedrockRuntimeImpl::new_test());
+    let bedrock = Arc::new(BedrockRuntimeImpl::new_test().await);
     let model_service = ModelServiceImpl::new(bedrock, database.clone(), config);
 
     let mut headers = axum::http::HeaderMap::new();
@@ -83,7 +84,7 @@ async fn test_extract_usage_metadata() {
 async fn test_extract_usage_metadata_from_response_body() {
     let (server, config) = create_test_server().await;
     let database = server.database.clone();
-    let bedrock = Arc::new(BedrockRuntimeImpl::new_test());
+    let bedrock = Arc::new(BedrockRuntimeImpl::new_test().await);
     let model_service = ModelServiceImpl::new(bedrock, database.clone(), config);
 
     // Test with JSON response body containing cache tokens
@@ -150,7 +151,7 @@ async fn test_calculate_cost() {
 async fn test_track_usage() {
     let (server, config) = create_test_server().await;
     let database = server.database.clone();
-    let bedrock = Arc::new(BedrockRuntimeImpl::new_test());
+    let bedrock = Arc::new(BedrockRuntimeImpl::new_test().await);
     let model_service = ModelServiceImpl::new(bedrock, database.clone(), config);
 
     // Create a test user first

@@ -66,6 +66,7 @@ impl Default for Config {
                 secret_access_key: None,
                 profile: None,
                 bearer_token: None,
+                region_prefix_mappings: std::collections::HashMap::new(),
             },
             logging: LoggingConfig::default(),
             oauth: OAuthConfig::default(),

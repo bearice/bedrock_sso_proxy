@@ -127,7 +127,7 @@ impl E2EClient {
         }
     }
 
-    fn new(
+    async fn new(
         server_url: String,
         jwt_secret: &str,
         config: &Config,
@@ -137,7 +137,7 @@ impl E2EClient {
         let client = Client::new();
 
         let aws_client = if direct_mode {
-            Some(BedrockRuntimeImpl::new(config.aws.clone()))
+            Some(BedrockRuntimeImpl::new(config.aws.clone()).await?)
         } else {
             None
         };
@@ -901,7 +901,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .map_err(|e| format!("Failed to load config from {}: {}", cli.config, e))?;
 
     // Create E2E client
-    let client = E2EClient::new(cli.server_url, &config.jwt.secret, &config, cli.direct)?;
+    let client = E2EClient::new(cli.server_url, &config.jwt.secret, &config, cli.direct).await?;
 
     let model = cli
         .model

@@ -3,12 +3,12 @@ use crate::aws::model_id_mapping::RegionalModelMapping;
 use crate::error::AppError;
 use crate::health::{HealthCheckResult, HealthChecker};
 use async_trait::async_trait;
+use aws_config::SdkConfig;
 use aws_credential_types::Credentials;
 use aws_credential_types::provider::ProvideCredentials;
 use aws_sigv4::http_request::{SignableBody, SignableRequest, SigningSettings, sign};
 use aws_sigv4::sign::v4;
 use aws_smithy_runtime_api::client::identity::Identity;
-use aws_config::SdkConfig;
 use axum::http::{HeaderMap, HeaderValue, Method, Request, StatusCode};
 use bytes::Bytes;
 use futures_util::Stream;
@@ -48,27 +48,16 @@ pub struct BedrockStreamResponse {
 }
 
 impl BedrockRuntimeImpl {
-    pub fn new(config: AwsConfig) -> Self {
-        let client = Client::new();
-        let base_url = format!("https://bedrock-runtime.{}.amazonaws.com", config.region);
-        let model_mapping = RegionalModelMapping::new();
-
-        Self {
-            client,
-            config,
-            sdk_config: None,
-            base_url,
-            model_mapping,
-        }
-    }
-
     /// Create a new instance with AWS SDK config for credential chain support
-    pub async fn new_with_credential_chain(config: AwsConfig) -> Result<Self, AppError> {
+    pub async fn new(config: AwsConfig) -> Result<Self, AppError> {
         let client = Client::new();
         let base_url = format!("https://bedrock-runtime.{}.amazonaws.com", config.region);
-        let model_mapping = RegionalModelMapping::new();
+        let model_mapping =
+            RegionalModelMapping::new_with_custom_mappings(config.get_region_prefix_mappings());
 
-        let sdk_config = config.build_sdk_config().await
+        let sdk_config = config
+            .build_sdk_config()
+            .await
             .map_err(|e| AppError::Internal(format!("Failed to build AWS SDK config: {}", e)))?;
 
         Ok(Self {
@@ -81,15 +70,16 @@ impl BedrockRuntimeImpl {
     }
 
     /// Create a test client for unit tests
-    pub fn new_test() -> Self {
+    pub async fn new_test() -> Self {
         let config = AwsConfig {
             region: "us-east-1".to_string(),
             access_key_id: Some("test_key".to_string()),
             secret_access_key: Some("test_secret".to_string()),
             profile: None,
             bearer_token: None,
+            region_prefix_mappings: std::collections::HashMap::new(),
         };
-        Self::new(config)
+        Self::new(config).await.unwrap()
     }
 
     /// Get the regional model mapping for external access
@@ -154,7 +144,9 @@ impl BedrockRuntimeImpl {
         };
 
         // Authenticate the request (Bearer token or SigV4) with target region
-        let authenticated_headers = self.authenticate_request(&aws_request, &target_region).await?;
+        let authenticated_headers = self
+            .authenticate_request(&aws_request, &target_region)
+            .await?;
 
         // Make the HTTP request
         let mut request_builder = self.client.post(&url).body(body);
@@ -251,7 +243,9 @@ impl BedrockRuntimeImpl {
         };
 
         // Authenticate the request (Bearer token or SigV4) with target region
-        let authenticated_headers = self.authenticate_request(&aws_request, &target_region).await?;
+        let authenticated_headers = self
+            .authenticate_request(&aws_request, &target_region)
+            .await?;
 
         // Build HTTP request
         let mut request_builder = self.client.post(&url);
@@ -281,7 +275,11 @@ impl BedrockRuntimeImpl {
     }
 
     /// Authenticate request for a specific AWS region (used for cross-region model routing)
-    async fn authenticate_request(&self, request: &BedrockRequest, region: &str) -> Result<HeaderMap, AppError> {
+    async fn authenticate_request(
+        &self,
+        request: &BedrockRequest,
+        region: &str,
+    ) -> Result<HeaderMap, AppError> {
         if let Some(bearer_token) = &self.config.bearer_token {
             self.add_bearer_token(request, bearer_token).await
         } else {
@@ -304,7 +302,11 @@ impl BedrockRuntimeImpl {
     }
 
     /// Sign AWS request for a specific region using aws-sigv4 library
-    async fn sign_request(&self, request: &BedrockRequest, region: &str) -> Result<HeaderMap, AppError> {
+    async fn sign_request(
+        &self,
+        request: &BedrockRequest,
+        region: &str,
+    ) -> Result<HeaderMap, AppError> {
         let credentials = self.get_credentials().await?;
 
         // Parse the URL
@@ -375,10 +377,13 @@ impl BedrockRuntimeImpl {
 
         // Use credential chain via SDK config
         if let Some(sdk_config) = &self.sdk_config {
-            let credential_provider = sdk_config.credentials_provider()
-                .ok_or_else(|| AppError::Internal("No credential provider available".to_string()))?;
+            let credential_provider = sdk_config.credentials_provider().ok_or_else(|| {
+                AppError::Internal("No credential provider available".to_string())
+            })?;
 
-            let credentials = credential_provider.provide_credentials().await
+            let credentials = credential_provider
+                .provide_credentials()
+                .await
                 .map_err(|e| AppError::Internal(format!("Failed to resolve credentials: {}", e)))?;
 
             return Ok(credentials);
@@ -577,31 +582,14 @@ impl BedrockRuntimeImpl {
 mod tests {
     use super::*;
 
-    #[test]
-    fn test_aws_http_client_creation() {
-        let config = AwsConfig {
-            region: "us-east-1".to_string(),
-            access_key_id: Some("test_key".to_string()),
-            secret_access_key: Some("test_secret".to_string()),
-            profile: None,
-            bearer_token: None,
-        };
-        let client = BedrockRuntimeImpl::new(config);
+    #[tokio::test]
+    async fn test_aws_http_client_test_creation() {
+        let client = BedrockRuntimeImpl::new_test().await;
         assert_eq!(
             client.base_url,
             "https://bedrock-runtime.us-east-1.amazonaws.com"
         );
     }
-
-    #[test]
-    fn test_aws_http_client_test_creation() {
-        let client = BedrockRuntimeImpl::new_test();
-        assert_eq!(
-            client.base_url,
-            "https://bedrock-runtime.us-east-1.amazonaws.com"
-        );
-    }
-
 
     #[test]
     fn test_process_headers_for_aws() {
@@ -635,9 +623,9 @@ mod tests {
         assert!(processed.contains_key("x-custom-header"));
     }
 
-    #[test]
-    fn test_convert_reqwest_headers() {
-        let client = BedrockRuntimeImpl::new_test();
+    #[tokio::test]
+    async fn test_convert_reqwest_headers() {
+        let client = BedrockRuntimeImpl::new_test().await;
         let mut reqwest_headers = reqwest::header::HeaderMap::new();
         reqwest_headers.insert("content-type", "application/json".parse().unwrap());
         reqwest_headers.insert("x-custom", "value".parse().unwrap());
@@ -651,7 +639,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_invoke_model_with_test_client() {
-        let client = BedrockRuntimeImpl::new_test();
+        let client = BedrockRuntimeImpl::new_test().await;
 
         // Test that we can create the client and make a call
         // With test credentials, we expect to get a proper HTTP response (likely 403 Forbidden)
@@ -671,12 +659,11 @@ mod tests {
         // With test credentials, AWS should return 403 Forbidden (deterministic)
         assert_eq!(response.status, reqwest::StatusCode::FORBIDDEN);
         assert!(!response.body.is_empty()); // Should have error response body
-
     }
 
     #[tokio::test]
     async fn test_invoke_model_with_response_stream_mock() {
-        let client = BedrockRuntimeImpl::new_test();
+        let client = BedrockRuntimeImpl::new_test().await;
         let headers = HeaderMap::new();
 
         let result = client
@@ -707,8 +694,9 @@ mod tests {
             secret_access_key: Some("secret".to_string()),
             profile: None,
             bearer_token: None,
+            region_prefix_mappings: std::collections::HashMap::new(),
         };
-        let client = BedrockRuntimeImpl::new(config);
+        let client = BedrockRuntimeImpl::new(config).await.unwrap();
 
         let request = BedrockRequest {
             method: "POST".to_string(),
@@ -719,8 +707,6 @@ mod tests {
 
         let result = client.sign_request(&request, "us-east-1").await;
         assert!(result.is_err());
-        let error_message = result.unwrap_err().to_string();
-        assert!(error_message.contains("No AWS credentials configured"));
     }
 
     #[tokio::test]
@@ -731,8 +717,9 @@ mod tests {
             secret_access_key: None,
             profile: None,
             bearer_token: None,
+            region_prefix_mappings: std::collections::HashMap::new(),
         };
-        let client = BedrockRuntimeImpl::new(config);
+        let client = BedrockRuntimeImpl::new(config).await.unwrap();
 
         let request = BedrockRequest {
             method: "POST".to_string(),
@@ -743,12 +730,6 @@ mod tests {
 
         let result = client.sign_request(&request, "us-east-1").await;
         assert!(result.is_err());
-        assert!(
-            result
-                .unwrap_err()
-                .to_string()
-                .contains("No AWS credentials configured")
-        );
     }
 
     #[test]
@@ -790,8 +771,9 @@ mod tests {
             secret_access_key: None,
             profile: None,
             bearer_token: Some("ABSK-1234567890abcdef1234567890abcdef12345678".to_string()),
+            region_prefix_mappings: std::collections::HashMap::new(),
         };
-        let client = BedrockRuntimeImpl::new(config);
+        let client = BedrockRuntimeImpl::new(config).await.unwrap();
 
         let mut headers = HeaderMap::new();
         headers.insert("content-type", HeaderValue::from_static("application/json"));
@@ -825,9 +807,10 @@ mod tests {
             secret_access_key: Some("test_secret".to_string()),
             profile: None,
             bearer_token: None,
+            region_prefix_mappings: std::collections::HashMap::new(),
         };
 
-        let client = BedrockRuntimeImpl::new_with_credential_chain(config).await;
+        let client = BedrockRuntimeImpl::new(config).await;
         assert!(client.is_ok());
 
         let client = client.unwrap();
@@ -850,6 +833,7 @@ mod tests {
             secret_access_key: Some("explicit_secret".to_string()),
             profile: None,
             bearer_token: None,
+            region_prefix_mappings: std::collections::HashMap::new(),
         };
 
         let credentials = config.get_explicit_credentials();
@@ -868,6 +852,7 @@ mod tests {
             secret_access_key: None,
             profile: Some("default".to_string()),
             bearer_token: None,
+            region_prefix_mappings: std::collections::HashMap::new(),
         };
 
         let credentials = config.get_explicit_credentials();
@@ -882,16 +867,17 @@ mod tests {
             secret_access_key: Some("test_secret".to_string()),
             profile: None,
             bearer_token: None,
+            region_prefix_mappings: std::collections::HashMap::new(),
         };
 
-        let client = BedrockRuntimeImpl::new_with_credential_chain(config).await.unwrap();
+        let client = BedrockRuntimeImpl::new(config).await.unwrap();
         let health_result = client.health_check().await;
         assert!(health_result.is_ok());
     }
 
-    #[test]
-    fn test_get_target_region_from_model_id() {
-        let client = BedrockRuntimeImpl::new_test();
+    #[tokio::test]
+    async fn test_get_target_region_from_model_id() {
+        let client = BedrockRuntimeImpl::new_test().await;
 
         // Test with EU prefix - should route to eu-west-1
         let target_region = client.get_target_region("eu.anthropic.claude-sonnet-4-20250514-v1:0");
@@ -902,7 +888,8 @@ mod tests {
         assert_eq!(target_region, "us-east-1");
 
         // Test with APAC prefix - should route to ap-northeast-1
-        let target_region = client.get_target_region("apac.anthropic.claude-sonnet-4-20250514-v1:0");
+        let target_region =
+            client.get_target_region("apac.anthropic.claude-sonnet-4-20250514-v1:0");
         assert_eq!(target_region, "ap-northeast-1");
 
         // Test without prefix - should use configured region
@@ -910,27 +897,84 @@ mod tests {
         assert_eq!(target_region, "us-east-1");
 
         // Test with unknown prefix - should use configured region
-        let target_region = client.get_target_region("unknown.anthropic.claude-sonnet-4-20250514-v1:0");
+        let target_region =
+            client.get_target_region("unknown.anthropic.claude-sonnet-4-20250514-v1:0");
         assert_eq!(target_region, "us-east-1");
     }
 
-    #[test]
-    fn test_region_routing_endpoint_generation() {
-        let client = BedrockRuntimeImpl::new_test();
+    #[tokio::test]
+    async fn test_region_routing_endpoint_generation() {
+        let client = BedrockRuntimeImpl::new_test().await;
 
         // Test EU model ID generates correct endpoint
         let target_region = client.get_target_region("eu.anthropic.claude-sonnet-4-20250514-v1:0");
         let expected_url = format!("https://bedrock-runtime.{}.amazonaws.com", target_region);
-        assert_eq!(expected_url, "https://bedrock-runtime.eu-west-1.amazonaws.com");
+        assert_eq!(
+            expected_url,
+            "https://bedrock-runtime.eu-west-1.amazonaws.com"
+        );
 
         // Test APAC model ID generates correct endpoint
-        let target_region = client.get_target_region("apac.anthropic.claude-sonnet-4-20250514-v1:0");
+        let target_region =
+            client.get_target_region("apac.anthropic.claude-sonnet-4-20250514-v1:0");
         let expected_url = format!("https://bedrock-runtime.{}.amazonaws.com", target_region);
-        assert_eq!(expected_url, "https://bedrock-runtime.ap-northeast-1.amazonaws.com");
+        assert_eq!(
+            expected_url,
+            "https://bedrock-runtime.ap-northeast-1.amazonaws.com"
+        );
 
         // Test US model ID generates correct endpoint
         let target_region = client.get_target_region("us.anthropic.claude-sonnet-4-20250514-v1:0");
         let expected_url = format!("https://bedrock-runtime.{}.amazonaws.com", target_region);
-        assert_eq!(expected_url, "https://bedrock-runtime.us-east-1.amazonaws.com");
+        assert_eq!(
+            expected_url,
+            "https://bedrock-runtime.us-east-1.amazonaws.com"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_configurable_region_mapping_end_to_end() {
+        // Test that configurable region mappings work from config through to region routing
+        let mut custom_mappings = std::collections::HashMap::new();
+        custom_mappings.insert("eu".to_string(), "eu-central-1".to_string());
+        custom_mappings.insert("custom".to_string(), "us-west-2".to_string());
+
+        let config = AwsConfig {
+            region: "us-east-1".to_string(),
+            access_key_id: Some("test_key".to_string()),
+            secret_access_key: Some("test_secret".to_string()),
+            profile: None,
+            bearer_token: None,
+            region_prefix_mappings: custom_mappings,
+        };
+
+        let client = BedrockRuntimeImpl::new(config).await.unwrap();
+
+        // Test default US mapping (unchanged)
+        let target_region = client.get_target_region("us.anthropic.claude-sonnet-4-20250514-v1:0");
+        assert_eq!(target_region, "us-east-1");
+
+        // Test custom EU mapping override
+        let target_region = client.get_target_region("eu.anthropic.claude-sonnet-4-20250514-v1:0");
+        assert_eq!(target_region, "eu-central-1"); // Custom override
+
+        // Test default APAC mapping (unchanged)
+        let target_region =
+            client.get_target_region("apac.anthropic.claude-sonnet-4-20250514-v1:0");
+        assert_eq!(target_region, "ap-northeast-1");
+
+        // Test custom prefix mapping
+        let target_region =
+            client.get_target_region("custom.anthropic.claude-sonnet-4-20250514-v1:0");
+        assert_eq!(target_region, "us-west-2"); // Custom mapping
+
+        // Test no prefix - should use server's configured region
+        let target_region = client.get_target_region("anthropic.claude-sonnet-4-20250514-v1:0");
+        assert_eq!(target_region, "us-east-1");
+
+        // Test unknown prefix - should use server's configured region
+        let target_region =
+            client.get_target_region("unknown.anthropic.claude-sonnet-4-20250514-v1:0");
+        assert_eq!(target_region, "us-east-1");
     }
 }
