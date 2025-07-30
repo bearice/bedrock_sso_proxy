@@ -88,7 +88,7 @@ export function Dashboard() {
             Dashboard
           </h2>
           <p style={{ margin: '0.5rem 0 0 0', color: '#374151', fontWeight: '500' }}>
-            Welcome back! Here's your quick start guide for using the proxy
+            Welcome back! Here&apos;s your quick start guide for using the proxy
           </p>
         </div>
       </div>

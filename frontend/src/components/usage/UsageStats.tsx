@@ -142,7 +142,7 @@ export function UsageStats({ stats, isLoading, error }: UsageStatsProps) {
     {
       icon: <DollarSign size={24} style={{ color: '#16a34a' }} />,
       label: 'Total Cost',
-      value: formatCurrency((stats as any).total_cost ?? stats.total_cost_cents),
+      value: formatCurrency(stats.total_cost ?? stats.total_cost_cents),
       color: '#16a34a',
       background: '#f0fdf4',
     },
@@ -170,8 +170,8 @@ export function UsageStats({ stats, isLoading, error }: UsageStatsProps) {
           textAlign: 'center',
         }}
       >
-        Usage statistics from {new Date((stats.date_range as any)?.[0] ?? stats.date_range?.start).toLocaleDateString()} to{' '}
-        {new Date((stats.date_range as any)?.[1] ?? stats.date_range?.end).toLocaleDateString()}
+        Usage statistics from {new Date(Array.isArray(stats.date_range) ? stats.date_range[0] : stats.date_range?.start).toLocaleDateString()} to{' '}
+        {new Date(Array.isArray(stats.date_range) ? stats.date_range[1] : stats.date_range?.end).toLocaleDateString()}
       </div>
 
       {/* Stats Grid */}

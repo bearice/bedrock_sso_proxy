@@ -7,6 +7,7 @@ import {
   CreateApiKeyRequest,
   CreateApiKeyResponse,
   ApiKeyInfo,
+  UserInfo,
 } from '../types/auth';
 import {
   UsageQuery,
@@ -110,12 +111,12 @@ export const authApi = {
   },
 
   // Get current user info (requires JWT authentication)
-  async getCurrentUser(token: string): Promise<any> {
-    return fetchApi<any>('/auth/me', createAuthenticatedRequest(token));
+  async getCurrentUser(token: string): Promise<UserInfo> {
+    return fetchApi<UserInfo>('/auth/me', createAuthenticatedRequest(token));
   },
 
   // Validate token and handle 401 responses with redirect
-  async validateToken(token: string): Promise<any | null> {
+  async validateToken(token: string): Promise<UserInfo | null> {
     try {
       const response = await fetch('/auth/me', {
         headers: {

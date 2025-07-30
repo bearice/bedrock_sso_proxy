@@ -66,3 +66,12 @@ export interface ApiKeyInfo {
   expires_at?: string;
   revoked_at?: string;
 }
+
+export interface UserInfo {
+  id: number;
+  email: string;
+  display_name?: string;
+  provider: string;
+  created_at: string;
+  last_login?: string;
+}

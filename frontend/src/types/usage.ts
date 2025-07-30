@@ -27,11 +27,12 @@ export interface UsageStats {
   total_tokens: number;
   success_rate: number;
   total_cost_cents: number;
+  total_cost?: number; // For backwards compatibility
   unique_models: number;
   date_range: {
     start: string;
     end: string;
-  };
+  } | [string, string]; // Allow both object and array format
 }
 
 export interface UsageQuery {
