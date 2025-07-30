@@ -240,7 +240,7 @@ mod tests {
 
         let region =
             mapping.parse_region_from_model_id("apac.anthropic.claude-sonnet-4-20250514-v1:0");
-        assert_eq!(region, Some("ap-southeast-1".to_string()));
+        assert_eq!(region, Some("ap-northeast-1".to_string()));
 
         let region =
             mapping.parse_region_from_model_id("eu.anthropic.claude-sonnet-4-20250514-v1:0");
@@ -267,7 +267,7 @@ mod tests {
         );
         assert_eq!(
             mapping.get_region_for_prefix("apac"),
-            Some("ap-southeast-1".to_string())
+            Some("ap-northeast-1".to_string())
         );
         assert_eq!(
             mapping.get_region_for_prefix("eu"),

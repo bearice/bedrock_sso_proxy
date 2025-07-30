@@ -702,7 +702,7 @@ mod tests {
     #[tokio::test]
     async fn test_background_task_shutdown() {
         let handle = tokio::spawn(async {});
-        let shutdown = BackgroundTaskShutdown::new("TestTask".to_string(), handle);
+        let shutdown = BackgroundTaskShutdown::new("TestTask".to_string(), handle, 5);
         assert_eq!(shutdown.name(), "TestTask");
     }
 }
