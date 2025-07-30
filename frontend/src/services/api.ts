@@ -30,7 +30,25 @@ class ApiError extends Error {
 }
 
 async function fetchApi<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
-  const headers: Record<string, string> = { ...options.headers };
+  const headers: Record<string, string> = {};
+  
+  // Handle different header types from RequestInit
+  if (options.headers) {
+    if (options.headers instanceof Headers) {
+      // Handle Headers class
+      options.headers.forEach((value, key) => {
+        headers[key] = value;
+      });
+    } else if (Array.isArray(options.headers)) {
+      // Handle array of [key, value] tuples
+      options.headers.forEach(([key, value]) => {
+        headers[key] = value;
+      });
+    } else {
+      // Handle Record<string, string>
+      Object.assign(headers, options.headers);
+    }
+  }
   
   // Only set Content-Type for requests with a body
   if (options.body) {

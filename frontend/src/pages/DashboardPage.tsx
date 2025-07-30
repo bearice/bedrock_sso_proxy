@@ -4,6 +4,7 @@ import { ApiKeyManagement } from '../components/apikeys';
 import { UsageTracking } from '../components/usage';
 import { Dashboard } from '../components/dashboard';
 import { authApi } from '../services/api';
+import { UserInfo } from '../types/auth';
 import {
   LogOut,
   User,
@@ -11,16 +12,6 @@ import {
   Activity,
   Settings,
 } from 'lucide-react';
-
-interface UserInfo {
-  id?: number;
-  provider_user_id: string;
-  provider: string;
-  email: string;
-  display_name?: string;
-  created_at: string;
-  last_login?: string;
-}
 
 export function DashboardPage() {
   const { token, provider, user, logout } =

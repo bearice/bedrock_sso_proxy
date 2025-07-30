@@ -69,9 +69,10 @@ export interface ApiKeyInfo {
 
 export interface UserInfo {
   id: number;
+  provider_user_id: string;
+  provider: string;
   email: string;
   display_name?: string;
-  provider: string;
   created_at: string;
   last_login?: string;
 }
