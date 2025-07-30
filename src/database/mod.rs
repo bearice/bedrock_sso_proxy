@@ -18,8 +18,8 @@ pub mod entities;
 pub mod migration;
 
 pub use dao::{
-    ApiKeysDao, AuditLogsDao, AuditLogQueryParams, CachedApiKeysDao, CachedModelCostsDao, CachedUsersDao, ModelCostsDao,
-    RefreshTokensDao, UsageDao, UsageQuery, UsageStats, UsersDao,
+    ApiKeysDao, AuditLogQueryParams, AuditLogsDao, CachedApiKeysDao, CachedModelCostsDao,
+    CachedUsersDao, ModelCostsDao, RefreshTokensDao, UsageDao, UsageQuery, UsageStats, UsersDao,
 };
 
 /// Database error types

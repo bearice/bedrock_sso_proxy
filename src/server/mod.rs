@@ -13,6 +13,7 @@ use crate::{
     database::{DatabaseManager, DatabaseManagerImpl},
     error::AppError,
     health::HealthService,
+    jobs::{CleanupJob, JobScheduler, SummariesJob},
     metrics,
     model_service::{ModelService, ModelServiceImpl},
     routes::{
@@ -22,6 +23,7 @@ use crate::{
     },
     server::route_builder::middleware_factories::request_response_logger,
     shutdown::{ShutdownCoordinator, ShutdownManager, StreamingConnectionManager},
+    summarization::SummarizationService,
 };
 use axum::{
     Router,
@@ -47,6 +49,7 @@ pub struct Server {
     pub streaming_manager: Arc<StreamingConnectionManager>,
     pub shutdown_coordinator: Arc<ShutdownCoordinator>,
     pub cost_service: Arc<crate::cost::CostTrackingService>,
+    pub job_scheduler: Arc<tokio::sync::RwLock<JobScheduler>>,
 }
 
 impl Server {
@@ -134,6 +137,14 @@ impl Server {
         // Initialize cost service
         let cost_service = Arc::new(crate::cost::CostTrackingService::new(database.clone()));
 
+        // Initialize job scheduler with shutdown coordination
+        let job_scheduler = Arc::new(tokio::sync::RwLock::new(
+            JobScheduler::with_shutdown_coordinator(
+                config.jobs.clone(),
+                shutdown_coordinator.subscribe(),
+            ),
+        ));
+
         let config = Arc::new(config);
         Ok(Self {
             config,
@@ -146,6 +157,7 @@ impl Server {
             streaming_manager,
             shutdown_coordinator,
             cost_service,
+            job_scheduler,
         })
     }
 
@@ -155,8 +167,38 @@ impl Server {
         self.database.migrate().await.map_err(AppError::Database)?;
         info!("Database migrations completed successfully");
 
+        // Start job scheduler if enabled
+        if self.config.jobs.enabled {
+            info!("Starting job scheduler...");
+
+            // Create summarization service for jobs
+            let summarization_service = Arc::new(SummarizationService::new(self.database.clone()));
+
+            // Create job instances
+            let summaries_job = Arc::new(SummariesJob::new(
+                summarization_service.clone(),
+                self.config.jobs.usage_summaries.clone(),
+            ));
+            let cleanup_job = Arc::new(CleanupJob::new(
+                summarization_service.clone(),
+                self.config.jobs.usage_cleanup.clone(),
+            ));
+
+            let jobs: Vec<Arc<dyn crate::jobs::Job>> = vec![summaries_job, cleanup_job];
+
+            // Start the scheduler
+            let mut scheduler = self.job_scheduler.write().await;
+            scheduler.start(jobs).await?;
+            drop(scheduler); // Release the write lock
+
+            info!("Job scheduler started successfully");
+        } else {
+            info!("Job scheduler disabled in configuration");
+        }
+
         // Initialize shutdown manager
-        let mut shutdown_manager = ShutdownManager::new(Duration::from_secs(30));
+        let mut shutdown_manager =
+            ShutdownManager::new(Duration::from_secs(self.config.shutdown.timeout_seconds));
 
         // Initialize model costs in the background (now that migrations are complete)
         let cost_service = self.cost_service.clone();
@@ -168,7 +210,11 @@ impl Server {
 
         // Register all server components for shutdown
         shutdown_manager.register_server_components(self);
-        shutdown_manager.register_background_task(cost_init, "cost init");
+        shutdown_manager.register_background_task(
+            cost_init,
+            "cost init",
+            self.config.shutdown.background_task_timeout_seconds,
+        );
 
         let app = self.create_app();
 

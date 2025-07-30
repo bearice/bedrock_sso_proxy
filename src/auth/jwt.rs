@@ -66,7 +66,7 @@ fn create_encoding_key(key_data: &str, algorithm: Algorithm) -> Result<EncodingK
 // OAuth-issued JWT claims structure
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct OAuthClaims {
-    pub sub: i32, // Database user ID
+    pub sub: i32,    // Database user ID
     pub admin: bool, // is admin
     pub iat: usize,
     pub exp: usize,

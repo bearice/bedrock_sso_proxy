@@ -253,27 +253,22 @@ cargo run --bin bedrock_proxy -- migrate up       # Run all pending migrations
 cargo run --bin bedrock_proxy -- migrate down     # Rollback last migration
 cargo run --bin bedrock_proxy -- migrate status   # Show migration status
 
-# Maintenance and background processing commands
-cargo run --bin bedrock_proxy -- maintenance all                                # Run all maintenance tasks with defaults
-cargo run --bin bedrock_proxy -- maintenance all --dry-run                      # Preview all maintenance tasks
+# Job management and background processing commands
+cargo run --bin bedrock_proxy -- job list                                      # List available job types
+cargo run --bin bedrock_proxy -- job status                                    # Check job system status
 
-# Usage summary generation (improves API performance)
-cargo run --bin bedrock_proxy -- maintenance summaries                          # Generate daily summaries for last 30 days
-cargo run --bin bedrock_proxy -- maintenance summaries --period weekly          # Generate weekly summaries
-cargo run --bin bedrock_proxy -- maintenance summaries --period monthly         # Generate monthly summaries
-cargo run --bin bedrock_proxy -- maintenance summaries --days-back 90           # Process last 90 days
-cargo run --bin bedrock_proxy -- maintenance summaries --user-id 123            # Process specific user only
-cargo run --bin bedrock_proxy -- maintenance summaries --model-id claude-sonnet-4  # Process specific model only
+# Usage summary generation (improves API performance - runs automatically or manually)
+cargo run --bin bedrock_proxy -- job run summaries --period daily              # Generate daily summaries for last 30 days
+cargo run --bin bedrock_proxy -- job run summaries --period weekly             # Generate weekly summaries
+cargo run --bin bedrock_proxy -- job run summaries --period monthly            # Generate monthly summaries
+cargo run --bin bedrock_proxy -- job run summaries --days-back 90              # Process last 90 days
+cargo run --bin bedrock_proxy -- job run summaries --user-id 123               # Process specific user only
+cargo run --bin bedrock_proxy -- job run summaries --model-id claude-sonnet-4  # Process specific model only
+cargo run --bin bedrock_proxy -- job run summaries --dry-run                   # Preview what would be generated
 
 # Database cleanup commands
-cargo run --bin bedrock_proxy -- maintenance cleanup-records --dry-run          # Preview old usage records to be deleted
-cargo run --bin bedrock_proxy -- maintenance cleanup-records --retention-days 30 # Delete usage records older than 30 days
-
-# Token and cache cleanup commands  
-cargo run --bin bedrock_proxy -- maintenance cleanup-tokens --refresh-tokens --dry-run  # Preview expired refresh tokens
-cargo run --bin bedrock_proxy -- maintenance cleanup-tokens --refresh-tokens    # Clean expired refresh tokens
-cargo run --bin bedrock_proxy -- maintenance cleanup-tokens --auth-cache        # Clear JWT validation cache
-cargo run --bin bedrock_proxy -- maintenance cleanup-tokens --oauth-states      # Clean OAuth state tokens
+cargo run --bin bedrock_proxy -- job run cleanup --dry-run                     # Preview old usage records to be deleted
+cargo run --bin bedrock_proxy -- job run cleanup --days-back 30                # Delete usage records older than 30 days
 ```
 
 ## Service Layer Architecture
@@ -302,6 +297,20 @@ testability and modularity:
 - **Cached DAOs**: Users, API keys with TypedCache integration
 - **Direct DAOs**: Usage tracking, audit logs, refresh tokens
 - **Migration management**: Automated schema updates
+
+**SummarizationService** (`src/summarization/`):
+
+- **Usage data aggregation**: Converts raw records into performance summaries
+- **Multi-period support**: Hourly, daily, weekly, monthly summaries
+- **Cleanup operations**: Manages data retention policies
+- **Summaries-first queries**: Optimized statistics with fallback to raw records
+
+**Job System** (`src/jobs/`):
+
+- **JobScheduler**: Cron-based background job execution with graceful shutdown
+- **SummariesJob**: Automatic usage summary generation
+- **CleanupJob**: Automatic data retention and cleanup
+- **Dual deployment**: Internal (in-process) or external (cron/K8s) execution
 
 **CacheManager** (`src/cache/`):
 
@@ -377,6 +386,20 @@ database:
 metrics:
   enabled: true
   port: 9090
+jobs:
+  enabled: true
+  usage_summaries:
+    schedule: "0 2 * * *"  # Daily at 2 AM
+    periods: ["daily"]
+  usage_cleanup:
+    schedule: "0 3 * * *"  # Daily at 3 AM
+    raw_records_days: 30
+    summaries_days: 365
+shutdown:
+  timeout_seconds: 30
+  streaming_timeout_seconds: 30
+  token_tracking_timeout_seconds: 30
+  background_task_timeout_seconds: 5
 ```
 
 ### Environment Variables
@@ -392,6 +415,11 @@ Use `BEDROCK_` prefix with double underscores for nesting:
 - `BEDROCK_DATABASE__URL=sqlite://./data/bedrock_sso.db`
 - `BEDROCK_METRICS__ENABLED=true`
 - `BEDROCK_METRICS__PORT=9090`
+- `BEDROCK_JOBS__ENABLED=true`
+- `BEDROCK_JOBS__USAGE_SUMMARIES__SCHEDULE="0 2 * * *"`
+- `BEDROCK_JOBS__USAGE_CLEANUP__RAW_RECORDS_DAYS=30`
+- `BEDROCK_SHUTDOWN__TIMEOUT_SECONDS=30`
+- `BEDROCK_SHUTDOWN__STREAMING_TIMEOUT_SECONDS=30`
 
 ### Cache Configuration
 

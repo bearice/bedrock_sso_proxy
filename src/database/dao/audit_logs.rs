@@ -2,8 +2,8 @@ use crate::database::entities::{AuditLogEntry, audit_logs};
 use crate::database::{DatabaseError, DatabaseResult};
 use chrono::{DateTime, Utc};
 use sea_orm::{
-    ActiveModelTrait, ActiveValue, ColumnTrait, DatabaseConnection, EntityTrait, PaginatorTrait, QueryFilter,
-    QueryOrder, QuerySelect, Set,
+    ActiveModelTrait, ActiveValue, ColumnTrait, DatabaseConnection, EntityTrait, PaginatorTrait,
+    QueryFilter, QueryOrder, QuerySelect, Set,
 };
 use serde::Deserialize;
 use utoipa::{IntoParams, ToSchema};
@@ -89,7 +89,7 @@ impl AuditLogsDao {
     /// Find all audit logs with optional filtering (admin use)
     pub async fn find_all(
         &self,
-        query_params: &AuditLogQueryParams
+        query_params: &AuditLogQueryParams,
     ) -> DatabaseResult<Vec<AuditLogEntry>> {
         let mut query = audit_logs::Entity::find();
 
@@ -125,10 +125,7 @@ impl AuditLogsDao {
     }
 
     /// Count audit logs with optional filtering (admin use)
-    pub async fn count_all(
-        &self,
-        query_params: &AuditLogQueryParams,
-    ) -> DatabaseResult<u64> {
+    pub async fn count_all(&self, query_params: &AuditLogQueryParams) -> DatabaseResult<u64> {
         let mut query = audit_logs::Entity::find();
 
         // Apply filters (same as find_all)
@@ -158,7 +155,6 @@ impl AuditLogsDao {
 
         Ok(count)
     }
-
 
     /// Clean up old audit logs
     pub async fn cleanup_old(&self, retention_days: u32) -> DatabaseResult<u64> {

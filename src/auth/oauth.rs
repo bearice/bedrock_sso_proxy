@@ -269,7 +269,7 @@ impl OAuthService {
             .map(|s| s.to_string());
 
         // Store user information persistently if storage is available
-        let (db_user_id,is_admin) = {
+        let (db_user_id, is_admin) = {
             let now = Utc::now();
             let user_record = UserRecord {
                 id: 0, // Will be set by database
@@ -343,7 +343,7 @@ impl OAuthService {
                 );
             }
 
-            (db_user_id,is_admin)
+            (db_user_id, is_admin)
         };
 
         // Create OAuth JWT token with proper refresh token support

@@ -167,6 +167,18 @@ impl TestServerBuilder {
         let shutdown_coordinator = Arc::new(crate::shutdown::ShutdownCoordinator::new());
         let cost_service = Arc::new(crate::cost::CostTrackingService::new(database.clone()));
 
+        // Create test job scheduler (disabled by default for tests)
+        let test_jobs_config = crate::jobs::JobsConfig {
+            enabled: false,
+            ..Default::default()
+        };
+        let job_scheduler = Arc::new(tokio::sync::RwLock::new(
+            crate::jobs::JobScheduler::with_shutdown_coordinator(
+                test_jobs_config,
+                shutdown_coordinator.subscribe(),
+            ),
+        ));
+
         Ok(Server {
             config,
             jwt_service,
@@ -180,6 +192,7 @@ impl TestServerBuilder {
             )),
             shutdown_coordinator,
             cost_service,
+            job_scheduler,
         })
     }
 }

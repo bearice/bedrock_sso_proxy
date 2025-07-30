@@ -7,7 +7,10 @@ use crate::auth::config::{AdminConfig, ApiKeyConfig, JwtConfig, OAuthConfig, OAu
 use crate::aws::config::AwsConfig;
 use crate::cache::config::CacheConfig;
 use crate::database::config::DatabaseConfig;
-use crate::server::config::{FrontendConfig, LoggingConfig, MetricsConfig, ServerConfig};
+use crate::jobs::JobsConfig;
+use crate::server::config::{
+    FrontendConfig, LoggingConfig, MetricsConfig, ServerConfig, ShutdownConfig,
+};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Config {
@@ -30,6 +33,10 @@ pub struct Config {
     pub database: DatabaseConfig,
     #[serde(default)]
     pub metrics: MetricsConfig,
+    #[serde(default)]
+    pub jobs: JobsConfig,
+    #[serde(default)]
+    pub shutdown: ShutdownConfig,
 }
 
 /// Configuration structures are now modularized by domain:
@@ -68,6 +75,8 @@ impl Default for Config {
             api_keys: ApiKeyConfig::default(),
             database: DatabaseConfig::default(),
             metrics: MetricsConfig::default(),
+            jobs: JobsConfig::default(),
+            shutdown: ShutdownConfig::default(),
         }
     }
 }

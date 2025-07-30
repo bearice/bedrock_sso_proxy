@@ -134,16 +134,37 @@ impl ShutdownManager {
 
     /// Register all server components for shutdown in the correct order
     pub fn register_server_components(&mut self, server: &crate::server::Server) {
-        // Register components in shutdown order (order matters: token tracking first, then streaming, then cache, then database)
-        self.register(TokenTrackingShutdown::new(server.model_service.clone()));
-        self.register(StreamingShutdown::new(server.streaming_manager.clone()));
+        // Register components in shutdown order (order matters: jobs first, then token tracking, streaming, cache, database)
+        self.register(JobSchedulerShutdown::new(server.job_scheduler.clone()));
+        self.register(TokenTrackingShutdown::new(
+            server.model_service.clone(),
+            server.config.shutdown.token_tracking_timeout_seconds,
+        ));
+        self.register(StreamingShutdown::new(
+            server.streaming_manager.clone(),
+            server.config.shutdown.streaming_timeout_seconds,
+        ));
         self.register(CacheShutdown::new(server.cache.clone()));
         self.register(DatabaseShutdown::new(server.database.clone()));
         self.register(HttpServerShutdown::new("HTTP Server".to_string()));
     }
 
-    pub fn register_background_task(&mut self, task: JoinHandle<()>, name: &str) {
-        self.register(BackgroundTaskShutdown::new(name.to_string(), task));
+    pub fn register_background_task(
+        &mut self,
+        task: JoinHandle<()>,
+        name: &str,
+        timeout_seconds: u64,
+    ) {
+        self.register(BackgroundTaskShutdown::new(
+            name.to_string(),
+            task,
+            timeout_seconds,
+        ));
+    }
+
+    /// Register background task with default timeout (for backward compatibility)
+    pub fn register_background_task_default(&mut self, task: JoinHandle<()>, name: &str) {
+        self.register_background_task(task, name, 5);
     }
     /// Shutdown all registered components
     pub async fn shutdown_all(&self) {
@@ -171,34 +192,24 @@ impl ShutdownManager {
 
 /// Database component that implements graceful shutdown
 pub struct DatabaseShutdown {
-    name: String,
+    #[allow(dead_code)]
     database: Arc<dyn crate::database::DatabaseManager>,
 }
 
 impl DatabaseShutdown {
     pub fn new(database: Arc<dyn crate::database::DatabaseManager>) -> Self {
-        Self {
-            name: "Database".to_string(),
-            database,
-        }
+        Self { database }
     }
 }
 
 #[async_trait::async_trait]
 impl GracefulShutdown for DatabaseShutdown {
     fn name(&self) -> &str {
-        &self.name
+        "Database"
     }
 
     async fn shutdown(&self) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         info!("Shutting down database connections...");
-
-        // Clean up any expired records before shutdown
-        let _ = self.database.api_keys().cleanup_expired().await;
-        let _ = self.database.refresh_tokens().cleanup_expired().await;
-
-        // Clear cache to free memory
-        let _ = self.database.cache_manager().clear().await;
 
         // The database connection itself is automatically closed when dropped
         // by the underlying SeaORM connection pool
@@ -209,33 +220,24 @@ impl GracefulShutdown for DatabaseShutdown {
 
 /// Cache component that implements graceful shutdown
 pub struct CacheShutdown {
-    name: String,
+    #[allow(dead_code)]
     cache: Arc<dyn crate::cache::CacheManager>,
 }
 
 impl CacheShutdown {
     pub fn new(cache: Arc<dyn crate::cache::CacheManager>) -> Self {
-        Self {
-            name: "Cache".to_string(),
-            cache,
-        }
+        Self { cache }
     }
 }
 
 #[async_trait::async_trait]
 impl GracefulShutdown for CacheShutdown {
     fn name(&self) -> &str {
-        &self.name
+        "Cache"
     }
 
     async fn shutdown(&self) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         info!("Shutting down cache...");
-
-        // Clear all cache entries to free memory
-        if let Err(e) = self.cache.clear().await {
-            error!("Failed to clear cache during shutdown: {}", e);
-            return Err(e.into());
-        }
 
         // Cache connections (Redis) are automatically closed when dropped
         info!("Cache shutdown completed");
@@ -272,13 +274,19 @@ impl GracefulShutdown for HttpServerShutdown {
 pub struct BackgroundTaskShutdown {
     name: String,
     task_handle: RwLock<Option<tokio::task::JoinHandle<()>>>,
+    timeout_seconds: u64,
 }
 
 impl BackgroundTaskShutdown {
-    pub fn new(name: String, task_handle: tokio::task::JoinHandle<()>) -> Self {
+    pub fn new(
+        name: String,
+        task_handle: tokio::task::JoinHandle<()>,
+        timeout_seconds: u64,
+    ) -> Self {
         Self {
             name,
             task_handle: RwLock::new(Some(task_handle)),
+            timeout_seconds,
         }
     }
 }
@@ -296,7 +304,7 @@ impl GracefulShutdown for BackgroundTaskShutdown {
                 handle.abort();
 
                 // Wait for task to complete or timeout
-                match timeout(Duration::from_secs(5), handle).await {
+                match timeout(Duration::from_secs(self.timeout_seconds), handle).await {
                     Ok(_) => {
                         info!("Background task '{}' shut down gracefully", self.name);
                     }
@@ -438,13 +446,15 @@ impl StreamingConnectionManager {
 pub struct StreamingShutdown {
     name: String,
     connection_manager: Arc<StreamingConnectionManager>,
+    timeout_seconds: u64,
 }
 
 impl StreamingShutdown {
-    pub fn new(connection_manager: Arc<StreamingConnectionManager>) -> Self {
+    pub fn new(connection_manager: Arc<StreamingConnectionManager>, timeout_seconds: u64) -> Self {
         Self {
             name: "Streaming Connections".to_string(),
             connection_manager,
+            timeout_seconds,
         }
     }
 }
@@ -466,7 +476,7 @@ impl GracefulShutdown for StreamingShutdown {
         // Wait for all connections to complete (with timeout)
         let completed = self
             .connection_manager
-            .wait_for_all_connections(Duration::from_secs(30))
+            .wait_for_all_connections(Duration::from_secs(self.timeout_seconds))
             .await;
 
         if completed {
@@ -483,13 +493,15 @@ impl GracefulShutdown for StreamingShutdown {
 pub struct TokenTrackingShutdown {
     name: String,
     model_service: Arc<dyn ModelService>,
+    timeout_seconds: u64,
 }
 
 impl TokenTrackingShutdown {
-    pub fn new(model_service: Arc<dyn ModelService>) -> Self {
+    pub fn new(model_service: Arc<dyn ModelService>, timeout_seconds: u64) -> Self {
         Self {
             name: "Token Tracking".to_string(),
             model_service,
+            timeout_seconds,
         }
     }
 }
@@ -506,7 +518,7 @@ impl GracefulShutdown for TokenTrackingShutdown {
         // First, wait for token tracking tasks to complete
         let completed = self
             .model_service
-            .wait_for_token_tracking_completion(Duration::from_secs(30))
+            .wait_for_token_tracking_completion(Duration::from_secs(self.timeout_seconds))
             .await;
 
         if completed {
@@ -517,6 +529,34 @@ impl GracefulShutdown for TokenTrackingShutdown {
             self.model_service.abort_token_tracking_tasks().await;
         }
 
+        Ok(())
+    }
+}
+
+/// Job scheduler shutdown component
+pub struct JobSchedulerShutdown {
+    job_scheduler: Arc<tokio::sync::RwLock<crate::jobs::JobScheduler>>,
+}
+
+impl JobSchedulerShutdown {
+    pub fn new(job_scheduler: Arc<tokio::sync::RwLock<crate::jobs::JobScheduler>>) -> Self {
+        Self { job_scheduler }
+    }
+}
+
+#[async_trait::async_trait]
+impl GracefulShutdown for JobSchedulerShutdown {
+    fn name(&self) -> &str {
+        "Job Scheduler"
+    }
+
+    async fn shutdown(&self) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        info!("Shutting down job scheduler...");
+
+        let mut scheduler = self.job_scheduler.write().await;
+        scheduler.stop().await;
+
+        info!("Job scheduler shutdown completed");
         Ok(())
     }
 }

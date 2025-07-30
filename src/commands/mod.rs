@@ -1,4 +1,4 @@
-pub mod maintenance;
+pub mod job;
 pub mod migrate;
 
 use crate::Config;
@@ -11,10 +11,10 @@ pub enum Commands {
         #[command(subcommand)]
         action: migrate::MigrateAction,
     },
-    /// Run maintenance and background processing tasks
-    Maintenance {
+    /// Run and manage background jobs
+    Job {
         #[command(subcommand)]
-        task: maintenance::MaintenanceTask,
+        command: job::JobCommand,
     },
 }
 
@@ -24,8 +24,6 @@ pub async fn handle_command(
 ) -> Result<(), Box<dyn std::error::Error>> {
     match command {
         Commands::Migrate { action } => migrate::handle_migrate_command(action, config).await,
-        Commands::Maintenance { task } => {
-            maintenance::handle_maintenance_command(task, config).await
-        }
+        Commands::Job { command } => job::handle_job_command(command, config).await,
     }
 }

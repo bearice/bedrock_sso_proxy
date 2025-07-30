@@ -11,7 +11,7 @@ pub mod users_cached;
 
 pub use api_keys::ApiKeysDao;
 pub use api_keys_cached::CachedApiKeysDao;
-pub use audit_logs::{AuditLogsDao, AuditLogQueryParams};
+pub use audit_logs::{AuditLogQueryParams, AuditLogsDao};
 pub use cached::{CacheKeyBuilder, CacheableDao, CachedDao, DaoCacheConfig};
 pub use model_costs::ModelCostsDao;
 pub use model_costs_cached::CachedModelCostsDao;

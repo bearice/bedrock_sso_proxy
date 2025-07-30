@@ -46,6 +46,22 @@ pub struct MetricsConfig {
     pub port: u16,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ShutdownConfig {
+    /// Timeout in seconds for graceful shutdown of components
+    #[serde(default = "default_shutdown_timeout")]
+    pub timeout_seconds: u64,
+    /// Timeout in seconds for streaming connections to complete
+    #[serde(default = "default_streaming_timeout")]
+    pub streaming_timeout_seconds: u64,
+    /// Timeout in seconds for token tracking tasks to complete
+    #[serde(default = "default_token_tracking_timeout")]
+    pub token_tracking_timeout_seconds: u64,
+    /// Timeout in seconds for background tasks to complete
+    #[serde(default = "default_background_task_timeout")]
+    pub background_task_timeout_seconds: u64,
+}
+
 fn default_metrics_enabled() -> bool {
     false
 }
@@ -59,6 +75,33 @@ impl Default for MetricsConfig {
         Self {
             enabled: default_metrics_enabled(),
             port: default_metrics_port(),
+        }
+    }
+}
+
+fn default_shutdown_timeout() -> u64 {
+    30
+}
+
+fn default_streaming_timeout() -> u64 {
+    30
+}
+
+fn default_token_tracking_timeout() -> u64 {
+    30
+}
+
+fn default_background_task_timeout() -> u64 {
+    5
+}
+
+impl Default for ShutdownConfig {
+    fn default() -> Self {
+        Self {
+            timeout_seconds: default_shutdown_timeout(),
+            streaming_timeout_seconds: default_streaming_timeout(),
+            token_tracking_timeout_seconds: default_token_tracking_timeout(),
+            background_task_timeout_seconds: default_background_task_timeout(),
         }
     }
 }

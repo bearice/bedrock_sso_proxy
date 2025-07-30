@@ -436,3 +436,65 @@ async fn test_pagination_limits() {
     let json: Value = serde_json::from_slice(&body).unwrap();
     assert_eq!(json["limit"], 500); // Should be capped at 500
 }
+
+#[tokio::test]
+async fn test_get_stats_uses_summaries_when_available() {
+    let server = create_test_server().await;
+    let (user_id, _) = setup_test_data(server.database.as_ref()).await;
+
+    // Create a usage summary record for the same user
+    let summary = UsageSummary {
+        id: 0,
+        user_id,
+        model_id: "anthropic.claude-sonnet-4-20250514-v1:0".to_string(),
+        period_type: "daily".to_string(),
+        period_start: Utc::now() - chrono::Duration::hours(24),
+        period_end: Utc::now(),
+        total_requests: 10,
+        total_input_tokens: 1000,
+        total_output_tokens: 500,
+        total_tokens: 1500,
+        avg_response_time_ms: 250.0,
+        success_rate: 0.9,
+        estimated_cost: Some(Decimal::new(150, 3)), // 0.150
+        created_at: Utc::now(),
+        updated_at: Utc::now(),
+    };
+
+    // Store the summary
+    server
+        .database
+        .usage()
+        .upsert_summary(&summary)
+        .await
+        .unwrap();
+
+    // Test the DAO method directly to verify it uses summaries
+    use bedrock_sso_proxy::database::dao::usage::UsageQuery;
+
+    let query = UsageQuery {
+        user_id: Some(user_id),
+        model_id: Some("anthropic.claude-sonnet-4-20250514-v1:0".to_string()),
+        start_date: None,
+        end_date: None,
+        success_only: None,
+        limit: None,
+        offset: None,
+    };
+
+    let stats = server.database.usage().get_stats(&query).await.unwrap();
+
+    // Verify stats come from summary (not from records)
+    // The summary should override the record data for this model
+    assert_eq!(stats.total_requests, 10);
+    assert_eq!(stats.total_input_tokens, 1000);
+    assert_eq!(stats.total_output_tokens, 500);
+    assert_eq!(stats.total_tokens, 1500);
+    assert_eq!(stats.avg_response_time_ms, 250.0);
+    assert_eq!(stats.success_rate, 0.9);
+
+    assert!(stats.total_cost.is_some());
+    let cost = stats.total_cost.unwrap();
+    // Compare decimal values properly
+    assert_eq!(cost, Decimal::new(150, 3)); // 0.150
+}
