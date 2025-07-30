@@ -18,7 +18,7 @@ pub mod entities;
 pub mod migration;
 
 pub use dao::{
-    ApiKeysDao, AuditLogsDao, CachedApiKeysDao, CachedModelCostsDao, CachedUsersDao, ModelCostsDao,
+    ApiKeysDao, AuditLogsDao, AuditLogQueryParams, CachedApiKeysDao, CachedModelCostsDao, CachedUsersDao, ModelCostsDao,
     RefreshTokensDao, UsageDao, UsageQuery, UsageStats, UsersDao,
 };
 

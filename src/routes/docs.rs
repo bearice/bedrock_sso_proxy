@@ -29,6 +29,7 @@ use utoipa_swagger_ui::SwaggerUi;
         crate::routes::usage::get_system_usage_records,
         crate::routes::usage::get_system_usage_stats,
         crate::routes::usage::get_top_models,
+        crate::routes::audit_logs::get_audit_logs,
     ),
     components(
         schemas(
@@ -53,6 +54,9 @@ use utoipa_swagger_ui::SwaggerUi;
             crate::routes::usage::ModelUsage,
             crate::database::entities::UsageRecord,
             crate::database::dao::usage::UsageStats,
+            crate::database::AuditLogQueryParams,
+            crate::routes::audit_logs::AuditLogsResponse,
+            crate::routes::audit_logs::AuditLogEntry,
         )
     ),
     tags(
@@ -63,6 +67,7 @@ use utoipa_swagger_ui::SwaggerUi;
         (name = "Cost Management", description = "Model cost tracking and management endpoints (admin only)"),
         (name = "Usage Tracking", description = "User usage tracking endpoints"),
         (name = "Admin Usage Management", description = "System-wide usage tracking endpoints (admin only)"),
+        (name = "admin-audit", description = "Admin audit log operations (admin only)"),
     ),
     modifiers(&SecurityAddon)
 )]
