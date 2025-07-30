@@ -95,7 +95,7 @@ impl Server {
         );
         let database: Arc<dyn DatabaseManager> = database_impl.clone();
 
-        let bedrock_impl = Arc::new(BedrockRuntimeImpl::new(config.aws.clone()));
+        let bedrock_impl = Arc::new(BedrockRuntimeImpl::new_with_credential_chain(config.aws.clone()).await?);
         let bedrock: Arc<dyn crate::aws::bedrock::BedrockRuntime> = bedrock_impl.clone();
 
         // Initialize shutdown coordinator and streaming manager

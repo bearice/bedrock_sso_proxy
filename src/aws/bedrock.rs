@@ -4,9 +4,11 @@ use crate::error::AppError;
 use crate::health::{HealthCheckResult, HealthChecker};
 use async_trait::async_trait;
 use aws_credential_types::Credentials;
+use aws_credential_types::provider::ProvideCredentials;
 use aws_sigv4::http_request::{SignableBody, SignableRequest, SigningSettings, sign};
 use aws_sigv4::sign::v4;
 use aws_smithy_runtime_api::client::identity::Identity;
+use aws_config::SdkConfig;
 use axum::http::{HeaderMap, HeaderValue, Method, Request, StatusCode};
 use bytes::Bytes;
 use futures_util::Stream;
@@ -19,6 +21,7 @@ use url::Url;
 pub struct BedrockRuntimeImpl {
     client: Client,
     config: AwsConfig,
+    sdk_config: Option<SdkConfig>,
     base_url: String,
     model_mapping: RegionalModelMapping,
 }
@@ -53,9 +56,28 @@ impl BedrockRuntimeImpl {
         Self {
             client,
             config,
+            sdk_config: None,
             base_url,
             model_mapping,
         }
+    }
+
+    /// Create a new instance with AWS SDK config for credential chain support
+    pub async fn new_with_credential_chain(config: AwsConfig) -> Result<Self, AppError> {
+        let client = Client::new();
+        let base_url = format!("https://bedrock-runtime.{}.amazonaws.com", config.region);
+        let model_mapping = RegionalModelMapping::new();
+
+        let sdk_config = config.build_sdk_config().await
+            .map_err(|e| AppError::Internal(format!("Failed to build AWS SDK config: {}", e)))?;
+
+        Ok(Self {
+            client,
+            config,
+            sdk_config: Some(sdk_config),
+            base_url,
+            model_mapping,
+        })
     }
 
     /// Create a test client for unit tests
@@ -260,19 +282,7 @@ impl BedrockRuntimeImpl {
 
     /// Sign AWS request using aws-sigv4 library
     async fn sign_request(&self, request: &BedrockRequest) -> Result<HeaderMap, AppError> {
-        let access_key = self
-            .config
-            .access_key_id
-            .as_ref()
-            .ok_or_else(|| AppError::Internal("AWS access key not configured".to_string()))?;
-        let secret_key = self
-            .config
-            .secret_access_key
-            .as_ref()
-            .ok_or_else(|| AppError::Internal("AWS secret key not configured".to_string()))?;
-
-        // Create AWS credentials
-        let credentials = Credentials::new(access_key, secret_key, None, None, "bedrock-sso-proxy");
+        let credentials = self.get_credentials().await?;
 
         // Parse the URL
         let url = Url::parse(&request.url)?;
@@ -338,6 +348,29 @@ impl BedrockRuntimeImpl {
         Ok(signed_headers)
     }
 
+    /// Get credentials using explicit config or credential chain
+    async fn get_credentials(&self) -> Result<Credentials, AppError> {
+        // Try explicit credentials first
+        if let Some(credentials) = self.config.get_explicit_credentials() {
+            return Ok(credentials);
+        }
+
+        // Use credential chain via SDK config
+        if let Some(sdk_config) = &self.sdk_config {
+            let credential_provider = sdk_config.credentials_provider()
+                .ok_or_else(|| AppError::Internal("No credential provider available".to_string()))?;
+            
+            let credentials = credential_provider.provide_credentials().await
+                .map_err(|e| AppError::Internal(format!("Failed to resolve credentials: {}", e)))?;
+            
+            return Ok(credentials);
+        }
+
+        Err(AppError::Internal(
+            "No AWS credentials configured. Please set explicit credentials in config, environment variables (AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY), AWS profile (~/.aws/credentials), or use IAM roles.".to_string()
+        ))
+    }
+
     /// Get the host for the AWS service
     fn get_host(&self) -> String {
         format!("bedrock-runtime.{}.amazonaws.com", self.config.region)
@@ -360,13 +393,9 @@ impl BedrockRuntimeImpl {
         if self.config.bearer_token.is_some() {
             // Bearer token authentication is configured
             Ok(())
-        } else if self.config.access_key_id.is_some() && self.config.secret_access_key.is_some() {
-            // SigV4 authentication is configured
-            Ok(())
         } else {
-            Err(AppError::Internal(
-                "AWS authentication not configured (need either bearer_token or access_key_id/secret_access_key)".to_string(),
-            ))
+            // Try to resolve credentials (explicit or credential chain)
+            self.get_credentials().await.map(|_| ())
         }
     }
 
@@ -397,7 +426,9 @@ impl HealthChecker for BedrockHealthChecker {
                 } else if self.client.config.access_key_id.is_some()
                     && self.client.config.secret_access_key.is_some()
                 {
-                    "sigv4"
+                    "sigv4_explicit"
+                } else if self.client.sdk_config.is_some() {
+                    "sigv4_credential_chain"
                 } else {
                     "unknown"
                 };
@@ -782,5 +813,77 @@ mod tests {
             "Bearer ABSK-1234567890abcdef1234567890abcdef12345678"
         );
         assert!(authenticated_headers.contains_key("content-type"));
+    }
+
+    #[tokio::test]
+    async fn test_new_with_credential_chain_explicit_credentials() {
+        let config = AwsConfig {
+            region: "us-east-1".to_string(),
+            access_key_id: Some("test_key".to_string()),
+            secret_access_key: Some("test_secret".to_string()),
+            profile: None,
+            bearer_token: None,
+        };
+
+        let client = BedrockRuntimeImpl::new_with_credential_chain(config).await;
+        assert!(client.is_ok());
+
+        let client = client.unwrap();
+        assert!(client.sdk_config.is_some());
+
+        // Should be able to get credentials
+        let credentials = client.get_credentials().await;
+        assert!(credentials.is_ok());
+
+        let creds = credentials.unwrap();
+        assert_eq!(creds.access_key_id(), "test_key");
+        assert_eq!(creds.secret_access_key(), "test_secret");
+    }
+
+    #[tokio::test]
+    async fn test_get_explicit_credentials() {
+        let config = AwsConfig {
+            region: "us-east-1".to_string(),
+            access_key_id: Some("explicit_key".to_string()),
+            secret_access_key: Some("explicit_secret".to_string()),
+            profile: None,
+            bearer_token: None,
+        };
+
+        let credentials = config.get_explicit_credentials();
+        assert!(credentials.is_some());
+
+        let creds = credentials.unwrap();
+        assert_eq!(creds.access_key_id(), "explicit_key");
+        assert_eq!(creds.secret_access_key(), "explicit_secret");
+    }
+
+    #[tokio::test]
+    async fn test_get_explicit_credentials_none() {
+        let config = AwsConfig {
+            region: "us-east-1".to_string(),
+            access_key_id: None,
+            secret_access_key: None,
+            profile: Some("default".to_string()),
+            bearer_token: None,
+        };
+
+        let credentials = config.get_explicit_credentials();
+        assert!(credentials.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_health_check_with_credential_chain() {
+        let config = AwsConfig {
+            region: "us-east-1".to_string(),
+            access_key_id: Some("test_key".to_string()),
+            secret_access_key: Some("test_secret".to_string()),
+            profile: None,
+            bearer_token: None,
+        };
+
+        let client = BedrockRuntimeImpl::new_with_credential_chain(config).await.unwrap();
+        let health_result = client.health_check().await;
+        assert!(health_result.is_ok());
     }
 }

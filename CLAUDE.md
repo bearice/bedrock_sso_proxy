@@ -367,8 +367,9 @@ jwt:
   secret: "your-jwt-secret"
 aws:
   region: "us-east-1"
-  access_key_id: "optional"
-  secret_access_key: "optional"
+  access_key_id: "optional"     # If not provided, uses AWS credential chain
+  secret_access_key: "optional" # If not provided, uses AWS credential chain
+  profile: "optional"           # AWS profile name from ~/.aws/config
 logging:
   level: "info"
 cache:
@@ -420,6 +421,37 @@ Use `BEDROCK_` prefix with double underscores for nesting:
 - `BEDROCK_JOBS__USAGE_CLEANUP__RAW_RECORDS_DAYS=30`
 - `BEDROCK_SHUTDOWN__TIMEOUT_SECONDS=30`
 - `BEDROCK_SHUTDOWN__STREAMING_TIMEOUT_SECONDS=30`
+
+### AWS Credential Chain Support
+
+The proxy now supports the standard AWS credential chain, trying credentials in this order:
+
+1. **Explicit config**: `access_key_id` and `secret_access_key` from configuration
+2. **Environment variables**: `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_SESSION_TOKEN`
+3. **AWS profiles**: `~/.aws/credentials` and `~/.aws/config` files
+4. **IAM roles**: EC2 instance roles, ECS task roles, Lambda execution roles
+5. **AWS SSO**: Single Sign-On credentials
+6. **Container credentials**: ECS/Fargate container metadata service
+
+**Usage Examples:**
+
+```bash
+# Using environment variables
+export AWS_ACCESS_KEY_ID=your_access_key
+export AWS_SECRET_ACCESS_KEY=your_secret_key
+export AWS_REGION=us-east-1
+cargo run --bin bedrock_proxy
+
+# Using AWS profile
+export AWS_PROFILE=my-profile
+cargo run --bin bedrock_proxy
+
+# Using explicit configuration
+echo "aws:
+  region: us-east-1
+  profile: my-profile" > config.yaml
+cargo run --bin bedrock_proxy
+```
 
 ### Cache Configuration
 
