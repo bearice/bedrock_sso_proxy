@@ -1,6 +1,5 @@
 use crate::{
     auth::{
-        jwt::OAuthClaims,
         oauth::{RefreshRequest, TokenRequest},
         request_context::RequestContext,
     },
@@ -154,21 +153,10 @@ pub async fn callback_handler(
 
 /// Get current user information (requires authentication)
 pub async fn me_handler(
-    Extension(claims): Extension<OAuthClaims>,
-    State(server): State<Server>,
+    Extension(user): Extension<UserRecord>,
 ) -> Result<Json<UserRecord>, AppError> {
     // Get user ID from subject
-    let user_id = claims.sub;
-
-    // Get user from database by ID through OAuth service
-    let user_record = server
-        .oauth_service
-        .get_user_by_id(user_id)
-        .await
-        .map_err(|e| AppError::Internal(format!("Failed to get user: {}", e)))?
-        .ok_or_else(|| AppError::NotFound("User not found".to_string()))?;
-
-    Ok(Json(user_record))
+    Ok(Json(user))
 }
 
 #[derive(Deserialize)]

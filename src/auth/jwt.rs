@@ -67,6 +67,7 @@ fn create_encoding_key(key_data: &str, algorithm: Algorithm) -> Result<EncodingK
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct OAuthClaims {
     pub sub: i32, // Database user ID
+    pub admin: bool, // is admin
     pub iat: usize,
     pub exp: usize,
 }
@@ -76,9 +77,18 @@ impl OAuthClaims {
         let now = Utc::now().timestamp() as usize;
         Self {
             sub: user_id,
+            admin: false,
             iat: now,
             exp: now + expires_in_seconds as usize,
         }
+    }
+
+    pub fn is_admin(&self) -> bool {
+        self.admin
+    }
+
+    pub fn set_admin(&mut self, admin: bool) {
+        self.admin = admin
     }
 
     pub fn is_expired(&self) -> bool {

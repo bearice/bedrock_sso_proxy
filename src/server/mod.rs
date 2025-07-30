@@ -17,7 +17,7 @@ use crate::{
     model_service::{ModelService, ModelServiceImpl},
     routes::{
         create_admin_api_routes, create_anthropic_routes, create_auth_routes,
-        create_bedrock_routes, create_docs_routes, create_frontend_router, create_health_routes,
+        create_bedrock_routes, create_frontend_router, create_health_routes,
         create_protected_auth_routes, create_user_api_routes,
     },
     server::route_builder::middleware_factories::request_response_logger,
@@ -221,8 +221,6 @@ impl Server {
             .nest("/auth", self.protected_auth_routes())
             // Health check routes
             .nest("/health", create_health_routes())
-            // API documentation routes (public)
-            .merge(create_docs_routes())
             // API routes
             .nest("/api", self.user_api_routes())
             .nest("/api", self.admin_api_routes())

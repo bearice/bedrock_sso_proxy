@@ -269,7 +269,7 @@ impl OAuthService {
             .map(|s| s.to_string());
 
         // Store user information persistently if storage is available
-        let db_user_id = {
+        let (db_user_id,is_admin) = {
             let now = Utc::now();
             let user_record = UserRecord {
                 id: 0, // Will be set by database
@@ -297,6 +297,8 @@ impl OAuthService {
                 .await
                 .map_err(|e| AppError::Internal(format!("Failed to find user: {}", e)))?
                 .ok_or_else(|| AppError::Internal("User not found after upsert".to_string()))?;
+
+            let is_admin = self.config.is_admin(&user.email);
 
             self.database
                 .users()
@@ -341,15 +343,15 @@ impl OAuthService {
                 );
             }
 
-            db_user_id
+            (db_user_id,is_admin)
         };
 
         // Create OAuth JWT token with proper refresh token support
-        let oauth_claims = OAuthClaims::new(
+        let mut oauth_claims = OAuthClaims::new(
             db_user_id, // Use database user ID as subject
             self.config.jwt.access_token_ttl,
         );
-
+        oauth_claims.set_admin(is_admin);
         let access_token = self.jwt_service.create_oauth_token(&oauth_claims)?;
 
         // Create refresh token for proper OAuth flow
@@ -533,7 +535,7 @@ impl OAuthService {
             })?;
 
         // Use email from token data (available from database storage)
-        let _email = if token_data.email.is_empty() {
+        let email = if token_data.email.is_empty() {
             // Fallback for cache-based tokens that don't have email
             format!("user@{}.com", token_data.provider)
         } else {
@@ -557,12 +559,15 @@ impl OAuthService {
             .map(|user| user.id)
             .ok_or_else(|| AppError::NotFound("User not found in database".to_string()))?;
 
+        let is_admin = self.config.is_admin(&email);
+
         // Create new OAuth JWT token
-        let oauth_claims = OAuthClaims::new(
+        let mut oauth_claims = OAuthClaims::new(
             db_user_id, // Use database user ID as subject
             self.config.jwt.access_token_ttl,
         );
 
+        oauth_claims.set_admin(is_admin);
         let access_token = self.jwt_service.create_oauth_token(&oauth_claims)?;
 
         Ok(TokenResponse {

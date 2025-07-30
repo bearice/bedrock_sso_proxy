@@ -69,10 +69,6 @@ pub async fn auth_middleware(
     // Add UserRecord to request extensions for downstream handlers
     request.extensions_mut().insert(user);
 
-    // Remove authentication headers before forwarding to AWS
-    request.headers_mut().remove(AUTHORIZATION);
-    request.headers_mut().remove(&X_API_KEY);
-
     Ok(next.run(request).await)
 }
 
@@ -160,9 +156,6 @@ pub async fn jwt_only_middleware(
     // Add UserRecord to request extensions for downstream handlers
     request.extensions_mut().insert(user);
 
-    // Remove Authorization header before forwarding
-    request.headers_mut().remove(AUTHORIZATION);
-
     Ok(next.run(request).await)
 }
 
@@ -196,9 +189,6 @@ pub async fn jwt_auth_middleware(
     // Add both claims and UserRecord to request extensions for downstream handlers
     request.extensions_mut().insert(claims.clone());
     request.extensions_mut().insert(user);
-
-    // Remove Authorization header before forwarding to AWS
-    request.headers_mut().remove(AUTHORIZATION);
 
     Ok(next.run(request).await)
 }
@@ -472,7 +462,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_authorization_header_removed() {
+    async fn test_authorization_header_preserved() {
         let server = create_test_server().await;
 
         // Create test user first
@@ -506,7 +496,7 @@ mod tests {
             .await
             .unwrap();
         let body_str = String::from_utf8(body.to_vec()).unwrap();
-        assert_eq!(body_str, "header_removed");
+        assert_eq!(body_str, "header_present");
     }
 
     // Admin middleware tests
