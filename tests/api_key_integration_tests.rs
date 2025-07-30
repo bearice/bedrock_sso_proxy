@@ -186,9 +186,12 @@ async fn test_revoked_api_key_authentication() {
 
     let api_key = create_response.key;
 
+    // Hash the API key for revocation (endpoint expects key hash, not raw key)
+    let key_hash = bedrock_sso_proxy::database::entities::api_keys::hash_api_key(&api_key);
+
     // Revoke the API key
     let revoke_request = Request::builder()
-        .uri(format!("/api/keys/{}", api_key))
+        .uri(format!("/api/keys/{}", key_hash))
         .method("DELETE")
         .header("Authorization", format!("Bearer {}", jwt_token))
         .body(Body::empty())
