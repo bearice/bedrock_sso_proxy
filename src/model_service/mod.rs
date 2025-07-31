@@ -207,21 +207,36 @@ impl ModelService for ModelServiceImpl {
             )
             .await?;
 
-        // 2. Create usage tracker for background usage tracking
+        // 2. Extract fields needed for registration before moving request
+        let user_id = request.user_id;
+        let model_id = request.model_id.clone();
+        let endpoint_type = request.endpoint_type.clone();
+
+        // 3. Create usage tracker for background usage tracking
         let usage_tracker = UsageTracker {
             model_request: request,
             model_service: Arc::new(self.clone()),
             start_time,
         };
 
-        // 3. Wrap the stream with parsed event stream and streaming manager
-        let parsed_event_stream = streaming::ParsedEventStream::new_with_streaming_manager(
-            aws_response.stream,
-            Some(usage_tracker),
-            self.streaming_manager.clone(),
-        );
+        // 4. Register streaming connection and create stream with connection ID
+        let parsed_event_stream = if let Some(streaming_manager) = &self.streaming_manager {
+            // Register connection externally to avoid race conditions
+            let (connection_id, _completion_rx) = streaming_manager
+                .register_connection(user_id, model_id, endpoint_type)
+                .await;
 
-        // 4. Return streaming response immediately
+            streaming::ParsedEventStream::new_with_connection_id(
+                aws_response.stream,
+                Some(usage_tracker),
+                connection_id,
+                streaming_manager.clone(),
+            )
+        } else {
+            streaming::ParsedEventStream::new(aws_response.stream, Some(usage_tracker))
+        };
+
+        // 5. Return streaming response immediately
         let response = ModelStreamResponse {
             status: aws_response.status,
             headers: aws_response.headers.clone(),

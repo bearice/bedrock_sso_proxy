@@ -194,7 +194,6 @@ pub struct ParsedEventStream {
     pending_events: VecDeque<SseEvent>,
     streaming_connection_id: Option<u64>,
     streaming_manager: Option<Arc<crate::shutdown::StreamingConnectionManager>>,
-    registration_initiated: bool,
 }
 
 impl ParsedEventStream {
@@ -209,24 +208,23 @@ impl ParsedEventStream {
             pending_events: VecDeque::new(),
             streaming_connection_id: None,
             streaming_manager: None,
-            registration_initiated: false,
         }
     }
 
-    /// Create a new ParsedEventStream with streaming connection tracking
-    pub fn new_with_streaming_manager(
+    /// Create a new ParsedEventStream with pre-registered streaming connection
+    pub fn new_with_connection_id(
         stream: Box<dyn Stream<Item = Result<Bytes, reqwest::Error>> + Send + Unpin>,
         usage_tracker: Option<UsageTracker>,
-        streaming_manager: Option<Arc<crate::shutdown::StreamingConnectionManager>>,
+        streaming_connection_id: u64,
+        streaming_manager: Arc<crate::shutdown::StreamingConnectionManager>,
     ) -> Self {
         Self {
             inner: stream,
             usage_tracker,
             parser: EventStreamParser::new(),
             pending_events: VecDeque::new(),
-            streaming_connection_id: None,
-            streaming_manager,
-            registration_initiated: false,
+            streaming_connection_id: Some(streaming_connection_id),
+            streaming_manager: Some(streaming_manager),
         }
     }
 }
@@ -239,39 +237,6 @@ impl Stream for ParsedEventStream {
         cx: &mut std::task::Context<'_>,
     ) -> std::task::Poll<Option<Self::Item>> {
         use crate::model_service::types::UsageMetadata;
-
-        // Register streaming connection on first poll if not already registered
-        if !self.registration_initiated {
-            if let (Some(streaming_manager), Some(usage_tracker)) =
-                (&self.streaming_manager, &self.usage_tracker)
-            {
-                let streaming_manager_clone = streaming_manager.clone();
-                let user_id = usage_tracker.model_request.user_id;
-                let model_id = usage_tracker.model_request.model_id.clone();
-                let endpoint_type = usage_tracker.model_request.endpoint_type.clone();
-
-                // Mark as initiated to prevent repeated registration
-                self.registration_initiated = true;
-
-                // We need to spawn a task to register the connection since this is async
-                let waker = cx.waker().clone();
-                tokio::spawn(async move {
-                    let (connection_id, _completion_rx) = streaming_manager_clone
-                        .register_connection(user_id, model_id, endpoint_type)
-                        .await;
-
-                    tracing::debug!("Registered streaming connection {}", connection_id);
-                    // Note: We can't easily update the stream state here due to ownership
-                    // The connection will be cleaned up on shutdown regardless
-
-                    // Wake up the stream to continue processing
-                    waker.wake();
-                });
-
-                // Return Pending to wait for registration
-                return std::task::Poll::Pending;
-            }
-        }
 
         // First, check if we have any pending events to return
         if let Some(event) = self.pending_events.pop_front() {
@@ -302,8 +267,14 @@ impl Stream for ParsedEventStream {
                             }
                         }
                     }
-                    Err(_) => {
-                        // Parsing error, continue polling
+                    Err(e) => {
+                        // Parsing error - log but continue to avoid breaking client connection
+                        // since we can't easily convert to reqwest::Error
+                        tracing::error!("Failed to parse event stream chunk: {}", e);
+                        tracing::debug!("Chunk data that failed to parse: {:?}", chunk);
+
+                        // Continue polling for next chunk rather than failing the entire stream
+                        // This is more resilient for malformed individual chunks
                         cx.waker().wake_by_ref();
                         std::task::Poll::Pending
                     }
@@ -330,44 +301,44 @@ impl Stream for ParsedEventStream {
 
                     // Track usage in background without blocking stream completion
                     tokio::spawn(async move {
-                        // Since we can't call spawn_token_tracking_task on trait object, spawn directly
-                        let task_id = tokio::spawn(async move {
-                            if let Err(e) = model_service
-                                .track_usage(&model_request, &usage_metadata)
-                                .await
-                            {
-                                tracing::warn!("Failed to track streaming usage: {}", e);
-                            } else {
-                                tracing::debug!(
-                                    "Successfully tracked streaming usage: {} input, {} output tokens",
-                                    usage_metadata.input_tokens,
-                                    usage_metadata.output_tokens
-                                );
-                            }
-                        });
-
-                        tracing::debug!(
-                            "Started token tracking task {:?} for streaming usage",
-                            task_id
-                        );
-                    });
-                }
-
-                // Unregister streaming connection if it was registered
-                if let (Some(streaming_manager), Some(connection_id)) =
-                    (&self.streaming_manager, self.streaming_connection_id)
-                {
-                    let streaming_manager_clone = streaming_manager.clone();
-                    tokio::spawn(async move {
-                        streaming_manager_clone
-                            .unregister_connection(connection_id)
-                            .await;
+                        if let Err(e) = model_service
+                            .track_usage(&model_request, &usage_metadata)
+                            .await
+                        {
+                            tracing::warn!("Failed to track streaming usage: {}", e);
+                        } else {
+                            tracing::debug!(
+                                "Successfully tracked streaming usage: {} input, {} output tokens",
+                                usage_metadata.input_tokens,
+                                usage_metadata.output_tokens
+                            );
+                        }
                     });
                 }
 
                 std::task::Poll::Ready(None)
             }
             std::task::Poll::Pending => std::task::Poll::Pending,
+        }
+    }
+}
+
+impl Drop for ParsedEventStream {
+    fn drop(&mut self) {
+        tracing::debug!("Stream dropping: {:?}",self.streaming_connection_id);
+        // Ensure deregistration happens even if stream is dropped before completion
+        if let (Some(streaming_manager), Some(connection_id)) =
+            (&self.streaming_manager, self.streaming_connection_id)
+        {
+            let streaming_manager_clone = streaming_manager.clone();
+
+            // Spawn a detached task for cleanup since we can't await in Drop
+            tokio::spawn(async move {
+                tracing::debug!("Stream dropped: Unregistering connection {}", connection_id);
+                streaming_manager_clone
+                    .unregister_connection(connection_id)
+                    .await;
+            });
         }
     }
 }
