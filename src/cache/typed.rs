@@ -4,7 +4,7 @@
 //! prevents key collisions between different types, and optimizes performance
 //! based on the cache backend (memory vs Redis).
 
-use crate::cache::{Cache, CacheBackend, CacheError, CacheResult};
+use crate::cache::{CacheError, CacheResult, TypedCacheBackend};
 use serde::{Deserialize, Serialize};
 use std::any::type_name;
 use std::marker::PhantomData;
@@ -39,7 +39,7 @@ pub trait CachedObject:
 /// Typed cache instance for a specific type T
 #[derive(Clone)]
 pub struct TypedCache<T: CachedObject> {
-    backend: CacheBackend,
+    backend: TypedCacheBackend<T>,
     prefix: String,
     type_hash: u64,
     default_ttl: Option<Duration>,
@@ -48,7 +48,7 @@ pub struct TypedCache<T: CachedObject> {
 
 impl<T: CachedObject> TypedCache<T> {
     /// Create a new typed cache for type T
-    pub(super) fn new(backend: CacheBackend) -> Self {
+    pub(super) fn new(backend: TypedCacheBackend<T>) -> Self {
         let prefix = T::cache_prefix();
         let type_hash = T::cache_type_hash();
 
@@ -70,28 +70,13 @@ impl<T: CachedObject> TypedCache<T> {
     pub async fn get(&self, key: &str) -> CacheResult<Option<T>> {
         let cache_key = self.cache_key(key);
 
-        // Try to get the cached entry with metadata
-        let cached_entry: Option<CachedEntry<T>> = match &self.backend {
-            CacheBackend::Memory(cache) => cache.get(&cache_key).await?,
-            CacheBackend::Redis(cache) => cache.get(&cache_key).await?,
+        // Get the value directly (type safety via key hash)
+        let result = match &self.backend {
+            TypedCacheBackend::Memory(cache) => cache.get(&cache_key).await?,
+            TypedCacheBackend::Redis(cache) => cache.get(&cache_key).await?,
         };
 
-        match cached_entry {
-            Some(entry) => {
-                // Verify type version matches
-                if entry.type_hash == self.type_hash {
-                    Ok(Some(entry.value))
-                } else {
-                    // Type version mismatch - invalidate entry
-                    let _ = match &self.backend {
-                        CacheBackend::Memory(cache) => cache.delete(&cache_key).await,
-                        CacheBackend::Redis(cache) => cache.delete(&cache_key).await,
-                    };
-                    Ok(None)
-                }
-            }
-            None => Ok(None),
-        }
+        Ok(result)
     }
 
     /// Set value in cache with optional TTL
@@ -99,14 +84,9 @@ impl<T: CachedObject> TypedCache<T> {
         let cache_key = self.cache_key(key);
         let ttl = ttl.or(self.default_ttl);
 
-        let entry = CachedEntry {
-            value: value.clone(),
-            type_hash: self.type_hash,
-        };
-
         match &self.backend {
-            CacheBackend::Memory(cache) => cache.set(&cache_key, &entry, ttl).await,
-            CacheBackend::Redis(cache) => cache.set(&cache_key, &entry, ttl).await,
+            TypedCacheBackend::Memory(cache) => cache.set(&cache_key, value, ttl).await,
+            TypedCacheBackend::Redis(cache) => cache.set(&cache_key, value, ttl).await,
         }
     }
 
@@ -119,8 +99,8 @@ impl<T: CachedObject> TypedCache<T> {
     pub async fn delete(&self, key: &str) -> CacheResult<()> {
         let cache_key = self.cache_key(key);
         match &self.backend {
-            CacheBackend::Memory(cache) => cache.delete(&cache_key).await,
-            CacheBackend::Redis(cache) => cache.delete(&cache_key).await,
+            TypedCacheBackend::Memory(cache) => cache.delete(&cache_key).await,
+            TypedCacheBackend::Redis(cache) => cache.delete(&cache_key).await,
         }
     }
 
@@ -128,8 +108,8 @@ impl<T: CachedObject> TypedCache<T> {
     pub async fn exists(&self, key: &str) -> CacheResult<bool> {
         let cache_key = self.cache_key(key);
         match &self.backend {
-            CacheBackend::Memory(cache) => cache.exists(&cache_key).await,
-            CacheBackend::Redis(cache) => cache.exists(&cache_key).await,
+            TypedCacheBackend::Memory(cache) => cache.exists(&cache_key).await,
+            TypedCacheBackend::Redis(cache) => cache.exists(&cache_key).await,
         }
     }
 
@@ -165,13 +145,6 @@ impl<T: CachedObject> TypedCache<T> {
     }
 }
 
-/// Cache entry with type metadata
-#[derive(Serialize, Deserialize, Clone)]
-struct CachedEntry<T> {
-    value: T,
-    type_hash: u64,
-}
-
 /// Statistics for a typed cache
 #[derive(Debug, Clone)]
 pub struct TypedCacheStats {
@@ -183,7 +156,7 @@ pub struct TypedCacheStats {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::cache::{CacheBackend, memory::MemoryCache};
+    use crate::cache::{TypedCacheBackend, memory::MemoryCache};
     use std::time::Duration;
 
     #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
@@ -203,9 +176,11 @@ mod tests {
 
     #[tokio::test]
     async fn test_typed_cache_basic_operations() {
-        let backend = CacheBackend::Memory(MemoryCache::new());
-        let user_cache = TypedCache::<TestUser>::new(backend.clone());
-        let api_key_cache = TypedCache::<TestApiKey>::new(backend.clone());
+        let user_backend = TypedCacheBackend::Memory(MemoryCache::new());
+        let user_cache = TypedCache::<TestUser>::new(user_backend);
+
+        let api_key_backend = TypedCacheBackend::Memory(MemoryCache::new());
+        let api_key_cache = TypedCache::<TestApiKey>::new(api_key_backend);
 
         let user = TestUser {
             id: 1,
@@ -238,9 +213,11 @@ mod tests {
 
     #[tokio::test]
     async fn test_auto_prefix_generation() {
-        let backend = CacheBackend::Memory(MemoryCache::new());
-        let user_cache = TypedCache::<TestUser>::new(backend.clone());
-        let api_key_cache = TypedCache::<TestApiKey>::new(backend.clone());
+        let user_backend = TypedCacheBackend::Memory(MemoryCache::new());
+        let user_cache = TypedCache::<TestUser>::new(user_backend);
+
+        let api_key_backend = TypedCacheBackend::Memory(MemoryCache::new());
+        let api_key_cache = TypedCache::<TestApiKey>::new(api_key_backend);
 
         let user_stats = user_cache.get_stats();
         let api_key_stats = api_key_cache.get_stats();
@@ -254,7 +231,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_structural_hashing() {
-        let _backend = CacheBackend::Memory(MemoryCache::new());
+        let _backend: TypedCacheBackend<i32> = TypedCacheBackend::Memory(MemoryCache::new());
 
         // Create two different struct types - should have different hashes
         #[derive(Serialize, Deserialize, Clone)]
@@ -282,7 +259,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_get_or_compute() {
-        let backend = CacheBackend::Memory(MemoryCache::new());
+        let backend = TypedCacheBackend::Memory(MemoryCache::new());
         let user_cache = TypedCache::<TestUser>::new(backend);
 
         let user = TestUser {
@@ -315,7 +292,7 @@ mod tests {
             name: String,
         }
 
-        let backend = CacheBackend::Memory(MemoryCache::new());
+        let backend = TypedCacheBackend::Memory(MemoryCache::new());
         let user_cache = TypedCache::<MacroTestUser>::new(backend);
 
         let stats = user_cache.get_stats();

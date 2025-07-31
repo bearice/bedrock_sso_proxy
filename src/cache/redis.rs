@@ -1,17 +1,20 @@
-use super::{Cache, CacheError, CacheResult};
+use crate::cache::CachedObject;
+
+use super::{CacheError, CacheResult};
 use redis::{AsyncCommands, Client};
 use std::{sync::Arc, time::Duration};
 use tokio::sync::Mutex;
 
 /// Redis cache implementation with single connection and reconnection logic
 #[derive(Clone)]
-pub struct RedisCache {
+pub struct RedisCache<T> {
     client: Client,
     connection: Arc<Mutex<Option<redis::aio::MultiplexedConnection>>>,
     key_prefix: String,
+    _phantom: std::marker::PhantomData<T>,
 }
 
-impl RedisCache {
+impl<T> RedisCache<T> {
     /// Create new Redis cache
     pub fn new(redis_url: &str, key_prefix: String) -> CacheResult<Self> {
         let client = Client::open(redis_url)
@@ -21,6 +24,7 @@ impl RedisCache {
             client,
             connection: Arc::new(Mutex::new(None)),
             key_prefix,
+            _phantom: std::marker::PhantomData,
         })
     }
 
@@ -79,26 +83,26 @@ impl RedisCache {
     }
 }
 
-#[async_trait::async_trait]
-impl Cache for RedisCache {
-    async fn get<T>(&self, key: &str) -> CacheResult<Option<T>>
-    where
-        T: serde::de::DeserializeOwned + Send,
-    {
+/// Generic implementation using bincode serialization for RedisCache<T>
+impl<T> RedisCache<T>
+where
+    T: CachedObject,
+{
+    /// Get value by key
+    pub async fn get(&self, key: &str) -> CacheResult<Option<T>> {
         let key = self.prefixed_key(key);
         let mut conn = self.get_connection().await?;
 
-        let result: Option<String> = conn
+        let result: Option<Vec<u8>> = conn
             .get(&key)
             .await
             .map_err(|e| CacheError::Cache(e.to_string()))?;
 
-        // Return connection to storage for reuse
         self.return_connection(conn).await;
 
         match result {
             Some(data) => {
-                let value = serde_json::from_str::<T>(&data)
+                let value: T = bincode::deserialize(&data)
                     .map_err(|e| CacheError::Serialization(e.to_string()))?;
                 Ok(Some(value))
             }
@@ -106,13 +110,11 @@ impl Cache for RedisCache {
         }
     }
 
-    async fn set<T>(&self, key: &str, value: &T, ttl: Option<Duration>) -> CacheResult<()>
-    where
-        T: serde::Serialize + Send + Sync,
-    {
+    /// Set value with optional expiration
+    pub async fn set(&self, key: &str, value: &T, ttl: Option<Duration>) -> CacheResult<()> {
         let key = self.prefixed_key(key);
-        let data =
-            serde_json::to_string(value).map_err(|e| CacheError::Serialization(e.to_string()))?;
+        let data = bincode::serialize(value)
+            .map_err(|e| CacheError::Serialization(e.to_string()))?;
 
         let mut conn = self.get_connection().await?;
 
@@ -128,13 +130,12 @@ impl Cache for RedisCache {
                 .map_err(|e| CacheError::Cache(e.to_string()))?;
         }
 
-        // Return connection for reuse
         self.return_connection(conn).await;
-
         Ok(())
     }
 
-    async fn delete(&self, key: &str) -> CacheResult<()> {
+    /// Delete key
+    pub async fn delete(&self, key: &str) -> CacheResult<()> {
         let key = self.prefixed_key(key);
         let mut conn = self.get_connection().await?;
 
@@ -147,7 +148,8 @@ impl Cache for RedisCache {
         Ok(())
     }
 
-    async fn exists(&self, key: &str) -> CacheResult<bool> {
+    /// Check if key exists
+    pub async fn exists(&self, key: &str) -> CacheResult<bool> {
         let key = self.prefixed_key(key);
         let mut conn = self.get_connection().await?;
 
@@ -160,7 +162,8 @@ impl Cache for RedisCache {
         Ok(exists)
     }
 
-    async fn clear(&self) -> CacheResult<()> {
+    /// Clear all cache entries
+    pub async fn clear(&self) -> CacheResult<()> {
         let mut conn = self.get_connection().await?;
 
         let _: () = redis::cmd("FLUSHDB")
@@ -173,12 +176,15 @@ impl Cache for RedisCache {
     }
 }
 
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use serde::{Deserialize, Serialize};
+    use typed_cache_macro::typed_cache;
 
-    #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+    #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+    #[typed_cache]
     struct TestData {
         id: u32,
         name: String,
@@ -187,20 +193,20 @@ mod tests {
     #[tokio::test]
     async fn test_redis_cache_new() {
         // Test that we can create a Redis cache (even if Redis is not running)
-        let result = RedisCache::new("redis://localhost:6379", "test:".to_string());
+        let result: Result<RedisCache<String>, _> = RedisCache::new("redis://localhost:6379", "test:".to_string());
         assert!(result.is_ok());
     }
 
     #[tokio::test]
     async fn test_redis_cache_key_prefix() {
-        let cache = RedisCache::new("redis://localhost:6379", "test:".to_string()).unwrap();
+        let cache: RedisCache<String> = RedisCache::new("redis://localhost:6379", "test:".to_string()).unwrap();
         let prefixed = cache.prefixed_key("my_key");
         assert_eq!(prefixed, "test:my_key");
     }
 
     #[tokio::test]
     async fn test_redis_cache_operations() {
-        let cache = RedisCache::new("redis://localhost:6379", "test:".to_string()).unwrap();
+        let cache: RedisCache<TestData> = RedisCache::new("redis://localhost:6379", "test:".to_string()).unwrap();
 
         let test_data = TestData {
             id: 1,
@@ -209,8 +215,8 @@ mod tests {
 
         // Test set and get
         cache.set("test_key", &test_data, None).await.unwrap();
-        let result: Option<TestData> = cache.get("test_key").await.unwrap();
-        assert_eq!(result, Some(test_data));
+        let result = cache.get("test_key").await.unwrap();
+        assert_eq!(result, Some(test_data.clone()));
 
         // Test exists
         let exists = cache.exists("test_key").await.unwrap();
@@ -218,7 +224,7 @@ mod tests {
 
         // Test delete
         cache.delete("test_key").await.unwrap();
-        let result: Option<TestData> = cache.get("test_key").await.unwrap();
+        let result = cache.get("test_key").await.unwrap();
         assert_eq!(result, None);
 
         // Test TTL
@@ -230,18 +236,18 @@ mod tests {
             .set("ttl_key", &test_data_ttl, Some(Duration::from_secs(1)))
             .await
             .unwrap();
-        let result: Option<TestData> = cache.get("ttl_key").await.unwrap();
+        let result = cache.get("ttl_key").await.unwrap();
         assert_eq!(result, Some(test_data_ttl));
 
         // Wait for TTL expiration
         tokio::time::sleep(Duration::from_secs(2)).await;
-        let result: Option<TestData> = cache.get("ttl_key").await.unwrap();
+        let result = cache.get("ttl_key").await.unwrap();
         assert_eq!(result, None);
     }
 
     #[tokio::test]
     async fn test_redis_health_check() {
-        let cache = RedisCache::new("redis://localhost:6379", "test:".to_string()).unwrap();
+        let cache: RedisCache<String> = RedisCache::new("redis://localhost:6379", "test:".to_string()).unwrap();
         let result = cache.health_check().await;
         assert!(result.is_ok());
     }

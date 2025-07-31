@@ -31,173 +31,129 @@ pub enum CacheError {
 pub type CacheResult<T> = Result<T, CacheError>;
 
 /// Cache manager trait for dependency injection and testing
-/// Note: Generic methods are handled by the concrete implementations
+/// Simplified to only handle TypedCache creation
 #[async_trait::async_trait]
 pub trait CacheManager: Send + Sync {
-    /// Delete from cache
-    async fn delete(&self, key: &str) -> CacheResult<()>;
-
-    /// Check if key exists in cache
-    async fn exists(&self, key: &str) -> CacheResult<bool>;
-
-    /// Clear cache
-    async fn clear(&self) -> CacheResult<()>;
-
-    /// Get JSON value from cache (dyn compatible)
-    async fn get_json(&self, key: &str) -> CacheResult<Option<serde_json::Value>>;
-
-    /// Set JSON value in cache (dyn compatible)
-    async fn set_json(
-        &self,
-        key: &str,
-        value: &serde_json::Value,
-        ttl: Option<std::time::Duration>,
-    ) -> CacheResult<()>;
+    // For health checking, we need non-generic methods
+    async fn health_check(&self) -> crate::health::HealthCheckResult;
+    fn backend_type(&self) -> &str;
 }
 
-/// Cache trait for different cache implementations
-#[async_trait::async_trait]
-pub trait Cache: Send + Sync {
-    /// Get value by key
-    async fn get<T>(&self, key: &str) -> CacheResult<Option<T>>
-    where
-        T: serde::de::DeserializeOwned + Send;
-
-    /// Set value with optional expiration
-    async fn set<T>(
-        &self,
-        key: &str,
-        value: &T,
-        ttl: Option<std::time::Duration>,
-    ) -> CacheResult<()>
-    where
-        T: serde::Serialize + Send + Sync;
-
-    /// Delete key
-    async fn delete(&self, key: &str) -> CacheResult<()>;
-
-    /// Check if key exists
-    async fn exists(&self, key: &str) -> CacheResult<bool>;
-
-    /// Clear all cache entries
-    async fn clear(&self) -> CacheResult<()>;
+/// Extended trait for getting typed caches - separate to avoid dyn issues
+pub trait TypedCacheProvider {
+    /// Get a typed cache for type T - the main interface
+    fn get_typed_cache<T: CachedObject>(&self) -> TypedCache<T>;
 }
 
-/// Cache backend enum - either Redis or memory cache
+/// Typed cache backend enum - stores CachedEntry<T> which includes type hash
 #[derive(Clone)]
-enum CacheBackend {
-    Memory(memory::MemoryCache),
-    Redis(redis::RedisCache),
+pub enum TypedCacheBackend<T> {
+    Memory(memory::MemoryCache<T>),  // JSON storage
+    Redis(redis::RedisCache<T>),    // Bitcode storage
 }
 
-/// Cache manager implementation - uses either Redis or memory cache, not both
+/// Cache manager implementation - creates TypedCache instances
 #[derive(Clone)]
 pub struct CacheManagerImpl {
-    backend: CacheBackend,
+    config: CacheConfig,
 }
 
 impl CacheManagerImpl {
     /// Create new cache manager with memory cache (for testing/single instance)
     pub fn new_memory() -> Self {
         Self {
-            backend: CacheBackend::Memory(memory::MemoryCache::new()),
+            config: CacheConfig {
+                backend: "memory".to_string(),
+                redis_url: "redis://localhost:6379".to_string(),
+                redis_key_prefix: "bedrock_sso:".to_string(),
+                validation_ttl: 3600,
+                max_entries: 10000,
+                cleanup_interval: 3600,
+            }
         }
     }
 
     /// Create cache manager from configuration
     pub async fn new_from_config(config: &CacheConfig) -> CacheResult<Self> {
-        match config.backend.as_str() {
-            "redis" => {
-                let redis =
-                    redis::RedisCache::new(&config.redis_url, config.redis_key_prefix.clone())?;
-                Ok(Self {
-                    backend: CacheBackend::Redis(redis),
-                })
-            }
-            _ => Ok(Self::new_memory()),
-        }
+        Ok(Self {
+            config: config.clone(),
+        })
     }
 }
 
 impl CacheManagerImpl {
-    /// Get a typed cache for type T
-    pub fn get_typed_cache<T: CachedObject>(&self) -> TypedCache<T> {
-        TypedCache::new(self.backend.clone())
-    }
-
-    /// Get value from cache
-    pub async fn get<T>(&self, key: &str) -> CacheResult<Option<T>>
-    where
-        T: serde::de::DeserializeOwned + Send,
-    {
-        match &self.backend {
-            CacheBackend::Memory(cache) => cache.get(key).await,
-            CacheBackend::Redis(cache) => cache.get(key).await,
-        }
-    }
-
-    /// Set value in cache
-    pub async fn set<T>(
-        &self,
-        key: &str,
-        value: &T,
-        ttl: Option<std::time::Duration>,
-    ) -> CacheResult<()>
-    where
-        T: serde::Serialize + Send + Sync,
-    {
-        match &self.backend {
-            CacheBackend::Memory(cache) => cache.set(key, value, ttl).await,
-            CacheBackend::Redis(cache) => cache.set(key, value, ttl).await,
+    /// Create typed cache backend based on configuration
+    fn create_backend<T: CachedObject>(&self) -> CacheResult<TypedCacheBackend<T>> {
+        match self.config.backend.as_str() {
+            "redis" => {
+                let redis = redis::RedisCache::new(&self.config.redis_url, self.config.redis_key_prefix.clone())?;
+                Ok(TypedCacheBackend::Redis(redis))
+            }
+            _ => Ok(TypedCacheBackend::Memory(memory::MemoryCache::new())),
         }
     }
 }
 
 #[async_trait::async_trait]
 impl CacheManager for CacheManagerImpl {
-    /// Delete from cache
-    async fn delete(&self, key: &str) -> CacheResult<()> {
-        match &self.backend {
-            CacheBackend::Memory(cache) => cache.delete(key).await,
-            CacheBackend::Redis(cache) => cache.delete(key).await,
+    async fn health_check(&self) -> crate::health::HealthCheckResult {
+        match self.config.backend.as_str() {
+            "redis" => {
+                // Create a temporary Redis connection to test health
+                match redis::RedisCache::<String>::new(&self.config.redis_url, self.config.redis_key_prefix.clone()) {
+                    Ok(redis_cache) => {
+                        match redis_cache.health_check().await {
+                            Ok(_) => {
+                                crate::health::HealthCheckResult::healthy_with_details(serde_json::json!({
+                                    "backend": "redis",
+                                    "status": "healthy",
+                                    "connection": "ok"
+                                }))
+                            }
+                            Err(err) => crate::health::HealthCheckResult::unhealthy_with_details(
+                                "Redis health check failed".to_string(),
+                                serde_json::json!({
+                                    "backend": "redis",
+                                    "status": "unhealthy",
+                                    "error": err.to_string()
+                                }),
+                            ),
+                        }
+                    }
+                    Err(err) => crate::health::HealthCheckResult::unhealthy_with_details(
+                        "Redis client creation failed".to_string(),
+                        serde_json::json!({
+                            "backend": "redis",
+                            "status": "unhealthy",
+                            "error": err.to_string()
+                        }),
+                    ),
+                }
+            }
+            _ => {
+                // Memory cache always passes health check
+                crate::health::HealthCheckResult::healthy_with_details(serde_json::json!({
+                    "backend": "memory",
+                    "status": "healthy"
+                }))
+            }
         }
     }
 
-    /// Check if key exists in cache
-    async fn exists(&self, key: &str) -> CacheResult<bool> {
-        match &self.backend {
-            CacheBackend::Memory(cache) => cache.exists(key).await,
-            CacheBackend::Redis(cache) => cache.exists(key).await,
-        }
+    fn backend_type(&self) -> &str {
+        &self.config.backend
     }
+}
 
-    /// Clear cache
-    async fn clear(&self) -> CacheResult<()> {
-        match &self.backend {
-            CacheBackend::Memory(cache) => cache.clear().await,
-            CacheBackend::Redis(cache) => cache.clear().await,
-        }
-    }
-
-    /// Get JSON value from cache (dyn compatible)
-    async fn get_json(&self, key: &str) -> CacheResult<Option<serde_json::Value>> {
-        match &self.backend {
-            CacheBackend::Memory(cache) => cache.get(key).await,
-            CacheBackend::Redis(cache) => cache.get(key).await,
-        }
-    }
-
-    /// Set JSON value in cache (dyn compatible)
-    async fn set_json(
-        &self,
-        key: &str,
-        value: &serde_json::Value,
-        ttl: Option<std::time::Duration>,
-    ) -> CacheResult<()> {
-        match &self.backend {
-            CacheBackend::Memory(cache) => cache.set(key, value, ttl).await,
-            CacheBackend::Redis(cache) => cache.set(key, value, ttl).await,
-        }
+impl TypedCacheProvider for CacheManagerImpl {
+    /// Get a typed cache for type T
+    fn get_typed_cache<T: CachedObject>(&self) -> TypedCache<T> {
+        // Create backend on-demand for each type
+        let backend = self.create_backend().unwrap_or_else(|_| {
+            // Fallback to memory cache on error
+            TypedCacheBackend::Memory(memory::MemoryCache::new())
+        });
+        TypedCache::new(backend)
     }
 }
 
@@ -214,44 +170,13 @@ impl HealthChecker for CacheManagerImpl {
     }
 
     async fn check(&self) -> crate::health::HealthCheckResult {
-        match &self.backend {
-            CacheBackend::Memory(_) => {
-                // Memory cache always passes health check
-                crate::health::HealthCheckResult::healthy_with_details(serde_json::json!({
-                    "backend": "memory",
-                    "status": "healthy"
-                }))
-            }
-            CacheBackend::Redis(redis_cache) => {
-                // Use the Redis health check function
-                match redis_cache.health_check().await {
-                    Ok(_) => {
-                        crate::health::HealthCheckResult::healthy_with_details(serde_json::json!({
-                            "backend": "redis",
-                            "status": "healthy",
-                            "connection": "ok"
-                        }))
-                    }
-                    Err(err) => crate::health::HealthCheckResult::unhealthy_with_details(
-                        "Redis health check failed".to_string(),
-                        serde_json::json!({
-                            "backend": "redis",
-                            "status": "unhealthy",
-                            "error": err.to_string()
-                        }),
-                    ),
-                }
-            }
-        }
+        self.health_check().await
     }
 
     fn info(&self) -> Option<serde_json::Value> {
         Some(serde_json::json!({
             "service": "Cache Manager",
-            "backend": match &self.backend {
-                CacheBackend::Memory(_) => "memory",
-                CacheBackend::Redis(_) => "redis",
-            }
+            "backend": self.backend_type()
         }))
     }
 }

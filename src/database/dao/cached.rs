@@ -4,7 +4,7 @@
 //! It offers automatic cache invalidation, type safety, and performance optimization
 //! for read-heavy database operations.
 
-use crate::cache::CacheManagerImpl;
+use crate::cache::{CacheManagerImpl, TypedCacheProvider};
 use crate::cache::typed::{CachedObject, TypedCache};
 use crate::database::DatabaseResult;
 use async_trait::async_trait;

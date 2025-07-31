@@ -1,6 +1,6 @@
 use crate::{
     auth::{OAuthClaims, jwt::JwtService, oauth::state::StateData},
-    cache::CacheManagerImpl,
+    cache::{CacheManagerImpl, TypedCacheProvider},
     config::Config,
     database::{
         DatabaseManager,
