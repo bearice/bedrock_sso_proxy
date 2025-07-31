@@ -3,6 +3,7 @@ use futures_util::Stream;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
+use crate::middleware::RequestId;
 use crate::model_service::ModelService;
 
 /// Request structure for model invocation
@@ -13,6 +14,7 @@ pub struct ModelRequest {
     pub headers: HeaderMap,
     pub user_id: i32,
     pub endpoint_type: String,
+    pub request_id: RequestId,
 }
 
 /// Response structure from model invocation

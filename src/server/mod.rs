@@ -15,6 +15,7 @@ use crate::{
     health::HealthService,
     jobs::{CleanupJob, JobScheduler, SummariesJob},
     metrics,
+    middleware::request_id_middleware,
     model_service::{ModelService, ModelServiceImpl},
     routes::{
         create_admin_api_routes, create_anthropic_routes, create_auth_routes,
@@ -334,12 +335,17 @@ impl Server {
 
     /// Helper method for adding conditional middleware
     fn add_conditional_middleware(&self, mut app: Router) -> Router {
-        if self.config.metrics.enabled {
-            app = app.layer(middleware::from_fn(metrics::metrics_middleware));
-        }
+        // Note: Middleware layers in Axum run in reverse order (last added runs first)
+        // So we add them in reverse order of desired execution
+
         if self.config.logging.log_request {
             app = app.layer(middleware::from_fn(request_response_logger));
         }
+        if self.config.metrics.enabled {
+            app = app.layer(middleware::from_fn(metrics::metrics_middleware));
+        }
+        // Add request ID middleware last so it runs first
+        app = app.layer(middleware::from_fn(request_id_middleware));
         app
     }
 }

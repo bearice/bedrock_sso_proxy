@@ -3,6 +3,7 @@ use crate::database::DatabaseManager;
 use crate::database::entities::UserRecord;
 use crate::database::entities::api_keys::{API_KEY_PREFIX, hash_api_key, validate_api_key_format};
 use crate::error::AppError;
+use crate::middleware::RequestIdExt;
 use crate::server::Server;
 use axum::{
     extract::{FromRequestParts, Request, State},
@@ -11,6 +12,7 @@ use axum::{
     response::Response,
 };
 use std::sync::Arc;
+use tracing::{trace, warn};
 
 /// Static header name for API key
 static X_API_KEY: HeaderName = HeaderName::from_static("x-api-key");
@@ -22,6 +24,7 @@ pub async fn auth_middleware(
     mut request: Request,
     next: Next,
 ) -> Result<Response, AppError> {
+    let request_id = request.extensions().request_id().as_str();
     // Try JWT authentication first
     let user = if let Some(auth_header) = request.headers().get(AUTHORIZATION) {
         if let Ok(auth_str) = auth_header.to_str() {
@@ -29,14 +32,18 @@ pub async fn auth_middleware(
                 // Check if it's an API key (has the SSOK_ prefix)
                 if token.starts_with(API_KEY_PREFIX) {
                     if !server.config.api_keys.enabled {
+                        warn!(request_id = %request_id, "API key authentication disabled");
                         return Err(AppError::Unauthorized(
                             "API key authentication is disabled".to_string(),
                         ));
                     }
-                    authenticate_with_api_key(token, &server.database).await?
+                    trace!(request_id = %request_id, auth_method = "api_key", "Authenticating request");
+                    authenticate_with_api_key(token, &server.database, &request_id).await?
                 } else {
                     // Try JWT authentication
-                    authenticate_with_jwt(token, &server.database, &server.jwt_service).await?
+                    trace!(request_id = %request_id, auth_method = "jwt", "Authenticating request");
+                    authenticate_with_jwt(token, &server.database, &server.jwt_service, &request_id)
+                        .await?
                 }
             } else {
                 return Err(AppError::Unauthorized(
@@ -56,7 +63,8 @@ pub async fn auth_middleware(
             ));
         }
         if let Ok(api_key) = api_key_header.to_str() {
-            authenticate_with_api_key(api_key, &server.database).await?
+            trace!(request_id = %request_id, auth_method = "x_api_key", "Authenticating request");
+            authenticate_with_api_key(api_key, &server.database, &request_id).await?
         } else {
             return Err(AppError::Unauthorized("Invalid API key header".to_string()));
         }
@@ -77,19 +85,21 @@ async fn authenticate_with_jwt(
     token: &str,
     database: &Arc<dyn DatabaseManager>,
     jwt_service: &Arc<dyn JwtService>,
+    request_id: &str,
 ) -> Result<UserRecord, AppError> {
     // Validate JWT token and get claims
     let claims = jwt_service.validate_oauth_token(token)?;
     let user_id = claims.sub;
 
     // lookup UserRecord
-    get_user_record(user_id, database).await
+    get_user_record(user_id, database, request_id).await
 }
 
 /// Authenticate with API key and return UserRecord
 async fn authenticate_with_api_key(
     api_key: &str,
     database: &Arc<dyn DatabaseManager>,
+    request_id: &str,
 ) -> Result<UserRecord, AppError> {
     // Validate API key format
     validate_api_key_format(api_key, API_KEY_PREFIX)?;
@@ -107,25 +117,33 @@ async fn authenticate_with_api_key(
 
     // Check if API key is valid (not expired, not revoked)
     if !stored_key.is_valid() {
+        warn!(user_id = %stored_key.user_id, request_id = %request_id, "API key expired or revoked");
         return Err(AppError::Unauthorized(
             "API key expired or revoked".to_string(),
         ));
     }
 
-    get_user_record(stored_key.user_id, database).await
+    trace!(user_id = %stored_key.user_id, request_id = %request_id, "API key authentication successful");
+    get_user_record(stored_key.user_id, database, request_id).await
 }
 
 async fn get_user_record(
     user_id: i32,
     database: &Arc<dyn DatabaseManager>,
+    request_id: &str,
 ) -> Result<UserRecord, AppError> {
     let user = database
         .users()
         .find_by_id(user_id)
         .await
         .map_err(|e| AppError::Internal(format!("Database error: {}", e)))?
-        .ok_or_else(|| AppError::Unauthorized("User not found".to_string()))?;
+        .ok_or_else(|| {
+            warn!(user_id = %user_id, request_id = %request_id, "User not found");
+            AppError::Unauthorized("User not found".to_string())
+        })?;
 
+    // Only log user authentication success at trace level to reduce noise
+    trace!(user_id = %user.id, email = %user.email, request_id = %request_id, "User authentication successful");
     Ok(user)
 }
 
@@ -136,6 +154,7 @@ pub async fn jwt_only_middleware(
     mut request: Request,
     next: Next,
 ) -> Result<Response, AppError> {
+    let request_id = request.extensions().request_id().as_str();
     let auth_header = request
         .headers()
         .get(AUTHORIZATION)
@@ -151,7 +170,7 @@ pub async fn jwt_only_middleware(
     let token = &auth_header[7..];
 
     // Authenticate with JWT and get UserRecord
-    let user = authenticate_with_jwt(token, &database, &jwt_service).await?;
+    let user = authenticate_with_jwt(token, &database, &jwt_service, &request_id).await?;
 
     // Add UserRecord to request extensions for downstream handlers
     request.extensions_mut().insert(user);
@@ -166,6 +185,7 @@ pub async fn jwt_auth_middleware(
     mut request: Request,
     next: Next,
 ) -> Result<Response, AppError> {
+    let request_id = request.extensions().request_id().as_str();
     let auth_header = request
         .headers()
         .get(AUTHORIZATION)
@@ -184,7 +204,7 @@ pub async fn jwt_auth_middleware(
     let claims = server.jwt_service.validate_oauth_token(token)?;
 
     // Get UserRecord for the user
-    let user = get_user_record(claims.sub, &server.database).await?;
+    let user = get_user_record(claims.sub, &server.database, &request_id).await?;
 
     // Add both claims and UserRecord to request extensions for downstream handlers
     request.extensions_mut().insert(claims.clone());
@@ -200,6 +220,7 @@ pub async fn admin_middleware(
     request: Request,
     next: Next,
 ) -> Result<Response, AppError> {
+    let request_id = request.extensions().request_id().as_str();
     // Get UserRecord from request extensions (should be set by auth middleware)
     let user = request
         .extensions()
@@ -208,8 +229,11 @@ pub async fn admin_middleware(
 
     // Check if user email is in admin list
     if !server.config.is_admin(&user.email) {
+        warn!(user_id = %user.id, email = %user.email, request_id = %request_id, "Admin access denied");
         return Err(AppError::Forbidden("Admin access required".to_string()));
     }
+
+    trace!(user_id = %user.id, email = %user.email, request_id = %request_id, "Admin access granted");
 
     Ok(next.run(request).await)
 }

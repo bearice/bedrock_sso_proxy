@@ -1,5 +1,6 @@
 use crate::{
     auth::middleware::{admin_middleware, auth_middleware, jwt_auth_middleware},
+    middleware::RequestIdExt,
     server::Server,
 };
 use axum::{
@@ -102,6 +103,9 @@ pub mod middleware_factories {
         let method = req.method().to_string();
         let path = req.uri().path().to_string();
 
+        // Get request ID from extensions
+        let request_id = req.extensions().request_id().as_str();
+
         // Skip logging for static files and frontend routes
         // Only log API routes that start with /bedrock, /anthropic, /auth, or /health
         let is_api_route = path.starts_with("/bedrock")
@@ -125,8 +129,15 @@ pub mod middleware_factories {
                 .map(|user| user.provider_user_id.clone())
                 .unwrap_or_else(|| "anonymous".to_string());
 
-            // Log request with simple format - only for API routes
-            info!("Request: {} {} ip={} user={}", method, path, ip, user);
+            // Log request with structured format - only for API routes
+            info!(
+                method = %method,
+                path = %path,
+                ip = %ip,
+                user = %user,
+                request_id = %request_id,
+                "API request"
+            );
 
             // Track request start time for latency calculation
             let start = std::time::Instant::now();
@@ -137,13 +148,14 @@ pub mod middleware_factories {
             // Calculate request duration
             let duration = start.elapsed();
 
-            // Log response
+            // Log response with structured format
             info!(
-                "Response: {} {} status={} latency={}ms",
-                method,
-                path,
-                response.status().as_u16(),
-                duration.as_millis()
+                method = %method,
+                path = %path,
+                status = %response.status().as_u16(),
+                latency_ms = %duration.as_millis(),
+                request_id = %request_id,
+                "API response"
             );
 
             response

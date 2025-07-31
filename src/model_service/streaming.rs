@@ -325,7 +325,7 @@ impl Stream for ParsedEventStream {
 
 impl Drop for ParsedEventStream {
     fn drop(&mut self) {
-        tracing::debug!("Stream dropping: {:?}",self.streaming_connection_id);
+        tracing::debug!("Stream dropping: {:?}", self.streaming_connection_id);
         // Ensure deregistration happens even if stream is dropped before completion
         if let (Some(streaming_manager), Some(connection_id)) =
             (&self.streaming_manager, self.streaming_connection_id)

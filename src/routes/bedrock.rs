@@ -1,6 +1,6 @@
 use crate::{
-    database::entities::UserRecord, error::AppError, model_service::ModelRequest,
-    routes::ApiErrorResponse, server::Server,
+    database::entities::UserRecord, error::AppError, middleware::RequestId,
+    model_service::ModelRequest, routes::ApiErrorResponse, server::Server,
 };
 use axum::{
     Router,
@@ -51,6 +51,7 @@ async fn invoke_model(
     Path(model_id): Path<String>,
     State(server): State<Server>,
     Extension(user): Extension<UserRecord>,
+    Extension(request_id): Extension<RequestId>,
     headers: HeaderMap,
     body: Bytes,
 ) -> Result<(StatusCode, HeaderMap, Bytes), AppError> {
@@ -62,6 +63,14 @@ async fn invoke_model(
     // Extract user_id from authenticated user record
     let user_id = user.id;
 
+    // Request ID is available directly as extension
+
+    tracing::info!(
+        model_id = %model_id,
+        request_id = %request_id,
+        "Handling invoke request"
+    );
+
     // Create ModelRequest
     let model_request = ModelRequest {
         model_id: model_id.clone(),
@@ -69,15 +78,16 @@ async fn invoke_model(
         headers,
         user_id,
         endpoint_type: "bedrock".to_string(),
+        request_id,
     };
 
     // Use ModelService to invoke model (includes automatic usage tracking)
     match server.model_service.invoke_model(model_request).await {
         Ok(model_response) => {
             tracing::info!(
-                "Successfully invoked model {} with status {}",
-                model_id,
-                model_response.status
+                model_id = %model_id,
+                status = %model_response.status,
+                "Successfully invoked model"
             );
 
             Ok((
@@ -87,7 +97,11 @@ async fn invoke_model(
             ))
         }
         Err(err) => {
-            tracing::error!("Model service error for model {}: {}", model_id, err);
+            tracing::error!(
+                model_id = %model_id,
+                error = %err,
+                "Model service error"
+            );
             Err(err)
         }
     }
@@ -124,11 +138,10 @@ async fn invoke_model_with_response_stream(
     Path(model_id): Path<String>,
     State(server): State<Server>,
     Extension(user): Extension<UserRecord>,
+    Extension(request_id): Extension<RequestId>,
     headers: HeaderMap,
     body: Bytes,
 ) -> Result<Response, AppError> {
-    tracing::info!("Handling streaming invoke request for model: {}", model_id);
-
     // Validate model ID
     if model_id.trim().is_empty() {
         return Err(AppError::BadRequest("Model ID cannot be empty".to_string()));
@@ -137,6 +150,14 @@ async fn invoke_model_with_response_stream(
     // Extract user_id from authenticated user record
     let user_id = user.id;
 
+    // Request ID is available directly as extension
+
+    tracing::info!(
+        model_id = %model_id,
+        request_id = %request_id,
+        "Handling streaming invoke request"
+    );
+
     // Create ModelRequest
     let model_request = ModelRequest {
         model_id: model_id.clone(),
@@ -144,6 +165,7 @@ async fn invoke_model_with_response_stream(
         headers: headers.clone(),
         user_id,
         endpoint_type: "bedrock".to_string(),
+        request_id,
     };
 
     // Use ModelService to invoke streaming model (includes automatic usage tracking)
@@ -154,9 +176,9 @@ async fn invoke_model_with_response_stream(
     {
         Ok(model_response) => {
             tracing::info!(
-                "Successfully invoked streaming model {} with status {}",
-                model_id,
-                model_response.status
+                model_id = %model_id,
+                status = %model_response.status,
+                "Successfully invoked streaming model"
             );
 
             // For streaming, we return the raw binary stream for AWS compatibility
@@ -196,9 +218,9 @@ async fn invoke_model_with_response_stream(
         }
         Err(err) => {
             tracing::error!(
-                "Model service streaming error for model {}: {}",
-                model_id,
-                err
+                model_id = %model_id,
+                error = %err,
+                "Model service streaming error"
             );
             Err(err)
         }
@@ -212,6 +234,7 @@ async fn invoke_model_with_response_stream(
 mod tests {
     use super::*;
     use crate::auth::middleware::jwt_auth_middleware;
+    use crate::middleware::request_id_middleware;
     use axum::{
         body::Body,
         http::{Request, StatusCode},
@@ -240,9 +263,13 @@ mod tests {
     #[tokio::test]
     async fn test_invoke_model_empty_model_id() {
         let server = create_test_server().await;
-        let app = create_bedrock_routes().with_state(server.clone()).layer(
-            middleware::from_fn_with_state(server.clone(), jwt_auth_middleware),
-        );
+        let app = create_bedrock_routes()
+            .with_state(server.clone())
+            .layer(middleware::from_fn_with_state(
+                server.clone(),
+                jwt_auth_middleware,
+            ))
+            .layer(middleware::from_fn(request_id_middleware));
 
         let request = Request::builder()
             .uri("/model/%20/invoke") // URL-encoded space
@@ -258,9 +285,13 @@ mod tests {
     #[tokio::test]
     async fn test_invoke_model_with_custom_headers() {
         let server = create_test_server().await;
-        let app = create_bedrock_routes().with_state(server.clone()).layer(
-            middleware::from_fn_with_state(server.clone(), jwt_auth_middleware),
-        );
+        let app = create_bedrock_routes()
+            .with_state(server.clone())
+            .layer(middleware::from_fn_with_state(
+                server.clone(),
+                jwt_auth_middleware,
+            ))
+            .layer(middleware::from_fn(request_id_middleware));
 
         let request = Request::builder()
             .uri("/model/anthropic.claude-v2/invoke")
@@ -279,9 +310,13 @@ mod tests {
     #[tokio::test]
     async fn test_invoke_model_streaming_with_empty_model_id() {
         let server = create_test_server().await;
-        let app = create_bedrock_routes().with_state(server.clone()).layer(
-            middleware::from_fn_with_state(server.clone(), jwt_auth_middleware),
-        );
+        let app = create_bedrock_routes()
+            .with_state(server.clone())
+            .layer(middleware::from_fn_with_state(
+                server.clone(),
+                jwt_auth_middleware,
+            ))
+            .layer(middleware::from_fn(request_id_middleware));
 
         // Create a valid JWT token for the test
         fn create_oauth_token(
@@ -312,9 +347,13 @@ mod tests {
     #[tokio::test]
     async fn test_invoke_model_with_response_stream_success() {
         let server = create_test_server().await;
-        let app = create_bedrock_routes().with_state(server.clone()).layer(
-            middleware::from_fn_with_state(server.clone(), jwt_auth_middleware),
-        );
+        let app = create_bedrock_routes()
+            .with_state(server.clone())
+            .layer(middleware::from_fn_with_state(
+                server.clone(),
+                jwt_auth_middleware,
+            ))
+            .layer(middleware::from_fn(request_id_middleware));
 
         let request = Request::builder()
             .uri("/model/anthropic.claude-v2/invoke-with-response-stream")
@@ -333,9 +372,13 @@ mod tests {
     #[tokio::test]
     async fn test_invoke_model_with_large_body() {
         let server = create_test_server().await;
-        let app = create_bedrock_routes().with_state(server.clone()).layer(
-            middleware::from_fn_with_state(server.clone(), jwt_auth_middleware),
-        );
+        let app = create_bedrock_routes()
+            .with_state(server.clone())
+            .layer(middleware::from_fn_with_state(
+                server.clone(),
+                jwt_auth_middleware,
+            ))
+            .layer(middleware::from_fn(request_id_middleware));
 
         // Create a large JSON body (simulating large input)
         let large_content = "A".repeat(1000);

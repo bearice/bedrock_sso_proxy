@@ -5,6 +5,7 @@ use crate::{
     aws::config::AwsConfig,
     config::Config,
     database::{UsageQuery, entities::*},
+    middleware::RequestId,
     model_service::streaming::{EventStreamParser, ParsedEventStream},
     model_service::types::*,
     test_utils::TestServerBuilder,
@@ -173,6 +174,7 @@ async fn test_track_usage() {
         headers: axum::http::HeaderMap::new(),
         user_id,
         endpoint_type: "bedrock".to_string(),
+        request_id: RequestId::new(),
     };
 
     let usage_metadata = UsageMetadata {
@@ -403,6 +405,7 @@ async fn test_bedrock_route_receives_exact_binary_stream() {
             headers: axum::http::HeaderMap::new(),
             user_id: 1,
             endpoint_type: "bedrock".to_string(),
+            request_id: RequestId::new(),
         },
         model_service: model_service.clone(),
         start_time: std::time::Instant::now(),
@@ -465,6 +468,7 @@ async fn test_bedrock_route_returns_exact_binary_format() {
             headers: axum::http::HeaderMap::new(),
             user_id: 1,
             endpoint_type: "bedrock".to_string(),
+            request_id: RequestId::new(),
         },
         model_service: model_service.clone(),
         start_time: std::time::Instant::now(),

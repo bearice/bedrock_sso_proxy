@@ -10,6 +10,7 @@ pub mod error;
 pub mod health;
 pub mod jobs;
 pub mod metrics;
+pub mod middleware;
 pub mod model_service;
 pub mod routes;
 pub mod server;

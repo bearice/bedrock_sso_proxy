@@ -9,6 +9,7 @@ use crate::{
     },
     database::entities::UserRecord,
     error::AppError,
+    middleware::RequestId,
     model_service::{ModelRequest, ModelService},
     routes::ApiErrorResponse,
     server::Server,
@@ -61,11 +62,14 @@ pub fn create_anthropic_routes() -> Router<Server> {
 pub async fn create_message(
     State(server): State<Server>,
     Extension(user): Extension<UserRecord>,
+    Extension(request_id): Extension<RequestId>,
     headers: HeaderMap,
     body: Bytes,
 ) -> Result<Response, AppError> {
     // Extract user_id from authenticated user record
     let user_id = user.id;
+
+    // Request ID is available directly as extension
     tracing::trace!("User ID from JWT claims: {}", user_id);
 
     // Log request body details for debugging
@@ -134,61 +138,61 @@ pub async fn create_message(
     // Check if streaming was requested
     let is_streaming = anthropic_request.stream.unwrap_or(false);
 
+    let params = MessageHandlerParams {
+        bedrock_model_id,
+        bedrock_body,
+        original_model: anthropic_request.model,
+        model_mapper,
+        user_id,
+        request_id,
+    };
+
     if is_streaming {
-        handle_streaming_message(
-            server.model_service.clone(),
-            headers,
-            bedrock_model_id,
-            bedrock_body,
-            anthropic_request.model,
-            model_mapper,
-            user_id,
-        )
-        .await
+        handle_streaming_message(server.model_service.clone(), headers, params).await
     } else {
-        handle_non_streaming_message(
-            server.model_service.clone(),
-            headers,
-            bedrock_model_id,
-            bedrock_body,
-            anthropic_request.model,
-            model_mapper,
-            user_id,
-        )
-        .await
+        handle_non_streaming_message(server.model_service.clone(), headers, params).await
     }
+}
+
+/// Parameters for handling message requests
+struct MessageHandlerParams {
+    bedrock_model_id: String,
+    bedrock_body: Vec<u8>,
+    original_model: String,
+    model_mapper: ModelMapper,
+    user_id: i32,
+    request_id: RequestId,
 }
 
 /// Handle non-streaming message requests
 async fn handle_non_streaming_message(
     model_service: Arc<dyn ModelService>,
     headers: HeaderMap,
-    bedrock_model_id: String,
-    bedrock_body: Vec<u8>,
-    original_model: String,
-    model_mapper: ModelMapper,
-    user_id: i32,
+    params: MessageHandlerParams,
 ) -> Result<Response, AppError> {
     info!(
-        "Processing non-streaming Anthropic request for model: {}",
-        bedrock_model_id
+        bedrock_model_id = %params.bedrock_model_id,
+        request_id = %params.request_id,
+        "Processing non-streaming Anthropic request"
     );
 
     // Create ModelRequest for the service
     let model_request = ModelRequest {
-        model_id: bedrock_model_id.clone(),
-        body: bedrock_body,
+        model_id: params.bedrock_model_id.clone(),
+        body: params.bedrock_body,
         headers: headers.clone(),
-        user_id,
+        user_id: params.user_id,
         endpoint_type: "anthropic".to_string(),
+        request_id: params.request_id,
     };
 
     // Use ModelService to invoke model (includes automatic usage tracking)
     match model_service.invoke_model(model_request).await {
         Ok(model_response) => {
             info!(
-                "Bedrock model {} invocation completed with status {}",
-                bedrock_model_id, model_response.status
+                bedrock_model_id = %params.bedrock_model_id,
+                status = %model_response.status,
+                "Bedrock model invocation completed"
             );
 
             // Check for HTTP error status first
@@ -204,8 +208,9 @@ async fn handle_non_streaming_message(
                     .unwrap_or("Unknown AWS error");
 
                 error!(
-                    "AWS Bedrock error ({}): {}",
-                    model_response.status, error_message
+                    status = %model_response.status,
+                    message = %error_message,
+                    "AWS Bedrock error"
                 );
 
                 // Return appropriate error based on status code
@@ -245,12 +250,15 @@ async fn handle_non_streaming_message(
                 })?;
 
             // Transform Bedrock response to Anthropic format
-            let anthropic_response =
-                transform_bedrock_to_anthropic(bedrock_response, &original_model, &model_mapper)
-                    .map_err(|e| {
-                        error!("Transformation error: {}", e);
-                        AppError::from(e)
-                    })?;
+            let anthropic_response = transform_bedrock_to_anthropic(
+                bedrock_response,
+                &params.original_model,
+                &params.model_mapper,
+            )
+            .map_err(|e| {
+                error!("Transformation error: {}", e);
+                AppError::from(e)
+            })?;
 
             // Return JSON response
             Ok(Response::builder()
@@ -261,8 +269,9 @@ async fn handle_non_streaming_message(
         }
         Err(err) => {
             error!(
-                "Model service error for model {}: {}",
-                bedrock_model_id, err
+                bedrock_model_id = %params.bedrock_model_id,
+                error = %err,
+                "Model service error"
             );
             Err(err)
         }
@@ -273,35 +282,35 @@ async fn handle_non_streaming_message(
 async fn handle_streaming_message(
     model_service: Arc<dyn ModelService>,
     headers: HeaderMap,
-    bedrock_model_id: String,
-    bedrock_body: Vec<u8>,
-    original_model: String,
-    _model_mapper: ModelMapper,
-    user_id: i32,
+    params: MessageHandlerParams,
 ) -> Result<Response, AppError> {
     info!(
-        "Processing streaming Anthropic request for model: {}",
-        bedrock_model_id
+        bedrock_model_id = %params.bedrock_model_id,
+        request_id = %params.request_id,
+        "Processing streaming Anthropic request"
     );
 
     // Create ModelRequest for the service
     let model_request = ModelRequest {
-        model_id: bedrock_model_id.clone(),
-        body: bedrock_body,
+        model_id: params.bedrock_model_id.clone(),
+        body: params.bedrock_body,
         headers: headers.clone(),
-        user_id,
+        user_id: params.user_id,
         endpoint_type: "anthropic".to_string(),
+        request_id: params.request_id,
     };
 
     // Use ModelService to invoke streaming model (includes automatic usage tracking)
     match model_service.invoke_model_stream(model_request).await {
         Ok(model_response) => {
             info!(
-                "Model service streaming response received for model: {:?}",
-                model_response
+                bedrock_model_id = %params.bedrock_model_id,
+                model_response = ?model_response,
+                "Model service streaming response received"
             );
 
             // For streaming, we transform each parsed event
+            let original_model = params.original_model.clone();
             let transformed_stream = model_response.stream.map(move |event_result| {
                 match event_result {
                     Ok(sse_event) => {
@@ -382,8 +391,9 @@ async fn handle_streaming_message(
         }
         Err(err) => {
             error!(
-                "Model service streaming error for model {}: {}",
-                bedrock_model_id, err
+                bedrock_model_id = %params.bedrock_model_id,
+                error = %err,
+                "Model service streaming error"
             );
             Err(err)
         }
@@ -397,6 +407,7 @@ async fn handle_streaming_message(
 mod tests {
     use super::*;
     use crate::auth::middleware::jwt_auth_middleware;
+    use crate::middleware::request_id_middleware;
     use axum::{
         body::Body,
         http::{Request, StatusCode},
@@ -456,9 +467,13 @@ mod tests {
     #[tokio::test]
     async fn test_create_message_basic() {
         let server = create_test_server().await;
-        let app = create_anthropic_routes().with_state(server.clone()).layer(
-            middleware::from_fn_with_state(server.clone(), jwt_auth_middleware),
-        );
+        let app = create_anthropic_routes()
+            .with_state(server.clone())
+            .layer(middleware::from_fn_with_state(
+                server.clone(),
+                jwt_auth_middleware,
+            ))
+            .layer(middleware::from_fn(request_id_middleware));
 
         let request = Request::builder()
             .uri("/v1/messages")
@@ -476,9 +491,13 @@ mod tests {
     #[tokio::test]
     async fn test_create_message_streaming() {
         let server = create_test_server().await;
-        let app = create_anthropic_routes().with_state(server.clone()).layer(
-            middleware::from_fn_with_state(server.clone(), jwt_auth_middleware),
-        );
+        let app = create_anthropic_routes()
+            .with_state(server.clone())
+            .layer(middleware::from_fn_with_state(
+                server.clone(),
+                jwt_auth_middleware,
+            ))
+            .layer(middleware::from_fn(request_id_middleware));
 
         let request = Request::builder()
             .uri("/v1/messages")
@@ -496,9 +515,13 @@ mod tests {
     #[tokio::test]
     async fn test_create_message_invalid_json() {
         let server = create_test_server().await;
-        let app = create_anthropic_routes().with_state(server.clone()).layer(
-            middleware::from_fn_with_state(server.clone(), jwt_auth_middleware),
-        );
+        let app = create_anthropic_routes()
+            .with_state(server.clone())
+            .layer(middleware::from_fn_with_state(
+                server.clone(),
+                jwt_auth_middleware,
+            ))
+            .layer(middleware::from_fn(request_id_middleware));
 
         // Create a valid JWT token for the test
         fn create_oauth_token(
@@ -529,9 +552,13 @@ mod tests {
     #[tokio::test]
     async fn test_create_message_missing_required_fields() {
         let server = create_test_server().await;
-        let app = create_anthropic_routes().with_state(server.clone()).layer(
-            middleware::from_fn_with_state(server.clone(), jwt_auth_middleware),
-        );
+        let app = create_anthropic_routes()
+            .with_state(server.clone())
+            .layer(middleware::from_fn_with_state(
+                server.clone(),
+                jwt_auth_middleware,
+            ))
+            .layer(middleware::from_fn(request_id_middleware));
 
         let incomplete_request = serde_json::to_string(&serde_json::json!({
             "model": "claude-sonnet-4-20250514",
@@ -554,9 +581,13 @@ mod tests {
     #[tokio::test]
     async fn test_create_message_unsupported_model() {
         let server = create_test_server().await;
-        let app = create_anthropic_routes().with_state(server.clone()).layer(
-            middleware::from_fn_with_state(server.clone(), jwt_auth_middleware),
-        );
+        let app = create_anthropic_routes()
+            .with_state(server.clone())
+            .layer(middleware::from_fn_with_state(
+                server.clone(),
+                jwt_auth_middleware,
+            ))
+            .layer(middleware::from_fn(request_id_middleware));
 
         let request_with_unsupported_model = serde_json::to_string(&serde_json::json!({
             "model": "unsupported-model",
@@ -585,9 +616,13 @@ mod tests {
     #[tokio::test]
     async fn test_create_message_with_system_prompt() {
         let server = create_test_server().await;
-        let app = create_anthropic_routes().with_state(server.clone()).layer(
-            middleware::from_fn_with_state(server.clone(), jwt_auth_middleware),
-        );
+        let app = create_anthropic_routes()
+            .with_state(server.clone())
+            .layer(middleware::from_fn_with_state(
+                server.clone(),
+                jwt_auth_middleware,
+            ))
+            .layer(middleware::from_fn(request_id_middleware));
 
         let request_with_system = serde_json::to_string(&serde_json::json!({
             "model": "claude-sonnet-4-20250514",
@@ -618,9 +653,13 @@ mod tests {
     #[tokio::test]
     async fn test_create_message_with_all_parameters() {
         let server = create_test_server().await;
-        let app = create_anthropic_routes().with_state(server.clone()).layer(
-            middleware::from_fn_with_state(server.clone(), jwt_auth_middleware),
-        );
+        let app = create_anthropic_routes()
+            .with_state(server.clone())
+            .layer(middleware::from_fn_with_state(
+                server.clone(),
+                jwt_auth_middleware,
+            ))
+            .layer(middleware::from_fn(request_id_middleware));
 
         let full_request = serde_json::to_string(&serde_json::json!({
             "model": "claude-sonnet-4-20250514",
@@ -655,9 +694,13 @@ mod tests {
     #[tokio::test]
     async fn test_create_message_with_model_alias() {
         let server = create_test_server().await;
-        let app = create_anthropic_routes().with_state(server.clone()).layer(
-            middleware::from_fn_with_state(server.clone(), jwt_auth_middleware),
-        );
+        let app = create_anthropic_routes()
+            .with_state(server.clone())
+            .layer(middleware::from_fn_with_state(
+                server.clone(),
+                jwt_auth_middleware,
+            ))
+            .layer(middleware::from_fn(request_id_middleware));
 
         let request_with_alias = serde_json::to_string(&serde_json::json!({
             "model": "claude-3-sonnet", // Using alias instead of full name
@@ -687,9 +730,13 @@ mod tests {
     #[tokio::test]
     async fn test_create_message_large_request() {
         let server = create_test_server().await;
-        let app = create_anthropic_routes().with_state(server.clone()).layer(
-            middleware::from_fn_with_state(server.clone(), jwt_auth_middleware),
-        );
+        let app = create_anthropic_routes()
+            .with_state(server.clone())
+            .layer(middleware::from_fn_with_state(
+                server.clone(),
+                jwt_auth_middleware,
+            ))
+            .layer(middleware::from_fn(request_id_middleware));
 
         // Create a large content string
         let large_content = "A".repeat(5000);

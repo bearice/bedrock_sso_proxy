@@ -160,6 +160,15 @@ impl UsageTrackingService {
         // Strip regional prefix from model ID for consistent storage and cost calculation
         let normalized_model_id = self.model_mapping.strip_regional_prefix(&request.model_id);
 
+        tracing::debug!(
+            "Tracking usage for user_id={} model={} input_tokens={} output_tokens={} request_id={}",
+            user_id,
+            normalized_model_id,
+            usage_metadata.input_tokens,
+            usage_metadata.output_tokens,
+            request.request_id
+        );
+
         // Calculate cost if model pricing is available
         let cost_usd = self
             .calculate_cost(
