@@ -14,7 +14,7 @@ pub use usage_records::Entity as UsageRecords;
 pub use usage_summaries::Entity as UsageSummaries;
 pub use users::Entity as Users;
 
-// Type aliases for backward compatibility
+// Type aliases
 pub type UserRecord = users::Model;
 pub type RefreshTokenData = refresh_tokens::Model;
 pub type AuditLogEntry = audit_logs::Model;

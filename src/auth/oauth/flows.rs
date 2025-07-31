@@ -1,16 +1,13 @@
 use crate::{
-    auth::config::OAuthProvider,
-    auth::{OAuthClaims, jwt::JwtService, request_context::RequestContext},
-    cache::{CacheManagerImpl, typed::typed_cache},
+    auth::{OAuthClaims, jwt::JwtService, request_context::RequestContext, oauth::state::StateData},
+    cache::CacheManagerImpl,
     config::Config,
-    database::{DatabaseManager, entities::UserRecord},
+    database::{DatabaseManager, entities::{UserRecord, AuditLogEntry, RefreshTokenData}},
     error::AppError,
-    health::{HealthCheckResult, HealthChecker},
 };
-use chrono::{Duration as ChronoDuration, Utc};
+use chrono::Utc;
 use oauth2::{
-    AuthUrl, AuthorizationCode, ClientId, ClientSecret, CsrfToken, EndpointNotSet, EndpointSet,
-    RedirectUrl, Scope, TokenResponse as OAuth2TokenResponse, TokenUrl, basic::BasicClient,
+    AuthorizationCode, CsrfToken, RedirectUrl, Scope, TokenResponse as OAuth2TokenResponse,
 };
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
@@ -19,22 +16,7 @@ use sha2::{Digest, Sha256};
 use std::{collections::HashMap, sync::Arc};
 use uuid::Uuid;
 
-/// Default OAuth state token TTL (10 minutes)
-const OAUTH_STATE_TTL_SECONDS: i64 = 600;
-
-/// CSRF state tokens for OAuth security
-#[derive(Clone, Debug, Serialize, Deserialize)]
-#[typed_cache(ttl = 600)] // 10 minutes TTL
-pub struct StateData {
-    pub provider: String,
-    pub redirect_uri: String,
-    pub created_at: chrono::DateTime<Utc>,
-    pub expires_at: chrono::DateTime<Utc>,
-}
-
-// Avoid oauth2 type madness
-pub type Oauth2Client =
-    BasicClient<EndpointSet, EndpointNotSet, EndpointNotSet, EndpointNotSet, EndpointSet>;
+use super::providers::Oauth2Client;
 
 #[derive(Debug, Serialize)]
 pub struct AuthorizeResponse {
@@ -77,7 +59,8 @@ pub struct ProvidersResponse {
     pub providers: Vec<ProviderInfo>,
 }
 
-pub struct OAuthService {
+/// OAuth flow handlers
+pub struct OAuthFlows {
     config: Config,
     jwt_service: Arc<dyn JwtService>,
     http_client: Client,
@@ -86,31 +69,22 @@ pub struct OAuthService {
     oauth_clients: HashMap<String, Arc<Oauth2Client>>,
 }
 
-impl OAuthService {
+impl OAuthFlows {
     pub fn new(
         config: Config,
         jwt_service: Arc<dyn JwtService>,
         database: Arc<dyn DatabaseManager>,
         cache: Arc<CacheManagerImpl>,
-    ) -> Result<Self, AppError> {
-        let oauth_clients = Self::initialize_oauth_clients(&config)?;
-
-        Ok(Self {
+        oauth_clients: HashMap<String, Arc<Oauth2Client>>,
+    ) -> Self {
+        Self {
             config,
             jwt_service,
             http_client: Client::new(),
             database,
             cache,
             oauth_clients,
-        })
-    }
-
-    /// Get user by database ID
-    pub async fn get_user_by_id(
-        &self,
-        user_id: i32,
-    ) -> Result<Option<UserRecord>, crate::database::DatabaseError> {
-        self.database.users().find_by_id(user_id).await
+        }
     }
 
     pub async fn get_authorization_url(
@@ -127,6 +101,7 @@ impl OAuthService {
 
         // Use the configured redirect URI if available, otherwise use the provided one
         let actual_redirect_uri = provider.redirect_uri.as_deref().unwrap_or(redirect_uri);
+        tracing::debug!("using redirect_uri {}", actual_redirect_uri);
 
         let client = self.get_oauth_client(provider_name)?;
 
@@ -135,7 +110,11 @@ impl OAuthService {
             .create_state_internal(provider_name.to_string(), actual_redirect_uri.to_string())
             .await?;
 
-        let (authorization_url, _csrf_token) = client
+        let (authorization_url, _csrf_token) = (*client)
+            .clone()
+            .set_redirect_uri(RedirectUrl::from_url(
+                actual_redirect_uri.try_into().unwrap(),
+            ))
             .authorize_url(|| CsrfToken::new(state.clone()))
             .add_scopes(provider.scopes.iter().map(|s| Scope::new(s.clone())))
             .url();
@@ -161,7 +140,7 @@ impl OAuthService {
             Err(e) => {
                 // Log authentication failure if database is available
                 {
-                    let audit_entry = crate::database::entities::audit_logs::Model {
+                    let audit_entry = AuditLogEntry {
                         id: 0, // Will be set by database
                         user_id: None,
                         event_type: "oauth_login_failed".to_string(),
@@ -227,6 +206,9 @@ impl OAuthService {
             })?;
 
         let client = self.get_oauth_client(&request.provider)?;
+        let client = (*client).clone().set_redirect_uri(RedirectUrl::from_url(
+            state_data.redirect_uri.as_str().try_into().unwrap(),
+        ));
         let http_client = reqwest::ClientBuilder::new()
             // Following redirects opens the client up to SSRF vulnerabilities.
             .redirect(reqwest::redirect::Policy::none())
@@ -289,25 +271,10 @@ impl OAuthService {
                 .await
                 .map_err(|e| AppError::Internal(format!("Failed to store user: {}", e)))?;
 
-            // Update last login time
-            let user = self
-                .database
-                .users()
-                .find_by_id(db_user_id)
-                .await
-                .map_err(|e| AppError::Internal(format!("Failed to find user: {}", e)))?
-                .ok_or_else(|| AppError::Internal("User not found after upsert".to_string()))?;
-
-            let is_admin = self.config.is_admin(&user.email);
-
-            self.database
-                .users()
-                .update_last_login(user)
-                .await
-                .map_err(|e| AppError::Internal(format!("Failed to update last login: {}", e)))?;
+            let is_admin = self.config.is_admin(&email);
 
             // Log successful authentication
-            let audit_entry = crate::database::entities::audit_logs::Model {
+            let audit_entry = AuditLogEntry {
                 id: 0, // Will be set by database
                 user_id: Some(db_user_id),
                 event_type: "oauth_login".to_string(),
@@ -357,7 +324,7 @@ impl OAuthService {
         // Create refresh token for proper OAuth flow
         let refresh_token = Uuid::new_v4().to_string();
         let refresh_token_hash = self.hash_token(&refresh_token);
-        let refresh_token_data = crate::database::entities::refresh_tokens::Model {
+        let refresh_token_data = RefreshTokenData {
             id: 0, // Will be set by database
             token_hash: refresh_token_hash,
             user_id: format!("{}:{}", request.provider, user_id), // Composite user ID
@@ -400,7 +367,7 @@ impl OAuthService {
             Err(e) => {
                 // Log refresh token failure if database is available
                 {
-                    let audit_entry = crate::database::entities::audit_logs::Model {
+                    let audit_entry = AuditLogEntry {
                         id: 0, // Will be set by database
                         user_id: None,
                         event_type: "token_refresh_failed".to_string(),
@@ -464,7 +431,7 @@ impl OAuthService {
             // Create new refresh token
             let new_token = Uuid::new_v4().to_string();
             let new_token_hash = self.hash_token(&new_token);
-            let new_token_data = crate::database::entities::refresh_tokens::Model {
+            let new_token_data = RefreshTokenData {
                 id: 0, // Will be set by database
                 token_hash: new_token_hash,
                 user_id: token_data.user_id.clone(),
@@ -485,7 +452,7 @@ impl OAuthService {
                 .map_err(|e| AppError::Internal(format!("Failed to store new token: {}", e)))?;
 
             // Log successful token refresh
-            let audit_entry = crate::database::entities::audit_logs::Model {
+            let audit_entry = AuditLogEntry {
                 id: 0,         // Will be set by database
                 user_id: None, // Would need user lookup by composite ID
                 event_type: "token_refresh".to_string(),
@@ -589,7 +556,7 @@ impl OAuthService {
                     .get_oauth_provider(&name)
                     .map(|provider| ProviderInfo {
                         name: name.clone(),
-                        display_name: self.get_display_name(&name),
+                        display_name: super::providers::get_display_name(&name),
                         scopes: provider.scopes,
                     })
             })
@@ -615,86 +582,9 @@ impl OAuthService {
             })
     }
 
-    fn initialize_oauth_clients(
-        config: &Config,
-    ) -> Result<HashMap<String, Arc<Oauth2Client>>, AppError> {
-        let mut clients = HashMap::new();
-
-        for provider_name in config.list_oauth_providers() {
-            if let Some(provider) = config.get_oauth_provider(&provider_name) {
-                let client = Arc::new(Self::create_oauth_client_static(&provider, &provider_name)?);
-                clients.insert(provider_name, client);
-            }
-        }
-
-        Ok(clients)
-    }
-
-    fn create_oauth_client_static(
-        provider: &OAuthProvider,
-        provider_name: &str,
-    ) -> Result<Oauth2Client, AppError> {
-        let auth_url = AuthUrl::new(
-            provider
-                .authorization_url
-                .as_ref()
-                .ok_or_else(|| {
-                    AppError::BadRequest(format!(
-                        "Authorization URL not configured for OAuth provider '{}'. Please check your configuration. \
-                         For known providers (google, github, microsoft, gitlab), URLs should be auto-configured. \
-                         For custom providers or providers requiring domain/tenant configuration (auth0, okta), \
-                         you must specify the authorization_url explicitly.",
-                        provider_name
-                    ))
-                })?
-                .clone(),
-        )
-        .map_err(|e| AppError::BadRequest(format!("Invalid authorization URL for provider '{}': {}", provider_name, e)))?;
-
-        let token_url = TokenUrl::new(
-            provider
-                .token_url
-                .as_ref()
-                .ok_or_else(|| {
-                    AppError::BadRequest(format!(
-                        "Token URL not configured for OAuth provider '{}'. Please check your configuration. \
-                         For known providers (google, github, microsoft, gitlab), URLs should be auto-configured. \
-                         For custom providers or providers requiring domain/tenant configuration (auth0, okta), \
-                         you must specify the token_url explicitly.",
-                        provider_name
-                    ))
-                })?
-                .clone(),
-        )
-        .map_err(|e| AppError::BadRequest(format!("Invalid token URL for provider '{}': {}", provider_name, e)))?;
-
-        let redirect_url = provider
-            .redirect_uri
-            .as_ref()
-            .map(|uri| RedirectUrl::new(uri.clone()))
-            .transpose()
-            .map_err(|e| {
-                AppError::BadRequest(format!(
-                    "Invalid redirect URI for provider '{}': {}",
-                    provider_name, e
-                ))
-            })?;
-
-        let mut client = BasicClient::new(ClientId::new(provider.client_id.clone()))
-            .set_client_secret(ClientSecret::new(provider.client_secret.clone()))
-            .set_auth_uri(auth_url)
-            .set_token_uri(token_url);
-
-        if let Some(redirect_url) = redirect_url {
-            client = client.set_redirect_uri(redirect_url);
-        }
-
-        Ok(client)
-    }
-
     async fn get_user_info(
         &self,
-        provider: &OAuthProvider,
+        provider: &crate::auth::config::OAuthProvider,
         access_token: &str,
     ) -> Result<HashMap<String, Value>, AppError> {
         let user_info_url = provider
@@ -725,18 +615,6 @@ impl OAuthService {
         Ok(user_info)
     }
 
-    fn get_display_name(&self, provider_name: &str) -> String {
-        match provider_name {
-            "google" => "Google".to_string(),
-            "github" => "GitHub".to_string(),
-            "microsoft" => "Microsoft".to_string(),
-            "gitlab" => "GitLab".to_string(),
-            "auth0" => "Auth0".to_string(),
-            "okta" => "Okta".to_string(),
-            _ => provider_name.to_string(),
-        }
-    }
-
     /// Hash a token for secure storage
     fn hash_token(&self, token: &str) -> String {
         let mut hasher = Sha256::new();
@@ -744,90 +622,6 @@ impl OAuthService {
         format!("{:x}", hasher.finalize())
     }
 
-    /// Create a health checker for this OAuth service
-    pub fn health_checker(self: &std::sync::Arc<Self>) -> Arc<OAuthHealthChecker> {
-        Arc::new(OAuthHealthChecker {
-            service: self.clone(),
-        })
-    }
-}
-
-/// Health checker implementation for OAuth service
-pub struct OAuthHealthChecker {
-    service: std::sync::Arc<OAuthService>,
-}
-
-#[async_trait::async_trait]
-impl HealthChecker for OAuthHealthChecker {
-    fn name(&self) -> &str {
-        "oauth"
-    }
-
-    async fn check(&self) -> HealthCheckResult {
-        let providers = self.service.list_providers();
-        let provider_count = providers.providers.len();
-
-        if provider_count == 0 {
-            HealthCheckResult::degraded_with_details(
-                "No OAuth providers configured".to_string(),
-                serde_json::json!({
-                    "provider_count": 0,
-                    "available_providers": []
-                }),
-            )
-        } else {
-            // Check if providers have required configuration
-            let mut configured_providers = vec![];
-            let mut misconfigured_providers = vec![];
-
-            for provider_info in &providers.providers {
-                if let Some(provider) = self.service.config.get_oauth_provider(&provider_info.name)
-                {
-                    if provider.client_id.is_empty() || provider.client_secret.is_empty() {
-                        misconfigured_providers.push(&provider_info.name);
-                    } else {
-                        configured_providers.push(&provider_info.name);
-                    }
-                }
-            }
-
-            if misconfigured_providers.is_empty() {
-                HealthCheckResult::healthy_with_details(serde_json::json!({
-                    "provider_count": provider_count,
-                    "configured_providers": configured_providers,
-                    "cache_status": "active"
-                }))
-            } else {
-                HealthCheckResult::degraded_with_details(
-                    format!(
-                        "Some OAuth providers are misconfigured: {:?}",
-                        misconfigured_providers
-                    ),
-                    serde_json::json!({
-                        "provider_count": provider_count,
-                        "configured_providers": configured_providers,
-                        "misconfigured_providers": misconfigured_providers,
-                        "cache_status": "active"
-                    }),
-                )
-            }
-        }
-    }
-
-    fn info(&self) -> Option<serde_json::Value> {
-        let providers = self.service.list_providers();
-        Some(serde_json::json!({
-            "service": "OAuth Authentication",
-            "providers": providers.providers.iter().map(|p| serde_json::json!({
-                "name": p.name,
-                "display_name": p.display_name,
-                "scopes": p.scopes
-            })).collect::<Vec<_>>()
-        }))
-    }
-}
-
-impl OAuthService {
     // State management methods using typed cache
     async fn create_state_internal(
         &self,
@@ -840,7 +634,7 @@ impl OAuthService {
             provider,
             redirect_uri,
             created_at: now,
-            expires_at: now + ChronoDuration::seconds(OAUTH_STATE_TTL_SECONDS),
+            expires_at: now + chrono::Duration::seconds(crate::auth::oauth::state::OAUTH_STATE_TTL_SECONDS),
         };
 
         // Use typed cache for state data
@@ -878,235 +672,5 @@ impl OAuthService {
                 .map_err(|e| AppError::Internal(format!("Failed to delete state: {}", e)))?;
         }
         Ok(state_data)
-    }
-
-    // Refresh token methods - removed unused internal methods
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::auth::config::{JwtConfig, OAuthConfig, OAuthProvider};
-    use crate::cache::config::CacheConfig;
-    use crate::database::DatabaseManagerImpl;
-    use jsonwebtoken::Algorithm;
-    use std::collections::HashMap;
-
-    fn create_test_config() -> Config {
-        let mut providers = HashMap::new();
-        providers.insert(
-            "google".to_string(),
-            OAuthProvider {
-                client_id: "test-client-id".to_string(),
-                client_secret: "test-client-secret".to_string(),
-                redirect_uri: Some("http://localhost:3000/callback".to_string()),
-                scopes: vec!["openid".to_string(), "email".to_string()],
-                authorization_url: Some("https://accounts.google.com/o/oauth2/v2/auth".to_string()),
-                token_url: Some("https://oauth2.googleapis.com/token".to_string()),
-                user_info_url: Some("https://www.googleapis.com/oauth2/v2/userinfo".to_string()),
-                user_id_field: "id".to_string(),
-                email_field: "email".to_string(),
-                tenant_id: None,
-                instance_url: None,
-                domain: None,
-            },
-        );
-
-        Config {
-            oauth: OAuthConfig { providers },
-            jwt: JwtConfig {
-                secret: "test-secret".to_string(),
-                algorithm: "HS256".to_string(),
-                access_token_ttl: 3600,
-                refresh_token_ttl: 86400,
-            },
-            cache: CacheConfig {
-                validation_ttl: 3600,
-                max_entries: 1000,
-                cleanup_interval: 300,
-                backend: "memory".to_string(),
-                redis_url: "redis://localhost:6379".to_string(),
-                redis_key_prefix: "test:".to_string(),
-            },
-            ..Default::default()
-        }
-    }
-
-    async fn create_test_components() -> (Arc<dyn DatabaseManager>, Arc<CacheManagerImpl>) {
-        let mut config = Config::default();
-        config.cache.backend = "memory".to_string();
-        config.database.enabled = true;
-        config.database.url = "sqlite::memory:".to_string();
-        let cache = Arc::new(CacheManagerImpl::new_memory());
-        let database = Arc::new(
-            DatabaseManagerImpl::new_from_config(&config, cache.clone())
-                .await
-                .unwrap(),
-        );
-
-        (database, cache)
-    }
-
-    #[tokio::test]
-    async fn test_oauth_service_creation() {
-        let config = create_test_config();
-        let (database, cache) = create_test_components().await;
-        let jwt_service = Arc::new(
-            crate::auth::jwt::JwtServiceImpl::new("test-secret".to_string(), Algorithm::HS256)
-                .unwrap(),
-        );
-
-        let oauth_service = OAuthService::new(config, jwt_service, database, cache).unwrap();
-
-        // Test that service was created successfully
-        let providers = oauth_service.list_providers();
-        assert_eq!(providers.providers.len(), 1);
-        assert_eq!(providers.providers[0].name, "google");
-        assert_eq!(providers.providers[0].display_name, "Google");
-    }
-
-    #[tokio::test]
-    async fn test_get_authorization_url() {
-        let config = create_test_config();
-        let (database, cache) = create_test_components().await;
-        let jwt_service = Arc::new(
-            crate::auth::jwt::JwtServiceImpl::new("test-secret".to_string(), Algorithm::HS256)
-                .unwrap(),
-        );
-        let oauth_service = OAuthService::new(config, jwt_service, database, cache).unwrap();
-
-        let result = oauth_service
-            .get_authorization_url("google", "http://localhost:3000/callback")
-            .await;
-        assert!(result.is_ok());
-
-        let response = result.unwrap();
-        assert_eq!(response.provider, "google");
-        assert!(
-            response
-                .authorization_url
-                .starts_with("https://accounts.google.com/o/oauth2/v2/auth")
-        );
-        assert!(!response.state.is_empty());
-    }
-
-    #[tokio::test]
-    async fn test_get_authorization_url_unknown_provider() {
-        let config = create_test_config();
-        let (database, cache) = create_test_components().await;
-        let jwt_service = Arc::new(
-            crate::auth::jwt::JwtServiceImpl::new("test-secret".to_string(), Algorithm::HS256)
-                .unwrap(),
-        );
-        let oauth_service = OAuthService::new(config, jwt_service, database, cache).unwrap();
-
-        let result = oauth_service
-            .get_authorization_url("unknown", "http://localhost:3000/callback")
-            .await;
-        assert!(result.is_err());
-    }
-
-    #[tokio::test]
-    async fn test_list_providers() {
-        let config = create_test_config();
-        let (database, cache) = create_test_components().await;
-        let jwt_service = Arc::new(
-            crate::auth::jwt::JwtServiceImpl::new("test-secret".to_string(), Algorithm::HS256)
-                .unwrap(),
-        );
-        let oauth_service = OAuthService::new(config, jwt_service, database, cache).unwrap();
-
-        let providers = oauth_service.list_providers();
-        assert_eq!(providers.providers.len(), 1);
-
-        let google_provider = &providers.providers[0];
-        assert_eq!(google_provider.name, "google");
-        assert_eq!(google_provider.display_name, "Google");
-        assert_eq!(google_provider.scopes, vec!["openid", "email"]);
-    }
-
-    #[tokio::test]
-    async fn test_display_names() {
-        let config = create_test_config();
-        let (database, cache) = create_test_components().await;
-        let jwt_service = Arc::new(
-            crate::auth::jwt::JwtServiceImpl::new("test-secret".to_string(), Algorithm::HS256)
-                .unwrap(),
-        );
-        let oauth_service = OAuthService::new(config, jwt_service, database, cache).unwrap();
-
-        assert_eq!(oauth_service.get_display_name("google"), "Google");
-        assert_eq!(oauth_service.get_display_name("github"), "GitHub");
-        assert_eq!(oauth_service.get_display_name("microsoft"), "Microsoft");
-        assert_eq!(oauth_service.get_display_name("gitlab"), "GitLab");
-        assert_eq!(oauth_service.get_display_name("auth0"), "Auth0");
-        assert_eq!(oauth_service.get_display_name("okta"), "Okta");
-        assert_eq!(oauth_service.get_display_name("custom"), "custom");
-    }
-
-    #[tokio::test]
-    async fn test_refresh_token_creation_and_storage() {
-        let config = create_test_config();
-        let (database, cache) = create_test_components().await;
-
-        // Initialize database by running migrations
-        database.migrate().await.unwrap();
-
-        let jwt_service = Arc::new(
-            crate::auth::jwt::JwtServiceImpl::new("test-secret".to_string(), Algorithm::HS256)
-                .unwrap(),
-        );
-        let oauth_service =
-            OAuthService::new(config, jwt_service, database.clone(), cache).unwrap();
-
-        // Create a test refresh token manually to verify the database/DAO layer works
-        let test_token = crate::database::entities::refresh_tokens::Model {
-            id: 0,
-            token_hash: "test-hash".to_string(),
-            user_id: "google:123456".to_string(),
-            provider: "google".to_string(),
-            email: "test@example.com".to_string(),
-            created_at: Utc::now(),
-            expires_at: Utc::now() + chrono::Duration::seconds(86400),
-            rotation_count: 0,
-            revoked_at: None,
-        };
-
-        // Test storing refresh token
-        let store_result = database.refresh_tokens().store(&test_token).await;
-        assert!(
-            store_result.is_ok(),
-            "Failed to store refresh token: {:?}",
-            store_result
-        );
-
-        // Test retrieving refresh token
-        let retrieved_token = database
-            .refresh_tokens()
-            .find_by_hash("test-hash")
-            .await
-            .unwrap();
-        assert!(
-            retrieved_token.is_some(),
-            "Failed to retrieve stored refresh token"
-        );
-
-        let token = retrieved_token.unwrap();
-        assert_eq!(token.user_id, "google:123456");
-        assert_eq!(token.provider, "google");
-        assert_eq!(token.email, "test@example.com");
-        assert_eq!(token.rotation_count, 0);
-        assert!(token.revoked_at.is_none());
-
-        // Test the hash_token function works
-        let hash1 = oauth_service.hash_token("test-token");
-        let hash2 = oauth_service.hash_token("test-token");
-        assert_eq!(hash1, hash2, "Hash function should be deterministic");
-
-        let hash3 = oauth_service.hash_token("different-token");
-        assert_ne!(
-            hash1, hash3,
-            "Different tokens should produce different hashes"
-        );
     }
 }

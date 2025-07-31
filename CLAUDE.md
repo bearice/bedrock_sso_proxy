@@ -10,7 +10,7 @@ secure access to AWS Bedrock APIs. It acts as an intermediary between clients
 and AWS Bedrock, handling JWT authentication and request forwarding with AWS
 Signature V4 signing.
 
-The proxy includes comprehensive OpenAPI documentation accessible at `/docs` for 
+The proxy includes comprehensive OpenAPI documentation accessible at `/docs` for
 interactive API exploration and testing.
 
 ## Architecture
@@ -76,7 +76,7 @@ interactive API exploration and testing.
 **API Documentation:**
 
 - `GET /docs` - Interactive Swagger UI documentation
-- `GET /openapi.yaml` - OpenAPI specification in YAML format  
+- `GET /openapi.yaml` - OpenAPI specification in YAML format
 - `GET /openapi.json` - OpenAPI specification in JSON format
 
 **Bedrock Format (AWS Native):**
@@ -540,7 +540,7 @@ quality and consistency.
 - **Integration Tests**: 49 tests across 5 test files
   - JWT integration tests: 7 tests
   - API key integration tests: 6 tests
-  - Cached DAO tests: 8 tests  
+  - Cached DAO tests: 8 tests
   - Cost integration tests: 10 tests
   - Usage integration tests: 8 tests
 - **Security Tests**: 13 comprehensive security attack simulations
@@ -661,10 +661,20 @@ cargo run --bin bedrock_proxy -- migrate up
 - **Database**: SeaORM with connection pooling and async operations
 - **Memory**: Request body size limited to 10MB to prevent DoS attacks
 
-### Coding Guidelines
+### Coding Guidelines (!!IMPORTANT!!)
 
 - **Imports**: If you are referring to something in the crate, import it instead
   using an absolute path
 - Use import as possible, unless it causes naming conflicts
 - When using entities in database, use type alias instead of raw Model name,
-  like UserRecord against users::Model
+  like UserRecord against users::Model see `src/database/entities/mod.rs` or following defs.
+```
+// Type aliases
+pub type UserRecord = users::Model;
+pub type RefreshTokenData = refresh_tokens::Model;
+pub type AuditLogEntry = audit_logs::Model;
+pub type UsageRecord = usage_records::Model;
+pub type UsageSummary = usage_summaries::Model;
+pub type ModelCost = model_costs::Model;
+pub type ApiKeyRecord = api_keys::Model;
+```
