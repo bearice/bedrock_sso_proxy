@@ -1,11 +1,11 @@
 use crate::{
     auth::{
-        oauth::{RefreshRequest, TokenRequest},
-        request_context::RequestContext,
+        oauth::{RefreshRequest, TokenRequest}
     },
     database::entities::UserRecord,
     error::AppError,
     server::Server,
+    utils::request_context::RequestContext,
 };
 use axum::{
     Extension, Router,

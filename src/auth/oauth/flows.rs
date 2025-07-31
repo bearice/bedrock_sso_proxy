@@ -1,9 +1,13 @@
 use crate::{
-    auth::{OAuthClaims, jwt::JwtService, request_context::RequestContext, oauth::state::StateData},
+    auth::{OAuthClaims, jwt::JwtService, oauth::state::StateData},
     cache::CacheManagerImpl,
     config::Config,
-    database::{DatabaseManager, entities::{UserRecord, AuditLogEntry, RefreshTokenData}},
+    database::{
+        DatabaseManager,
+        entities::{AuditLogEntry, RefreshTokenData, UserRecord},
+    },
     error::AppError,
+    utils::request_context::RequestContext,
 };
 use chrono::Utc;
 use oauth2::{
@@ -634,7 +638,8 @@ impl OAuthFlows {
             provider,
             redirect_uri,
             created_at: now,
-            expires_at: now + chrono::Duration::seconds(crate::auth::oauth::state::OAUTH_STATE_TTL_SECONDS),
+            expires_at: now
+                + chrono::Duration::seconds(crate::auth::oauth::state::OAUTH_STATE_TTL_SECONDS),
         };
 
         // Use typed cache for state data

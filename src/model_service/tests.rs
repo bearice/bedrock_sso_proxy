@@ -5,7 +5,7 @@ use crate::{
     aws::config::AwsConfig,
     config::Config,
     database::{UsageQuery, entities::*},
-    middleware::RequestId,
+    utils::RequestId,
     model_service::streaming::{EventStreamParser, ParsedEventStream},
     model_service::types::*,
     test_utils::TestServerBuilder,

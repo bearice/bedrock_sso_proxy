@@ -3,7 +3,7 @@ use futures_util::Stream;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
-use crate::middleware::RequestId;
+use crate::utils::RequestId;
 use crate::model_service::ModelService;
 
 /// Request structure for model invocation

@@ -8,14 +8,14 @@ use crate::{
             },
             health::OAuthHealthChecker,
             providers::initialize_oauth_clients,
-        },
-        request_context::RequestContext,
+        }
     },
     cache::CacheManagerImpl,
     config::Config,
     database::{DatabaseManager, entities::UserRecord},
     error::AppError,
     health::{HealthCheckResult, HealthChecker},
+    utils::request_context::RequestContext,
 };
 use std::sync::Arc;
 

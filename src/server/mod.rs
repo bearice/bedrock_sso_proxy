@@ -15,7 +15,7 @@ use crate::{
     health::HealthService,
     jobs::{CleanupJob, JobScheduler, SummariesJob},
     metrics,
-    middleware::request_id_middleware,
+    utils::request_id_middleware,
     model_service::{ModelService, ModelServiceImpl},
     routes::{
         create_admin_api_routes, create_anthropic_routes, create_auth_routes,

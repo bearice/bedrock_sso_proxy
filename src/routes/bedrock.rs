@@ -1,5 +1,5 @@
 use crate::{
-    database::entities::UserRecord, error::AppError, middleware::RequestId,
+    database::entities::UserRecord, error::AppError, utils::RequestId,
     model_service::ModelRequest, routes::ApiErrorResponse, server::Server,
 };
 use axum::{
@@ -234,7 +234,7 @@ async fn invoke_model_with_response_stream(
 mod tests {
     use super::*;
     use crate::auth::middleware::jwt_auth_middleware;
-    use crate::middleware::request_id_middleware;
+    use crate::utils::request_id_middleware;
     use axum::{
         body::Body,
         http::{Request, StatusCode},
