@@ -288,10 +288,10 @@ export function LoginPage() {
               >
                 <h4 style={{ marginBottom: '0.5rem', color: '#4a5568' }}>What happens next?</h4>
                 <ol style={{ paddingLeft: '1.5rem', color: '#666' }}>
-                  <li>You&apos;ll be redirected to your chosen provider</li>
-                  <li>Sign in with your existing account</li>
-                  <li>Authorize access to Bedrock SSO Proxy</li>
-                  <li>Get your JWT token for Claude Code</li>
+                    <li>You&apos;ll be redirected to your chosen provider</li>
+                    <li>Sign in with your existing account</li>
+                    <li>Authorize access to Bedrock SSO Proxy</li>
+                    <li>Get your token for Claude Code</li>
                 </ol>
               </div>
             </div>

@@ -107,6 +107,14 @@ impl BedrockRuntimeImpl {
         accept: Option<&str>,
         body: Vec<u8>,
     ) -> Result<BedrockResponse, AppError> {
+        tracing::trace!(
+            model_id = %model_id,
+            content_type = ?content_type,
+            accept = ?accept,
+            body_size = body.len(),
+            "Starting model invocation"
+        );
+
         // Add regional prefix to model ID if not already present
         let regionalized_model_id = self
             .model_mapping
@@ -143,7 +151,6 @@ impl BedrockRuntimeImpl {
             body: body.clone(),
         };
 
-        // Authenticate the request (Bearer token or SigV4) with target region
         let authenticated_headers = self
             .authenticate_request(&aws_request, &target_region)
             .await?;
@@ -158,10 +165,44 @@ impl BedrockRuntimeImpl {
 
         let response = request_builder.send().await?;
 
+        tracing::trace!(
+            status = %response.status(),
+            "Received response from AWS Bedrock"
+        );
+
+        // Check for success status codes (2xx)
+        if !response.status().is_success() {
+            let status_code = response.status();
+            let error_body = response.text().await.unwrap_or_default();
+
+            tracing::error!(
+                status = %status_code,
+                error_body = %error_body,
+                "AWS Bedrock returned error response"
+            );
+
+            return Err(AppError::Aws(format!(
+                "AWS Bedrock error ({}): {}",
+                status_code,
+                if error_body.is_empty() {
+                    status_code.canonical_reason().unwrap_or("Unknown error")
+                } else {
+                    &error_body
+                }
+            )));
+        }
+
         // Convert response
         let status = StatusCode::from_u16(response.status().as_u16())?;
         let response_headers = self.convert_reqwest_headers(response.headers());
         let response_body = response.bytes().await?.to_vec();
+
+        tracing::trace!(
+            status = %status,
+            response_headers_count = response_headers.len(),
+            response_body_size = response_body.len(),
+            "Model invocation complete"
+        );
 
         Ok(BedrockResponse {
             status,
@@ -204,36 +245,6 @@ impl BedrockRuntimeImpl {
             processed_headers.insert("accept", HeaderValue::from_str(acc)?);
         }
 
-        // Check if this is a test client (has test credentials)
-        if self.config.access_key_id.as_deref() == Some("test_key") {
-            // Return mock streaming response for tests
-            use bytes::Bytes;
-            use futures_util::stream;
-
-            let mock_data = vec![
-                Bytes::from(
-                    "data: {\"type\":\"message_start\",\"message\":{\"id\":\"msg_test\"}}\n\n",
-                ),
-                Bytes::from(
-                    "data: {\"type\":\"content_block_delta\",\"delta\":{\"text\":\"Hello\"}}\n\n",
-                ),
-                Bytes::from("data: {\"type\":\"message_stop\"}\n\n"),
-            ];
-
-            let mock_stream = stream::iter(mock_data.into_iter().map(Ok::<_, reqwest::Error>));
-            let mut response_headers = HeaderMap::new();
-            response_headers.insert(
-                "content-type",
-                HeaderValue::from_static("text/event-stream"),
-            );
-
-            return Ok(BedrockStreamResponse {
-                status: StatusCode::OK,
-                headers: response_headers,
-                stream: Box::new(mock_stream),
-            });
-        }
-
         // Create AWS request
         let aws_request = BedrockRequest {
             method: "POST".to_string(),
@@ -261,6 +272,28 @@ impl BedrockRuntimeImpl {
         }
 
         let response = request_builder.send().await?;
+
+        // Check for success status codes (2xx) before creating stream
+        if !response.status().is_success() {
+            let status_code = response.status();
+            let error_body = response.text().await.unwrap_or_default();
+
+            tracing::error!(
+                status = %status_code,
+                error_body = %error_body,
+                "AWS Bedrock streaming returned error response"
+            );
+
+            return Err(AppError::Aws(format!(
+                "AWS Bedrock streaming error ({}): {}",
+                status_code,
+                if error_body.is_empty() {
+                    status_code.canonical_reason().unwrap_or("Unknown error")
+                } else {
+                    &error_body
+                }
+            )));
+        }
 
         // Convert response for streaming
         let status = StatusCode::from_u16(response.status().as_u16())?;
@@ -364,7 +397,6 @@ impl BedrockRuntimeImpl {
         for (name, value) in http_request.headers() {
             signed_headers.insert(name, value.clone());
         }
-
         Ok(signed_headers)
     }
 
@@ -539,14 +571,30 @@ impl BedrockRuntime for BedrockRuntimeImpl {
 }
 
 impl BedrockRuntimeImpl {
-    /// Process headers for forwarding to AWS, removing sensitive headers
+    /// Process headers for forwarding to AWS, removing sensitive and client-specific headers
     pub fn process_headers_for_aws(headers: &HeaderMap) -> HeaderMap {
         let mut forwarded_headers = HeaderMap::new();
 
         for (name, value) in headers {
-            // Skip authorization header and other sensitive headers
-            match name.as_str().to_lowercase().as_str() {
-                "authorization" | "host" | "content-length" => continue,
+            let header_name = name.as_str().to_lowercase();
+
+            // Skip headers that shouldn't be forwarded to AWS
+            match header_name.as_str() {
+                // Authentication and connection headers
+                "authorization" | "host" | "content-length" | "connection" => continue,
+
+                // Browser-specific headers
+                "accept-encoding" | "accept-language" | "sec-fetch-mode" | "sec-fetch-site"
+                | "sec-fetch-dest" | "referer" | "origin" | "user-agent" => continue,
+
+                // Client SDK headers (Anthropic SDK, Stainless, etc.)
+                h if h.starts_with("x-stainless-") => continue,
+                h if h.starts_with("anthropic-") => continue,
+                h if h.starts_with("x-app") => continue,
+
+                // Other potentially problematic headers
+                "cookie" | "set-cookie" | "upgrade" | "transfer-encoding" => continue,
+
                 _ => {
                     if let Ok(header_value) = HeaderValue::try_from(value.as_bytes()) {
                         forwarded_headers.insert(name.clone(), header_value);
@@ -608,6 +656,65 @@ mod tests {
     }
 
     #[test]
+    fn test_process_headers_for_aws_client_headers_filtered() {
+        let mut headers = HeaderMap::new();
+
+        // Headers that should be kept
+        headers.insert("content-type", HeaderValue::from_static("application/json"));
+        headers.insert("accept", HeaderValue::from_static("application/json"));
+        headers.insert("x-custom-header", HeaderValue::from_static("custom-value"));
+
+        // Headers that should be filtered out
+        headers.insert("authorization", HeaderValue::from_static("Bearer token"));
+        headers.insert("host", HeaderValue::from_static("example.com"));
+        headers.insert("content-length", HeaderValue::from_static("100"));
+        headers.insert("connection", HeaderValue::from_static("keep-alive"));
+        headers.insert("accept-encoding", HeaderValue::from_static("gzip, deflate"));
+        headers.insert(
+            "accept-language",
+            HeaderValue::from_static("en-US,en;q=0.9"),
+        );
+        headers.insert("sec-fetch-mode", HeaderValue::from_static("cors"));
+        headers.insert("user-agent", HeaderValue::from_static("Mozilla/5.0"));
+        headers.insert("x-stainless-lang", HeaderValue::from_static("js"));
+        headers.insert(
+            "x-stainless-package-version",
+            HeaderValue::from_static("0.55.1"),
+        );
+        headers.insert("anthropic-version", HeaderValue::from_static("2023-06-01"));
+        headers.insert(
+            "anthropic-dangerous-direct-browser-access",
+            HeaderValue::from_static("true"),
+        );
+        headers.insert("x-app", HeaderValue::from_static("cli"));
+
+        let processed = BedrockRuntimeImpl::process_headers_for_aws(&headers);
+
+        // Should be kept
+        assert!(processed.contains_key("content-type"));
+        assert!(processed.contains_key("accept"));
+        assert!(processed.contains_key("x-custom-header"));
+
+        // Should be filtered out
+        assert!(!processed.contains_key("authorization"));
+        assert!(!processed.contains_key("host"));
+        assert!(!processed.contains_key("content-length"));
+        assert!(!processed.contains_key("connection"));
+        assert!(!processed.contains_key("accept-encoding"));
+        assert!(!processed.contains_key("accept-language"));
+        assert!(!processed.contains_key("sec-fetch-mode"));
+        assert!(!processed.contains_key("user-agent"));
+        assert!(!processed.contains_key("x-stainless-lang"));
+        assert!(!processed.contains_key("x-stainless-package-version"));
+        assert!(!processed.contains_key("anthropic-version"));
+        assert!(!processed.contains_key("anthropic-dangerous-direct-browser-access"));
+        assert!(!processed.contains_key("x-app"));
+
+        // Only 3 headers should remain
+        assert_eq!(processed.len(), 3);
+    }
+
+    #[test]
     fn test_process_headers_from_aws() {
         let mut headers = HeaderMap::new();
         headers.insert("content-type", HeaderValue::from_static("application/json"));
@@ -642,7 +749,7 @@ mod tests {
         let client = BedrockRuntimeImpl::new_test().await;
 
         // Test that we can create the client and make a call
-        // With test credentials, we expect to get a proper HTTP response (likely 403 Forbidden)
+        // With test credentials, we expect to get an AWS error (likely 403 Forbidden)
         let result = client
             .invoke_model(
                 "anthropic.claude-v2",
@@ -652,13 +759,17 @@ mod tests {
             )
             .await;
 
-        // Should succeed in making the HTTP call but get rejected by AWS
-        assert!(result.is_ok());
-        let response = result.unwrap();
+        // Should fail with AWS error due to invalid test credentials
+        assert!(result.is_err());
+        let error = result.err().unwrap();
 
-        // With test credentials, AWS should return 403 Forbidden (deterministic)
-        assert_eq!(response.status, reqwest::StatusCode::FORBIDDEN);
-        assert!(!response.body.is_empty()); // Should have error response body
+        // Should be an AWS error containing the 403 status information
+        match error {
+            AppError::Aws(msg) => {
+                assert!(msg.contains("403") || msg.contains("Forbidden"));
+            }
+            _ => panic!("Expected AWS error, got: {:?}", error),
+        }
     }
 
     #[tokio::test]
@@ -676,14 +787,17 @@ mod tests {
             )
             .await;
 
-        // Should succeed with mock data for test client
-        assert!(result.is_ok());
-        let response = result.unwrap();
-        assert_eq!(response.status, StatusCode::OK);
-        assert_eq!(
-            response.headers.get("content-type").unwrap(),
-            "text/event-stream"
-        );
+        // Should fail with AWS error due to invalid test credentials
+        assert!(result.is_err());
+        let error = result.err().unwrap();
+
+        // Should be an AWS error containing the 403 status information
+        match error {
+            AppError::Aws(msg) => {
+                assert!(msg.contains("403") || msg.contains("Forbidden"));
+            }
+            _ => panic!("Expected AWS streaming error, got: {:?}", error),
+        }
     }
 
     #[tokio::test]
@@ -930,6 +1044,69 @@ mod tests {
             expected_url,
             "https://bedrock-runtime.us-east-1.amazonaws.com"
         );
+    }
+
+    #[tokio::test]
+    async fn test_error_handling_for_aws_responses() {
+        // This test verifies that AWS error responses are properly converted to AppError::Aws
+        // We can't easily mock HTTP responses in unit tests, but we verify the error handling logic
+        let client = BedrockRuntimeImpl::new_test().await;
+
+        // Test with invalid model ID to trigger AWS error
+        let result = client
+            .invoke_model(
+                "invalid.model.id",
+                Some("application/json"),
+                Some("application/json"),
+                b"{}".to_vec(),
+            )
+            .await;
+
+        // Should return an error (likely 400 Bad Request or 404 Not Found from AWS)
+        assert!(result.is_err());
+        let error = result.err().unwrap();
+
+        // Should be an AWS error
+        match error {
+            AppError::Aws(msg) => {
+                // Error message should contain status code information
+                assert!(!msg.is_empty());
+                assert!(msg.contains("AWS Bedrock error"));
+            }
+            _ => panic!("Expected AWS error, got: {:?}", error),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_streaming_error_handling_for_aws_responses() {
+        // This test verifies that AWS streaming error responses are properly converted to AppError::Aws
+        let client = BedrockRuntimeImpl::new_test().await;
+        let headers = HeaderMap::new();
+
+        // Test with invalid model ID to trigger AWS error
+        let result = client
+            .invoke_model_with_response_stream(
+                "invalid.model.id",
+                &headers,
+                Some("application/json"),
+                Some("text/event-stream"),
+                b"{}".to_vec(),
+            )
+            .await;
+
+        // Should return an error (likely 400 Bad Request or 404 Not Found from AWS)
+        assert!(result.is_err());
+        let error = result.err().unwrap();
+
+        // Should be an AWS error
+        match error {
+            AppError::Aws(msg) => {
+                // Error message should contain status code information
+                assert!(!msg.is_empty());
+                assert!(msg.contains("AWS Bedrock streaming error"));
+            }
+            _ => panic!("Expected AWS streaming error, got: {:?}", error),
+        }
     }
 
     #[tokio::test]

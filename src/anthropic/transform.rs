@@ -4,6 +4,9 @@ use super::{
 };
 
 #[cfg(test)]
+use super::{Tool, ToolInputSchema};
+
+#[cfg(test)]
 use super::Message;
 use serde_json::{Value, json};
 
@@ -67,6 +70,25 @@ pub fn transform_anthropic_to_bedrock(
 
         if !system_string.is_empty() {
             bedrock_request["system"] = json!(system_string);
+        }
+    }
+
+    // Add tools if present
+    if let Some(tools) = request.tools {
+        bedrock_request["tools"] = json!(tools);
+    }
+
+    // Add tool_choice if present
+    if let Some(tool_choice) = request.tool_choice {
+        bedrock_request["tool_choice"] = tool_choice;
+    }
+
+    // Add any additional fields from the passthrough mechanism
+    for (key, value) in request.additional_fields {
+        // Skip known fields to avoid conflicts
+        if !["model", "messages", "max_tokens", "temperature", "top_p", "top_k", 
+              "stop_sequences", "stream", "system", "tools", "tool_choice"].contains(&key.as_str()) {
+            bedrock_request[key] = value;
         }
     }
 
@@ -191,7 +213,7 @@ pub fn transform_streaming_event(
     if let Some(data_part) = chunk_str.strip_prefix("data: ") {
         // Handle special cases
         if data_part.trim() == "[DONE]" {
-            return Ok(Some("data: [DONE]\n\n".to_string()));
+            return Ok(Some("event: done\ndata: [DONE]\n\n".to_string()));
         }
 
         // Try to parse as JSON
@@ -199,11 +221,12 @@ pub fn transform_streaming_event(
             // Transform the event data to Anthropic format
             let anthropic_event =
                 transform_bedrock_event_to_anthropic(bedrock_data, original_model)?;
+            let event_type = anthropic_event["type"].as_str().unwrap_or("unknown");
             let event_json = serde_json::to_string(&anthropic_event).map_err(|e| {
                 AnthropicError::TransformationError(format!("JSON serialization failed: {}", e))
             })?;
 
-            return Ok(Some(format!("data: {}\n\n", event_json)));
+            return Ok(Some(format!("event: {}\ndata: {}\n\n", event_type, event_json)));
         }
     }
 
@@ -217,33 +240,178 @@ pub fn transform_bedrock_event_to_anthropic(
     bedrock_event: Value,
     original_model: &str,
 ) -> Result<Value, AnthropicError> {
-    // This is a simplified transformation for streaming events
-    // In practice, you would need to handle different event types:
-    // - message_start
-    // - content_block_start
-    // - content_block_delta
-    // - content_block_stop
-    // - message_delta
-    // - message_stop
+    // Extract the event type
+    let event_type = bedrock_event["type"].as_str().unwrap_or("");
 
-    // For now, we'll pass through most fields and ensure model consistency
-    let mut anthropic_event = bedrock_event.clone();
-
-    // Ensure the model field uses the original Anthropic model name
-    if let Some(event_obj) = anthropic_event.as_object_mut() {
-        if event_obj.contains_key("model") {
-            event_obj.insert("model".to_string(), json!(original_model));
+    match event_type {
+        "message_start" => transform_message_start_event(bedrock_event, original_model),
+        "content_block_start" => transform_content_block_start_event(bedrock_event),
+        "content_block_delta" => transform_content_block_delta_event(bedrock_event),
+        "content_block_stop" => transform_content_block_stop_event(bedrock_event),
+        "message_delta" => transform_message_delta_event(bedrock_event),
+        "message_stop" => Ok(json!({"type": "message_stop"})),
+        "amazon-bedrock-invocationMetrics" => {
+            // Filter out internal AWS metrics events - these should not be sent to clients
+            Err(AnthropicError::TransformationError(
+                "Internal AWS metrics event filtered out".to_string(),
+            ))
         }
+        _ => {
+            // For unknown event types, pass through with minimal transformation
+            let mut anthropic_event = bedrock_event.clone();
+            if let Some(event_obj) = anthropic_event.as_object_mut() {
+                if event_obj.contains_key("model") {
+                    event_obj.insert("model".to_string(), json!(original_model));
+                }
+            }
+            Ok(anthropic_event)
+        }
+    }
+}
 
-        // Handle message events that might contain model information
-        if let Some(message) = event_obj.get_mut("message") {
-            if let Some(message_obj) = message.as_object_mut() {
-                message_obj.insert("model".to_string(), json!(original_model));
+/// Transform message_start event to Anthropic format
+fn transform_message_start_event(
+    bedrock_event: Value,
+    original_model: &str,
+) -> Result<Value, AnthropicError> {
+    let message = bedrock_event["message"].as_object()
+        .ok_or_else(|| AnthropicError::TransformationError("Missing message object".to_string()))?;
+
+    // Build the Anthropic message_start event structure
+    Ok(json!({
+        "type": "message_start",
+        "message": {
+            "id": message.get("id").unwrap_or(&json!("msg_unknown")),
+            "type": "message",
+            "role": message.get("role").unwrap_or(&json!("assistant")),
+            "content": [],
+            "model": original_model,
+            "stop_reason": null,
+            "stop_sequence": null,
+            "usage": message.get("usage").unwrap_or(&json!({
+                "input_tokens": 0,
+                "output_tokens": 0
+            }))
+        }
+    }))
+}
+
+/// Transform content_block_start event to Anthropic format
+fn transform_content_block_start_event(bedrock_event: Value) -> Result<Value, AnthropicError> {
+    let index = bedrock_event["index"].as_u64().unwrap_or(0);
+    let content_block = bedrock_event["content_block"].as_object()
+        .ok_or_else(|| AnthropicError::TransformationError("Missing content_block object".to_string()))?;
+
+    let block_type = content_block.get("type")
+        .and_then(|t| t.as_str())
+        .unwrap_or("text");
+
+    let mut result_block = json!({
+        "type": block_type
+    });
+
+    match block_type {
+        "text" => {
+            result_block["text"] = content_block.get("text").unwrap_or(&json!("")).clone();
+        }
+        "tool_use" => {
+            if let Some(id) = content_block.get("id") {
+                result_block["id"] = id.clone();
+            }
+            if let Some(name) = content_block.get("name") {
+                result_block["name"] = name.clone();
+            }
+            // input will be populated via input_json_delta events
+            result_block["input"] = json!({});
+        }
+        _ => {
+            // For other content block types, copy all fields except type
+            for (key, value) in content_block {
+                if key != "type" {
+                    result_block[key] = value.clone();
+                }
             }
         }
     }
 
-    Ok(anthropic_event)
+    Ok(json!({
+        "type": "content_block_start",
+        "index": index,
+        "content_block": result_block
+    }))
+}
+
+/// Transform content_block_delta event to Anthropic format
+fn transform_content_block_delta_event(bedrock_event: Value) -> Result<Value, AnthropicError> {
+    let index = bedrock_event["index"].as_u64().unwrap_or(0);
+    let delta = bedrock_event["delta"].as_object()
+        .ok_or_else(|| AnthropicError::TransformationError("Missing delta object".to_string()))?;
+
+    let delta_type = delta.get("type")
+        .and_then(|t| t.as_str())
+        .unwrap_or("text_delta");
+
+    let mut result_delta = json!({
+        "type": delta_type
+    });
+
+    match delta_type {
+        "text_delta" => {
+            result_delta["text"] = delta.get("text").unwrap_or(&json!("")).clone();
+        }
+        "input_json_delta" => {
+            result_delta["partial_json"] = delta.get("partial_json").unwrap_or(&json!("")).clone();
+        }
+        _ => {
+            // For other delta types, copy all fields except type
+            for (key, value) in delta {
+                if key != "type" {
+                    result_delta[key] = value.clone();
+                }
+            }
+        }
+    }
+
+    Ok(json!({
+        "type": "content_block_delta",
+        "index": index,
+        "delta": result_delta
+    }))
+}
+
+/// Transform content_block_stop event to Anthropic format
+fn transform_content_block_stop_event(bedrock_event: Value) -> Result<Value, AnthropicError> {
+    let index = bedrock_event["index"].as_u64().unwrap_or(0);
+
+    Ok(json!({
+        "type": "content_block_stop",
+        "index": index
+    }))
+}
+
+/// Transform message_delta event to Anthropic format
+fn transform_message_delta_event(bedrock_event: Value) -> Result<Value, AnthropicError> {
+    let delta = bedrock_event["delta"].as_object()
+        .ok_or_else(|| AnthropicError::TransformationError("Missing delta object".to_string()))?;
+
+    let usage = bedrock_event["usage"].as_object();
+
+    let mut result = json!({
+        "type": "message_delta",
+        "delta": {
+            "stop_reason": delta.get("stop_reason"),
+            "stop_sequence": delta.get("stop_sequence")
+        }
+    });
+
+    // Add usage information if present
+    if let Some(usage_obj) = usage {
+        result["usage"] = json!({
+            "output_tokens": usage_obj.get("output_tokens").unwrap_or(&json!(0))
+        });
+    }
+
+    Ok(result)
 }
 
 /// Helper function to validate Anthropic request format
@@ -332,6 +500,9 @@ mod tests {
             stop_sequences: None,
             stream: Some(false),
             system: None,
+            tools: None,
+            tool_choice: None,
+            additional_fields: std::collections::HashMap::new(),
         }
     }
 
@@ -455,7 +626,9 @@ mod tests {
 
         let transformed = result.unwrap();
         assert!(transformed.is_some());
-        assert!(transformed.unwrap().starts_with("data: "));
+        let output = transformed.unwrap();
+        assert!(output.starts_with("event: "));
+        assert!(output.contains("\ndata: "));
     }
 
     #[test]
@@ -467,7 +640,7 @@ mod tests {
         assert!(result.is_ok());
 
         let transformed = result.unwrap();
-        assert_eq!(transformed, Some("data: [DONE]\n\n".to_string()));
+        assert_eq!(transformed, Some("event: done\ndata: [DONE]\n\n".to_string()));
     }
 
     #[test]
@@ -552,5 +725,398 @@ mod tests {
 
         // Should pass through as string
         assert_eq!(bedrock_request["system"], "You are a helpful assistant.");
+    }
+
+    #[test]
+    fn test_streaming_event_message_start_transformation() {
+        let bedrock_event = json!({
+            "type": "message_start",
+            "message": {
+                "id": "msg_01ABC123",
+                "role": "assistant",
+                "usage": {
+                    "input_tokens": 10,
+                    "output_tokens": 0
+                }
+            }
+        });
+
+        let result = transform_bedrock_event_to_anthropic(bedrock_event, "claude-sonnet-4-20250514").unwrap();
+        
+        assert_eq!(result["type"], "message_start");
+        assert_eq!(result["message"]["id"], "msg_01ABC123");
+        assert_eq!(result["message"]["model"], "claude-sonnet-4-20250514");
+        assert_eq!(result["message"]["role"], "assistant");
+        assert_eq!(result["message"]["content"], json!([]));
+        assert_eq!(result["message"]["usage"]["input_tokens"], 10);
+    }
+
+    #[test]
+    fn test_streaming_event_content_block_start_transformation() {
+        let bedrock_event = json!({
+            "type": "content_block_start",
+            "index": 0,
+            "content_block": {
+                "type": "text",
+                "text": ""
+            }
+        });
+
+        let result = transform_bedrock_event_to_anthropic(bedrock_event, "claude-sonnet-4-20250514").unwrap();
+        
+        assert_eq!(result["type"], "content_block_start");
+        assert_eq!(result["index"], 0);
+        assert_eq!(result["content_block"]["type"], "text");
+        assert_eq!(result["content_block"]["text"], "");
+    }
+
+    #[test]
+    fn test_streaming_event_content_block_delta_transformation() {
+        let bedrock_event = json!({
+            "type": "content_block_delta",
+            "index": 0,  
+            "delta": {
+                "type": "text_delta",
+                "text": "Hello"
+            }
+        });
+
+        let result = transform_bedrock_event_to_anthropic(bedrock_event, "claude-sonnet-4-20250514").unwrap();
+        
+        assert_eq!(result["type"], "content_block_delta");
+        assert_eq!(result["index"], 0);
+        assert_eq!(result["delta"]["type"], "text_delta");
+        assert_eq!(result["delta"]["text"], "Hello");
+    }
+
+    #[test]
+    fn test_streaming_event_message_delta_transformation() {
+        let bedrock_event = json!({
+            "type": "message_delta",
+            "delta": {
+                "stop_reason": "end_turn",
+                "stop_sequence": null
+            },
+            "usage": {
+                "output_tokens": 23
+            }
+        });
+
+        let result = transform_bedrock_event_to_anthropic(bedrock_event, "claude-sonnet-4-20250514").unwrap();
+        
+        assert_eq!(result["type"], "message_delta");
+        assert_eq!(result["delta"]["stop_reason"], "end_turn");
+        assert_eq!(result["usage"]["output_tokens"], 23);
+    }
+
+    #[test]
+    fn test_streaming_event_internal_aws_metrics_filtered() {
+        let bedrock_event = json!({
+            "type": "amazon-bedrock-invocationMetrics",
+            "cacheReadInputTokenCount": 0,
+            "inputTokenCount": 4,
+            "outputTokenCount": 23
+        });
+
+        let result = transform_bedrock_event_to_anthropic(bedrock_event, "claude-sonnet-4-20250514");
+        
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("Internal AWS metrics event filtered out"));
+    }
+
+    #[test]
+    fn test_streaming_event_message_stop_transformation() {
+        let bedrock_event = json!({
+            "type": "message_stop"
+        });
+
+        let result = transform_bedrock_event_to_anthropic(bedrock_event, "claude-sonnet-4-20250514").unwrap();
+        
+        assert_eq!(result["type"], "message_stop");
+    }
+
+    #[test]
+    fn test_message_content_string_format() {
+        let mapper = create_test_mapper();
+        let mut request = create_test_anthropic_request();
+        
+        // Test with string content (current test format)
+        request.messages = vec![Message {
+            role: "user".to_string(),
+            content: json!("Hello, how can you help me today?"),
+        }];
+
+        let (bedrock_request, _model_id) = transform_anthropic_to_bedrock(request, &mapper).unwrap();
+        
+        assert_eq!(bedrock_request["messages"][0]["role"], "user");
+        assert_eq!(bedrock_request["messages"][0]["content"], "Hello, how can you help me today?");
+    }
+
+    #[test]
+    fn test_message_content_blocks_format() {
+        let mapper = create_test_mapper();
+        let mut request = create_test_anthropic_request();
+        
+        // Test with content blocks format
+        request.messages = vec![Message {
+            role: "user".to_string(),
+            content: json!([
+                {
+                    "type": "text",
+                    "text": "Hello, how can you help me today?"
+                }
+            ]),
+        }];
+
+        let (bedrock_request, _model_id) = transform_anthropic_to_bedrock(request, &mapper).unwrap();
+        
+        assert_eq!(bedrock_request["messages"][0]["role"], "user");
+        assert_eq!(bedrock_request["messages"][0]["content"][0]["type"], "text");
+        assert_eq!(bedrock_request["messages"][0]["content"][0]["text"], "Hello, how can you help me today?");
+    }
+
+    #[test]
+    fn test_message_content_multimodal_format() {
+        let mapper = create_test_mapper();
+        let mut request = create_test_anthropic_request();
+        
+        // Test with multimodal content (text + image)
+        request.messages = vec![Message {
+            role: "user".to_string(),
+            content: json!([
+                {
+                    "type": "text",
+                    "text": "What's in this image?"
+                },
+                {
+                    "type": "image",
+                    "source": {
+                        "type": "base64",
+                        "media_type": "image/png",
+                        "data": "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8/5+hHgAHggJ/PchI7wAAAABJRU5ErkJggg=="
+                    }
+                }
+            ]),
+        }];
+
+        let (bedrock_request, _model_id) = transform_anthropic_to_bedrock(request, &mapper).unwrap();
+        
+        assert_eq!(bedrock_request["messages"][0]["role"], "user");
+        assert_eq!(bedrock_request["messages"][0]["content"][0]["type"], "text");
+        assert_eq!(bedrock_request["messages"][0]["content"][0]["text"], "What's in this image?");
+        assert_eq!(bedrock_request["messages"][0]["content"][1]["type"], "image");
+        assert_eq!(bedrock_request["messages"][0]["content"][1]["source"]["type"], "base64");
+        assert_eq!(bedrock_request["messages"][0]["content"][1]["source"]["media_type"], "image/png");
+    }
+
+    #[test]
+    fn test_assistant_message_transformation() {
+        let mapper = create_test_mapper();
+        let mut request = create_test_anthropic_request();
+        
+        // Test assistant message with content blocks
+        request.messages = vec![
+            Message {
+                role: "user".to_string(),
+                content: json!("Hello"),
+            },
+            Message {
+                role: "assistant".to_string(),
+                content: json!([
+                    {
+                        "type": "text",
+                        "text": "Hello! How can I help you today?"
+                    }
+                ]),
+            }
+        ];
+
+        let (bedrock_request, _model_id) = transform_anthropic_to_bedrock(request, &mapper).unwrap();
+        
+        assert_eq!(bedrock_request["messages"].as_array().unwrap().len(), 2);
+        assert_eq!(bedrock_request["messages"][0]["role"], "user");
+        assert_eq!(bedrock_request["messages"][1]["role"], "assistant");
+        assert_eq!(bedrock_request["messages"][1]["content"][0]["type"], "text");
+        assert_eq!(bedrock_request["messages"][1]["content"][0]["text"], "Hello! How can I help you today?");
+    }
+
+    #[test]
+    fn test_sse_format_with_event_lines() {
+        let mapper = create_test_mapper();
+        
+        // Test content_block_delta event SSE formatting
+        let chunk = b"data: {\"type\": \"content_block_delta\", \"index\": 0, \"delta\": {\"type\": \"text_delta\", \"text\": \"Hello world\"}}";
+        
+        let result = transform_streaming_event(chunk, &mapper, "claude-sonnet-4-20250514");
+        assert!(result.is_ok());
+        
+        let transformed = result.unwrap().unwrap();
+        
+        // Should have proper SSE format with event: and data: lines
+        assert!(transformed.starts_with("event: content_block_delta\n"));
+        assert!(transformed.contains("data: "));
+        assert!(transformed.contains("\"type\":\"content_block_delta\""));
+        assert!(transformed.contains("\"text\":\"Hello world\""));
+        assert!(transformed.ends_with("\n\n"));
+    }
+
+    #[test] 
+    fn test_sse_message_start_event_format() {
+        let bedrock_event = json!({
+            "type": "message_start",
+            "message": {
+                "id": "msg_01ABC123",
+                "role": "assistant",
+                "usage": {
+                    "input_tokens": 10,
+                    "output_tokens": 0
+                }
+            }
+        });
+
+        let result = transform_bedrock_event_to_anthropic(bedrock_event, "claude-sonnet-4-20250514").unwrap();
+        
+        // Verify the event can be formatted properly for SSE
+        assert_eq!(result["type"], "message_start");
+        assert_eq!(result["message"]["model"], "claude-sonnet-4-20250514");
+        
+        // This should be able to generate: event: message_start\ndata: {...}\n\n
+        let event_type = result["type"].as_str().unwrap();
+        assert_eq!(event_type, "message_start");
+    }
+
+    #[test]
+    fn test_tools_transformation() {
+        let mapper = create_test_mapper();
+        let mut request = create_test_anthropic_request();
+        
+        // Add a tool to the request
+        request.tools = Some(vec![Tool {
+            name: "get_weather".to_string(),
+            description: "Get weather information for a location".to_string(),
+            input_schema: ToolInputSchema {
+                type_: "object".to_string(),
+                properties: Some({
+                    let mut props = std::collections::HashMap::new();
+                    props.insert("location".to_string(), json!({
+                        "type": "string",
+                        "description": "The city name"
+                    }));
+                    props
+                }),
+                required: Some(vec!["location".to_string()]),
+                additional_schema: std::collections::HashMap::new(),
+            },
+        }]);
+
+        let (bedrock_request, _model_id) = transform_anthropic_to_bedrock(request, &mapper).unwrap();
+        
+        // Verify tools were passed through to Bedrock request
+        assert!(bedrock_request["tools"].is_array());
+        assert_eq!(bedrock_request["tools"][0]["name"], "get_weather");
+        assert_eq!(bedrock_request["tools"][0]["description"], "Get weather information for a location");
+        assert_eq!(bedrock_request["tools"][0]["input_schema"]["type"], "object");
+        assert_eq!(bedrock_request["tools"][0]["input_schema"]["required"][0], "location");
+    }
+
+    #[test]
+    fn test_tool_choice_transformation() {
+        let mapper = create_test_mapper();
+        let mut request = create_test_anthropic_request();
+        
+        // Add tool_choice to the request
+        request.tool_choice = Some(json!({
+            "type": "tool",
+            "name": "get_weather"
+        }));
+
+        let (bedrock_request, _model_id) = transform_anthropic_to_bedrock(request, &mapper).unwrap();
+        
+        // Verify tool_choice was passed through
+        assert_eq!(bedrock_request["tool_choice"]["type"], "tool");
+        assert_eq!(bedrock_request["tool_choice"]["name"], "get_weather");
+    }
+
+    #[test]
+    fn test_additional_fields_passthrough() {
+        let mapper = create_test_mapper();
+        let mut request = create_test_anthropic_request();
+        
+        // Add some additional fields
+        request.additional_fields.insert("custom_field".to_string(), json!("custom_value"));
+        request.additional_fields.insert("another_field".to_string(), json!(42));
+        
+        // Also try to override a known field (should be ignored)
+        request.additional_fields.insert("model".to_string(), json!("should_be_ignored"));
+
+        let (bedrock_request, _model_id) = transform_anthropic_to_bedrock(request, &mapper).unwrap();
+        
+        // Verify additional fields were passed through
+        assert_eq!(bedrock_request["custom_field"], "custom_value");
+        assert_eq!(bedrock_request["another_field"], 42);
+        
+        // Verify known field was not overridden (model field is not in bedrock request)
+        // The model is used to determine the bedrock model ID returned separately
+        assert!(!bedrock_request.get("model").is_some());
+    }
+
+    #[test]
+    fn test_tool_use_content_block_start() {
+        let bedrock_event = json!({
+            "type": "content_block_start",
+            "index": 0,
+            "content_block": {
+                "type": "tool_use",
+                "id": "toolu_01A09q90qw90lq917835lq9",
+                "name": "get_weather"
+            }
+        });
+
+        let result = transform_bedrock_event_to_anthropic(bedrock_event, "claude-sonnet-4-20250514").unwrap();
+        
+        assert_eq!(result["type"], "content_block_start");
+        assert_eq!(result["index"], 0);
+        assert_eq!(result["content_block"]["type"], "tool_use");
+        assert_eq!(result["content_block"]["id"], "toolu_01A09q90qw90lq917835lq9");
+        assert_eq!(result["content_block"]["name"], "get_weather");
+        assert_eq!(result["content_block"]["input"], json!({}));
+    }
+
+    #[test]
+    fn test_input_json_delta_transformation() {
+        let bedrock_event = json!({
+            "type": "content_block_delta",
+            "index": 0,
+            "delta": {
+                "type": "input_json_delta",
+                "partial_json": "{\"location\": \"San"
+            }
+        });
+
+        let result = transform_bedrock_event_to_anthropic(bedrock_event, "claude-sonnet-4-20250514").unwrap();
+        
+        assert_eq!(result["type"], "content_block_delta");
+        assert_eq!(result["index"], 0);
+        assert_eq!(result["delta"]["type"], "input_json_delta");
+        assert_eq!(result["delta"]["partial_json"], "{\"location\": \"San");
+    }
+
+    #[test]
+    fn test_text_content_block_still_works() {
+        let bedrock_event = json!({
+            "type": "content_block_start",
+            "index": 0,
+            "content_block": {
+                "type": "text",
+                "text": ""
+            }
+        });
+
+        let result = transform_bedrock_event_to_anthropic(bedrock_event, "claude-sonnet-4-20250514").unwrap();
+        
+        assert_eq!(result["type"], "content_block_start");
+        assert_eq!(result["index"], 0);
+        assert_eq!(result["content_block"]["type"], "text");
+        assert_eq!(result["content_block"]["text"], "");
     }
 }

@@ -32,6 +32,17 @@ pub struct ModelStreamResponse {
     pub usage_tracker: Option<UsageTracker>,
 }
 
+impl std::fmt::Debug for ModelStreamResponse {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ModelStreamResponse")
+            .field("status", &self.status)
+            .field("headers", &self.headers)
+            .field("stream", &"<stream>")
+            .field("usage_tracker", &"<usage_tracker>")
+            .finish()
+    }
+}
+
 /// Usage tracker for streaming responses
 pub struct UsageTracker {
     pub model_request: ModelRequest,

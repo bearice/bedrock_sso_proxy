@@ -64,8 +64,6 @@ pub async fn create_message(
     headers: HeaderMap,
     body: Bytes,
 ) -> Result<Response, AppError> {
-    info!("Handling Anthropic API /v1/messages request");
-
     // Extract user_id from authenticated user record
     let user_id = user.id;
     tracing::trace!("User ID from JWT claims: {}", user_id);
@@ -73,13 +71,18 @@ pub async fn create_message(
     // Log request body details for debugging
     tracing::trace!("Request body size: {} bytes", body.len());
 
-    // Log first 500 characters of the body for debugging (safely)
-    let body_preview = if body.len() > 500 {
-        format!("{}... (truncated)", String::from_utf8_lossy(&body[..500]))
+    // Log first & last 200 characters of the body for debugging (safely)
+    let body_preview = String::from_utf8_lossy(&body).to_string();
+    let truncated_preview = if body_preview.len() > 500 {
+        format!(
+            "{}...{}",
+            &body_preview[0..100],
+            &body_preview[body_preview.len() - 400..]
+        )
     } else {
-        String::from_utf8_lossy(&body).to_string()
+        body_preview
     };
-    tracing::trace!("Request body preview: {}", body_preview);
+    tracing::trace!("Request body preview: {}", truncated_preview);
 
     // Parse the Anthropic request
     let anthropic_request: AnthropicRequest = serde_json::from_slice(&body).map_err(|e| {
@@ -111,11 +114,6 @@ pub async fn create_message(
     // Create model mapper for transformations from service config
     let model_mapper = server.model_service.create_model_mapper();
 
-    // Transform Anthropic request to Bedrock format
-    tracing::trace!(
-        "Transforming Anthropic model '{}' to Bedrock format",
-        anthropic_request.model
-    );
     let (bedrock_request, bedrock_model_id) =
         transform_anthropic_to_bedrock(anthropic_request.clone(), &model_mapper).map_err(|e| {
             error!(
@@ -299,8 +297,8 @@ async fn handle_streaming_message(
     match model_service.invoke_model_stream(model_request).await {
         Ok(model_response) => {
             info!(
-                "Model service streaming response received for model: {}",
-                bedrock_model_id
+                "Model service streaming response received for model: {:?}",
+                model_response
             );
 
             // For streaming, we transform each parsed event
@@ -311,26 +309,44 @@ async fn handle_streaming_message(
                             let data_clone = data.clone();
                             match transform_bedrock_event_to_anthropic(data, &original_model) {
                                 Ok(transformed) => {
-                                    // Format as SSE event
+                                    // Extract event type from transformed data
+                                    let event_type =
+                                        transformed["type"].as_str().unwrap_or("unknown");
+
+                                    // Format as proper SSE event with both event: and data: lines
                                     let sse_output = format!(
-                                        "data: {}\n\n",
+                                        "event: {}\ndata: {}\n\n",
+                                        event_type,
                                         serde_json::to_string(&transformed).unwrap_or_default()
                                     );
+                                    tracing::trace!("transformed SSE: {}", sse_output);
                                     Ok(Bytes::from(sse_output))
                                 }
                                 Err(e) => {
-                                    error!("Failed to transform streaming event: {}", e);
-                                    // For transformation errors, create SSE format from original JSON
-                                    let sse_output = format!(
-                                        "data: {}\n\n",
-                                        serde_json::to_string(&data_clone).unwrap_or_default()
-                                    );
-                                    Ok(Bytes::from(sse_output))
+                                    // Check if this is an internal AWS event that should be filtered out
+                                    if e.to_string()
+                                        .contains("Internal AWS metrics event filtered out")
+                                    {
+                                        tracing::trace!("Filtered out internal AWS event");
+                                        // Return empty bytes to effectively skip this event
+                                        Ok(Bytes::from(""))
+                                    } else {
+                                        error!("Failed to transform streaming event: {}", e);
+                                        // For other transformation errors, create SSE format from original JSON
+                                        let event_type =
+                                            data_clone["type"].as_str().unwrap_or("unknown");
+                                        let sse_output = format!(
+                                            "event: {}\ndata: {}\n\n",
+                                            event_type,
+                                            serde_json::to_string(&data_clone).unwrap_or_default()
+                                        );
+                                        Ok(Bytes::from(sse_output))
+                                    }
                                 }
                             }
                         } else {
-                            // No data to transform, create empty SSE event
-                            Ok(Bytes::from("data: {}\n\n"))
+                            // No data to transform, create ping event to keep connection alive
+                            Ok(Bytes::from("event: ping\ndata: {\"type\": \"ping\"}\n\n"))
                         }
                     }
                     Err(e) => Err(e),

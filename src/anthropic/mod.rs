@@ -56,6 +56,18 @@ pub struct AnthropicRequest {
     /// System prompt to provide context (can be string or array of content blocks)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub system: Option<serde_json::Value>,
+
+    /// Tools available for the model to use
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tools: Option<Vec<Tool>>,
+
+    /// How the model should use tools. Can be "auto", "any", or specific tool choice
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tool_choice: Option<serde_json::Value>,
+
+    /// Passthrough for any additional fields not explicitly handled
+    #[serde(flatten)]
+    pub additional_fields: std::collections::HashMap<String, serde_json::Value>,
 }
 
 /// Anthropic API response format
@@ -121,6 +133,66 @@ pub struct Usage {
 
     /// Number of output tokens
     pub output_tokens: u32,
+}
+
+/// Tool definition for function calling
+#[derive(Debug, Serialize, Deserialize, Clone, ToSchema)]
+pub struct Tool {
+    /// Name of the tool (must be unique within the request)
+    pub name: String,
+
+    /// Description of what the tool does and when to use it
+    pub description: String,
+
+    /// JSON Schema defining the tool's input parameters
+    pub input_schema: ToolInputSchema,
+}
+
+/// JSON Schema for tool input parameters
+#[derive(Debug, Serialize, Deserialize, Clone, ToSchema)]
+pub struct ToolInputSchema {
+    /// Schema type (typically "object")
+    #[serde(rename = "type")]
+    pub type_: String,
+
+    /// Properties of the input object
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub properties: Option<std::collections::HashMap<String, serde_json::Value>>,
+
+    /// List of required property names
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub required: Option<Vec<String>>,
+
+    /// Additional schema properties
+    #[serde(flatten)]
+    pub additional_schema: std::collections::HashMap<String, serde_json::Value>,
+}
+
+/// Tool use content block (Claude requesting tool execution)
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct ToolUse {
+    /// Tool use ID for tracking
+    pub id: String,
+
+    /// Name of the tool to use
+    pub name: String,
+
+    /// Input parameters for the tool
+    pub input: serde_json::Value,
+}
+
+/// Tool result content block (user providing tool execution results)
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct ToolResult {
+    /// Tool use ID this result corresponds to
+    pub tool_use_id: String,
+
+    /// Result content (can be text or structured data)
+    pub content: serde_json::Value,
+
+    /// Whether the tool execution was successful
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub is_error: Option<bool>,
 }
 
 /// Streaming event for Server-Sent Events
