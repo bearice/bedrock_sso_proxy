@@ -8,14 +8,13 @@ use crate::{
         oauth::OAuthService,
     },
     aws::bedrock::BedrockRuntimeImpl,
-    cache::{CacheManager, CacheManagerImpl},
+    cache::CacheManager,
     config::Config,
     database::{DatabaseManager, DatabaseManagerImpl},
     error::AppError,
     health::HealthService,
     jobs::{CleanupJob, JobScheduler, SummariesJob},
     metrics,
-    utils::request_id_middleware,
     model_service::{ModelService, ModelServiceImpl},
     routes::{
         create_admin_api_routes, create_anthropic_routes, create_auth_routes,
@@ -25,6 +24,7 @@ use crate::{
     server::route_builder::middleware_factories::request_response_logger,
     shutdown::{ShutdownCoordinator, ShutdownManager, StreamingConnectionManager},
     summarization::SummarizationService,
+    utils::request_id_middleware,
 };
 use axum::{
     Router,
@@ -46,7 +46,7 @@ pub struct Server {
     pub oauth_service: Arc<OAuthService>,
     pub health_service: Arc<HealthService>,
     pub database: Arc<dyn DatabaseManager>,
-    pub cache: Arc<dyn CacheManager>,
+    pub cache: Arc<CacheManager>,
     pub streaming_manager: Arc<StreamingConnectionManager>,
     pub shutdown_coordinator: Arc<ShutdownCoordinator>,
     pub cost_service: Arc<crate::cost::CostTrackingService>,
@@ -85,8 +85,8 @@ impl Server {
         )?);
 
         // Initialize cache (create concrete instances for services that need them)
-        let cache_impl = Arc::new(CacheManagerImpl::new_from_config(&config.cache).await?);
-        let cache: Arc<dyn CacheManager> = cache_impl.clone();
+        let cache_impl = Arc::new(CacheManager::new_from_config(&config.cache).await?);
+        let cache: Arc<CacheManager> = cache_impl.clone();
 
         // Initialize database
         let database_impl = Arc::new(

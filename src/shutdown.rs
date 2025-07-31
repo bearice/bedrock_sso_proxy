@@ -1,4 +1,4 @@
-use crate::model_service::ModelService;
+use crate::{cache::CacheManager, model_service::ModelService};
 use std::{
     collections::HashMap,
     sync::{
@@ -221,11 +221,11 @@ impl GracefulShutdown for DatabaseShutdown {
 /// Cache component that implements graceful shutdown
 pub struct CacheShutdown {
     #[allow(dead_code)]
-    cache: Arc<dyn crate::cache::CacheManager>,
+    cache: Arc<CacheManager>,
 }
 
 impl CacheShutdown {
-    pub fn new(cache: Arc<dyn crate::cache::CacheManager>) -> Self {
+    pub fn new(cache: Arc<CacheManager>) -> Self {
         Self { cache }
     }
 }

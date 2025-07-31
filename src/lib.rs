@@ -10,12 +10,12 @@ pub mod error;
 pub mod health;
 pub mod jobs;
 pub mod metrics;
-pub mod utils;
 pub mod model_service;
 pub mod routes;
 pub mod server;
 pub mod shutdown;
 pub mod summarization;
+pub mod utils;
 
 #[cfg(any(test, feature = "test-utils", debug_assertions))]
 pub mod test_utils;

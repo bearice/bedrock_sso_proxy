@@ -1,6 +1,5 @@
 use crate::{
-    Config, cache::CacheManagerImpl, database::DatabaseManagerImpl,
-    summarization::SummarizationService,
+    Config, cache::CacheManager, database::DatabaseManagerImpl, summarization::SummarizationService,
 };
 use clap::Subcommand;
 use std::sync::Arc;
@@ -38,7 +37,7 @@ pub enum JobCommand {
     /// List available job types
     List,
 
-    /// Check job system status  
+    /// Check job system status
     Status,
 }
 
@@ -46,7 +45,7 @@ pub async fn handle_job_command(
     command: JobCommand,
     config: &Config,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let cache_manager = Arc::new(CacheManagerImpl::new_from_config(&config.cache).await?);
+    let cache_manager = Arc::new(CacheManager::new_from_config(&config.cache).await?);
     let db_manager = Arc::new(DatabaseManagerImpl::new_from_config(config, cache_manager).await?);
     let summarization_service = Arc::new(SummarizationService::new(db_manager));
 

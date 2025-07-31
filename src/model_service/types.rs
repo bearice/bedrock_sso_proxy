@@ -3,8 +3,8 @@ use futures_util::Stream;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
-use crate::utils::RequestId;
 use crate::model_service::ModelService;
+use crate::utils::RequestId;
 
 /// Request structure for model invocation
 #[derive(Debug, Clone)]

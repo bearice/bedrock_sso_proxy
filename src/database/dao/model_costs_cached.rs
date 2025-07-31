@@ -4,7 +4,7 @@
 //! for efficient cost lookups. Since model costs change infrequently, this significantly
 //! improves performance for high-frequency cost calculations.
 
-use crate::cache::CacheManagerImpl;
+use crate::cache::CacheManager;
 use crate::database::DatabaseResult;
 use crate::database::dao::ModelCostsDao;
 use crate::database::dao::cached::CachedDao;
@@ -20,7 +20,7 @@ pub struct CachedModelCostsDao {
 
 impl CachedModelCostsDao {
     /// Create a new cached model costs DAO
-    pub fn new(inner: ModelCostsDao, cache_manager: &CacheManagerImpl) -> Self {
+    pub fn new(inner: ModelCostsDao, cache_manager: &CacheManager) -> Self {
         Self {
             cached_dao: CachedDao::new(inner, cache_manager),
         }
@@ -112,7 +112,7 @@ impl CachedModelCostsDao {
     }
 
     /// Get cache statistics
-    pub fn get_cache_stats(&self) -> crate::cache::typed::TypedCacheStats {
+    pub fn get_cache_stats(&self) -> crate::cache::object::TypedCacheStats {
         self.cached_dao.get_cache_stats()
     }
 

@@ -1,4 +1,5 @@
-use crate::cache::typed::typed_cache;
+use crate::cache::object::typed_cache;
+
 use chrono::{DateTime, Utc};
 use sea_orm::entity::prelude::*;
 use serde::{Deserialize, Serialize};

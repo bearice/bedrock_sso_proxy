@@ -101,7 +101,7 @@ impl TestServerBuilder {
                 oauth::OAuthService,
             },
             aws::mock::MockBedrockRuntime,
-            cache::CacheManagerImpl,
+            cache::CacheManager,
             database::DatabaseManagerImpl,
             health::HealthService,
             model_service::ModelServiceImpl,
@@ -118,8 +118,8 @@ impl TestServerBuilder {
         )?);
 
         // Initialize cache
-        let cache_impl = Arc::new(CacheManagerImpl::new_from_config(&config.cache).await?);
-        let cache: Arc<dyn crate::cache::CacheManager> = cache_impl.clone();
+        let cache_impl = Arc::new(CacheManager::new_from_config(&config.cache).await?);
+        let cache: Arc<CacheManager> = cache_impl.clone();
 
         // Initialize database
         let database_impl = Arc::new(

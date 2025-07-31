@@ -143,8 +143,11 @@ mod tests {
         let health_checker = OAuthHealthChecker::new(config);
 
         let result = health_checker.check().await;
-        assert!(matches!(result.status, crate::health::HealthStatus::Healthy));
-        
+        assert!(matches!(
+            result.status,
+            crate::health::HealthStatus::Healthy
+        ));
+
         let details = result.details.unwrap();
         assert_eq!(details["provider_count"], 1);
         assert_eq!(details["configured_providers"][0], "google");
@@ -156,8 +159,11 @@ mod tests {
         let health_checker = OAuthHealthChecker::new(config);
 
         let result = health_checker.check().await;
-        assert!(matches!(result.status, crate::health::HealthStatus::Degraded));
-        
+        assert!(matches!(
+            result.status,
+            crate::health::HealthStatus::Degraded
+        ));
+
         let details = result.details.unwrap();
         assert_eq!(details["provider_count"], 0);
     }
@@ -169,13 +175,16 @@ mod tests {
         if let Some(provider) = config.oauth.providers.get_mut("google") {
             provider.client_secret = "".to_string();
         }
-        
+
         let config = Arc::new(config);
         let health_checker = OAuthHealthChecker::new(config);
 
         let result = health_checker.check().await;
-        assert!(matches!(result.status, crate::health::HealthStatus::Degraded));
-        
+        assert!(matches!(
+            result.status,
+            crate::health::HealthStatus::Degraded
+        ));
+
         let details = result.details.unwrap();
         assert_eq!(details["provider_count"], 1);
         assert_eq!(details["misconfigured_providers"][0], "google");

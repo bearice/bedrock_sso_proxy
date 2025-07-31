@@ -5,10 +5,10 @@ use crate::{
     aws::config::AwsConfig,
     config::Config,
     database::{UsageQuery, entities::*},
-    utils::RequestId,
     model_service::streaming::{EventStreamParser, ParsedEventStream},
     model_service::types::*,
     test_utils::TestServerBuilder,
+    utils::RequestId,
 };
 use bytes::Bytes;
 use futures_util::StreamExt;

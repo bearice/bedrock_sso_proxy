@@ -3,13 +3,21 @@
 //! This module provides a typed cache interface that ensures type safety,
 //! prevents key collisions between different types, and optimizes performance
 //! based on the cache backend (memory vs Redis).
-
-use crate::cache::{CacheError, CacheResult, TypedCacheBackend};
+pub mod memory;
+pub mod redis;
+use crate::cache::{CacheError, CacheResult};
 use serde::{Deserialize, Serialize};
 use std::any::type_name;
 use std::marker::PhantomData;
 use std::time::Duration;
 pub use typed_cache_macro::typed_cache;
+
+/// Typed cache backend enum - stores CachedEntry<T> which includes type hash
+#[derive(Clone)]
+pub enum TypedCacheBackend<T> {
+    Memory(memory::MemoryCache<T>), // JSON storage
+    Redis(redis::RedisCache<T>),    // Bitcode storage
+}
 
 /// Trait for types that can be cached with automatic structural hashing
 pub trait CachedObject:
@@ -22,13 +30,7 @@ pub trait CachedObject:
 
     /// Generate cache prefix from type name
     /// Can be overridden for custom prefixes
-    fn cache_prefix() -> String {
-        type_name::<Self>()
-            .split("::")
-            .last()
-            .unwrap_or("unknown")
-            .to_string()
-    }
+    fn cache_prefix() -> &'static str;
 
     /// Generate structural hash from type definition using custom derive
     /// This creates a hash based on the actual type structure including
@@ -40,7 +42,7 @@ pub trait CachedObject:
 #[derive(Clone)]
 pub struct TypedCache<T: CachedObject> {
     backend: TypedCacheBackend<T>,
-    prefix: String,
+    prefix: &'static str,
     type_hash: u64,
     default_ttl: Option<Duration>,
     _phantom: PhantomData<T>,
@@ -80,7 +82,12 @@ impl<T: CachedObject> TypedCache<T> {
     }
 
     /// Set value in cache with optional TTL
-    pub async fn set(&self, key: &str, value: &T, ttl: Option<Duration>) -> CacheResult<()> {
+    pub async fn set_with_ttl(
+        &self,
+        key: &str,
+        value: &T,
+        ttl: Option<Duration>,
+    ) -> CacheResult<()> {
         let cache_key = self.cache_key(key);
         let ttl = ttl.or(self.default_ttl);
 
@@ -91,8 +98,8 @@ impl<T: CachedObject> TypedCache<T> {
     }
 
     /// Set with default TTL
-    pub async fn set_default(&self, key: &str, value: &T) -> CacheResult<()> {
-        self.set(key, value, None).await
+    pub async fn set(&self, key: &str, value: &T) -> CacheResult<()> {
+        self.set_with_ttl(key, value, None).await
     }
 
     /// Delete value from cache
@@ -130,7 +137,7 @@ impl<T: CachedObject> TypedCache<T> {
             .map_err(|e| CacheError::Cache(e.to_string()))?;
 
         // Cache the computed value
-        self.set_default(key, &value).await?;
+        self.set(key, &value).await?;
 
         Ok(value)
     }
@@ -138,9 +145,9 @@ impl<T: CachedObject> TypedCache<T> {
     /// Get cache statistics for this type
     pub fn get_stats(&self) -> TypedCacheStats {
         TypedCacheStats {
-            type_name: type_name::<T>().to_string(),
+            type_name: type_name::<T>(),
             type_hash: self.type_hash,
-            prefix: self.prefix.clone(),
+            prefix: self.prefix.to_string(),
         }
     }
 }
@@ -148,15 +155,15 @@ impl<T: CachedObject> TypedCache<T> {
 /// Statistics for a typed cache
 #[derive(Debug, Clone)]
 pub struct TypedCacheStats {
-    pub type_name: String,
+    pub type_name: &'static str,
     pub type_hash: u64,
     pub prefix: String,
 }
 
 #[cfg(test)]
 mod tests {
+    use super::memory::MemoryCache;
     use super::*;
-    use crate::cache::{TypedCacheBackend, memory::MemoryCache};
     use std::time::Duration;
 
     #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
@@ -194,8 +201,8 @@ mod tests {
         };
 
         // Test setting and getting
-        user_cache.set_default("1", &user).await.unwrap();
-        api_key_cache.set_default("1", &api_key).await.unwrap();
+        user_cache.set("1", &user).await.unwrap();
+        api_key_cache.set("1", &api_key).await.unwrap();
 
         let cached_user = user_cache.get("1").await.unwrap();
         let cached_api_key = api_key_cache.get("1").await.unwrap();

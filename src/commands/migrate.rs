@@ -24,13 +24,13 @@ pub async fn handle_migrate_command(
     action: MigrateAction,
     config: &Config,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    use crate::cache::CacheManagerImpl;
+    use crate::cache::CacheManager;
     use crate::database::migration::Migrator;
     use crate::database::{DatabaseManager, DatabaseManagerImpl};
     use sea_orm_migration::MigratorTrait;
     use std::sync::Arc;
 
-    let cache_manager = Arc::new(CacheManagerImpl::new_from_config(&config.cache).await?);
+    let cache_manager = Arc::new(CacheManager::new_from_config(&config.cache).await?);
     let db_manager = DatabaseManagerImpl::new_from_config(config, cache_manager).await?;
     let connection = db_manager.connection();
 

@@ -1,11 +1,7 @@
-use crate::{
-    auth::config::OAuthProvider,
-    config::Config,
-    error::AppError,
-};
+use crate::{auth::config::OAuthProvider, config::Config, error::AppError};
 use oauth2::{
-    AuthUrl, TokenUrl, RedirectUrl, ClientId, ClientSecret, basic::BasicClient,
-    EndpointNotSet, EndpointSet,
+    AuthUrl, ClientId, ClientSecret, EndpointNotSet, EndpointSet, RedirectUrl, TokenUrl,
+    basic::BasicClient,
 };
 use std::{collections::HashMap, sync::Arc};
 
@@ -149,19 +145,29 @@ mod tests {
     fn test_create_oauth_client_missing_auth_url() {
         let mut provider = create_test_provider();
         provider.authorization_url = None;
-        
+
         let result = create_oauth_client(&provider, "test");
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("Authorization URL not configured"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Authorization URL not configured")
+        );
     }
 
     #[test]
     fn test_create_oauth_client_missing_token_url() {
         let mut provider = create_test_provider();
         provider.token_url = None;
-        
+
         let result = create_oauth_client(&provider, "test");
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("Token URL not configured"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Token URL not configured")
+        );
     }
 }

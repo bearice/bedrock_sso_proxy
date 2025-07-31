@@ -113,8 +113,8 @@ where
     /// Set value with optional expiration
     pub async fn set(&self, key: &str, value: &T, ttl: Option<Duration>) -> CacheResult<()> {
         let key = self.prefixed_key(key);
-        let data = bincode::serialize(value)
-            .map_err(|e| CacheError::Serialization(e.to_string()))?;
+        let data =
+            bincode::serialize(value).map_err(|e| CacheError::Serialization(e.to_string()))?;
 
         let mut conn = self.get_connection().await?;
 
@@ -176,7 +176,6 @@ where
     }
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -193,20 +192,23 @@ mod tests {
     #[tokio::test]
     async fn test_redis_cache_new() {
         // Test that we can create a Redis cache (even if Redis is not running)
-        let result: Result<RedisCache<String>, _> = RedisCache::new("redis://localhost:6379", "test:".to_string());
+        let result: Result<RedisCache<String>, _> =
+            RedisCache::new("redis://localhost:6379", "test:".to_string());
         assert!(result.is_ok());
     }
 
     #[tokio::test]
     async fn test_redis_cache_key_prefix() {
-        let cache: RedisCache<String> = RedisCache::new("redis://localhost:6379", "test:".to_string()).unwrap();
+        let cache: RedisCache<String> =
+            RedisCache::new("redis://localhost:6379", "test:".to_string()).unwrap();
         let prefixed = cache.prefixed_key("my_key");
         assert_eq!(prefixed, "test:my_key");
     }
 
     #[tokio::test]
     async fn test_redis_cache_operations() {
-        let cache: RedisCache<TestData> = RedisCache::new("redis://localhost:6379", "test:".to_string()).unwrap();
+        let cache: RedisCache<TestData> =
+            RedisCache::new("redis://localhost:6379", "test:".to_string()).unwrap();
 
         let test_data = TestData {
             id: 1,
@@ -247,7 +249,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_redis_health_check() {
-        let cache: RedisCache<String> = RedisCache::new("redis://localhost:6379", "test:".to_string()).unwrap();
+        let cache: RedisCache<String> =
+            RedisCache::new("redis://localhost:6379", "test:".to_string()).unwrap();
         let result = cache.health_check().await;
         assert!(result.is_ok());
     }

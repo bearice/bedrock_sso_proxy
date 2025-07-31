@@ -1,6 +1,6 @@
 use crate::{
     auth::{OAuthClaims, jwt::JwtService, oauth::state::StateData},
-    cache::{CacheManagerImpl, TypedCacheProvider},
+    cache::CacheManager,
     config::Config,
     database::{
         DatabaseManager,
@@ -69,7 +69,7 @@ pub struct OAuthFlows {
     jwt_service: Arc<dyn JwtService>,
     http_client: Client,
     database: Arc<dyn DatabaseManager>,
-    cache: Arc<CacheManagerImpl>,
+    cache: Arc<CacheManager>,
     oauth_clients: HashMap<String, Arc<Oauth2Client>>,
 }
 
@@ -78,7 +78,7 @@ impl OAuthFlows {
         config: Config,
         jwt_service: Arc<dyn JwtService>,
         database: Arc<dyn DatabaseManager>,
-        cache: Arc<CacheManagerImpl>,
+        cache: Arc<CacheManager>,
         oauth_clients: HashMap<String, Arc<Oauth2Client>>,
     ) -> Self {
         Self {
@@ -643,9 +643,9 @@ impl OAuthFlows {
         };
 
         // Use typed cache for state data
-        let state_cache = self.cache.get_typed_cache::<StateData>();
+        let state_cache = self.cache.cache::<StateData>();
         state_cache
-            .set_default(&state, &state_data)
+            .set(&state, &state_data)
             .await
             .map_err(|e| AppError::Internal(format!("Failed to store state: {}", e)))?;
 
@@ -653,7 +653,7 @@ impl OAuthFlows {
     }
 
     async fn get_state_data_internal(&self, state: &str) -> Result<Option<StateData>, AppError> {
-        let state_cache = self.cache.get_typed_cache::<StateData>();
+        let state_cache = self.cache.cache::<StateData>();
         state_cache
             .get(state)
             .await
@@ -664,7 +664,7 @@ impl OAuthFlows {
         &self,
         state: &str,
     ) -> Result<Option<StateData>, AppError> {
-        let state_cache = self.cache.get_typed_cache::<StateData>();
+        let state_cache = self.cache.cache::<StateData>();
         let state_data = state_cache
             .get(state)
             .await

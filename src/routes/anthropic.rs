@@ -9,10 +9,10 @@ use crate::{
     },
     database::entities::UserRecord,
     error::AppError,
-    utils::RequestId,
     model_service::{ModelRequest, ModelService},
     routes::ApiErrorResponse,
     server::Server,
+    utils::RequestId,
 };
 use axum::{
     Router,

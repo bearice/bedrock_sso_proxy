@@ -6,7 +6,7 @@
 
 use super::api_keys::ApiKeysDao;
 use super::cached::{CacheKeyBuilder, CachedDao};
-use crate::cache::CacheManagerImpl;
+use crate::cache::CacheManager;
 use crate::database::DatabaseResult;
 use crate::database::entities::ApiKeyRecord;
 
@@ -18,7 +18,7 @@ pub struct CachedApiKeysDao {
 
 impl CachedApiKeysDao {
     /// Create a new cached API keys DAO
-    pub fn new(api_keys_dao: ApiKeysDao, cache: &CacheManagerImpl) -> Self {
+    pub fn new(api_keys_dao: ApiKeysDao, cache: &CacheManager) -> Self {
         Self {
             cached_dao: CachedDao::new(api_keys_dao, cache),
             key_builder: CacheKeyBuilder::new("api_key"),
@@ -101,7 +101,7 @@ impl CachedApiKeysDao {
     }
 
     /// Get cache statistics
-    pub fn get_cache_stats(&self) -> crate::cache::typed::TypedCacheStats {
+    pub fn get_cache_stats(&self) -> crate::cache::object::TypedCacheStats {
         self.cached_dao.get_cache_stats()
     }
 }

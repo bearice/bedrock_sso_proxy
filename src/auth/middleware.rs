@@ -3,8 +3,8 @@ use crate::database::DatabaseManager;
 use crate::database::entities::UserRecord;
 use crate::database::entities::api_keys::{API_KEY_PREFIX, hash_api_key, validate_api_key_format};
 use crate::error::AppError;
-use crate::utils::RequestIdExt;
 use crate::server::Server;
+use crate::utils::RequestIdExt;
 use axum::{
     extract::{FromRequestParts, Request, State},
     http::{HeaderName, header::AUTHORIZATION, request::Parts},

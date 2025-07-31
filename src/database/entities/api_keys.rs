@@ -1,4 +1,4 @@
-use crate::cache::typed::typed_cache;
+use crate::cache::object::typed_cache;
 use chrono::{DateTime, Utc};
 use rand::{Rng, distr::Alphanumeric};
 use sea_orm::entity::prelude::*;

@@ -8,9 +8,9 @@ use crate::{
             },
             health::OAuthHealthChecker,
             providers::initialize_oauth_clients,
-        }
+        },
     },
-    cache::CacheManagerImpl,
+    cache::CacheManager,
     config::Config,
     database::{DatabaseManager, entities::UserRecord},
     error::AppError,
@@ -30,7 +30,7 @@ impl OAuthService {
         config: Config,
         jwt_service: Arc<dyn JwtService>,
         database: Arc<dyn DatabaseManager>,
-        cache: Arc<CacheManagerImpl>,
+        cache: Arc<CacheManager>,
     ) -> Result<Self, AppError> {
         let oauth_clients = initialize_oauth_clients(&config)?;
         let flows = OAuthFlows::new(
@@ -170,12 +170,12 @@ mod tests {
         }
     }
 
-    async fn create_test_components() -> (Arc<dyn DatabaseManager>, Arc<CacheManagerImpl>) {
+    async fn create_test_components() -> (Arc<dyn DatabaseManager>, Arc<CacheManager>) {
         let mut config = Config::default();
         config.cache.backend = "memory".to_string();
         config.database.enabled = true;
         config.database.url = "sqlite::memory:".to_string();
-        let cache = Arc::new(CacheManagerImpl::new_memory());
+        let cache = Arc::new(CacheManager::new_memory());
         let database = Arc::new(
             DatabaseManagerImpl::new_from_config(&config, cache.clone())
                 .await

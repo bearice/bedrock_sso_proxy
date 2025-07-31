@@ -66,7 +66,12 @@ impl<T: Clone + Send + Sync + 'static> MemoryCache<T> {
     }
 
     /// Set value with optional expiration
-    pub async fn set(&self, key: &str, value: &T, ttl: Option<std::time::Duration>) -> CacheResult<()> {
+    pub async fn set(
+        &self,
+        key: &str,
+        value: &T,
+        ttl: Option<std::time::Duration>,
+    ) -> CacheResult<()> {
         let entry = CacheEntry::new(value.clone(), ttl);
 
         let mut store = self.store.write().await;
@@ -108,7 +113,6 @@ impl<T: Clone + Send + Sync + 'static> MemoryCache<T> {
     }
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -119,7 +123,10 @@ mod tests {
         let cache: MemoryCache<String> = MemoryCache::new();
 
         // Test set and get
-        cache.set("key1", &"value1".to_string(), None).await.unwrap();
+        cache
+            .set("key1", &"value1".to_string(), None)
+            .await
+            .unwrap();
         let value = cache.get("key1").await.unwrap();
         assert_eq!(value, Some("value1".to_string()));
 
@@ -139,7 +146,11 @@ mod tests {
 
         // Set with very short TTL
         cache
-            .set("key1", &"value1".to_string(), Some(Duration::from_millis(50)))
+            .set(
+                "key1",
+                &"value1".to_string(),
+                Some(Duration::from_millis(50)),
+            )
             .await
             .unwrap();
 
@@ -159,8 +170,14 @@ mod tests {
     async fn test_memory_cache_clear() {
         let cache: MemoryCache<String> = MemoryCache::new();
 
-        cache.set("key1", &"value1".to_string(), None).await.unwrap();
-        cache.set("key2", &"value2".to_string(), None).await.unwrap();
+        cache
+            .set("key1", &"value1".to_string(), None)
+            .await
+            .unwrap();
+        cache
+            .set("key2", &"value2".to_string(), None)
+            .await
+            .unwrap();
 
         cache.clear().await.unwrap();
 

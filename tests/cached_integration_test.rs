@@ -3,7 +3,7 @@
 //! This module provides comprehensive tests for the cached DAO layer,
 //! verifying cache behavior, invalidation, and performance characteristics.
 
-use bedrock_sso_proxy::cache::CacheManagerImpl;
+use bedrock_sso_proxy::cache::CacheManager;
 use bedrock_sso_proxy::database::dao::cached::{CacheKeyBuilder, CachedDao};
 use bedrock_sso_proxy::database::entities::{ApiKeyRecord, UserRecord};
 use chrono::Utc;
@@ -49,7 +49,7 @@ impl MockUsersDao {
 
 #[tokio::test]
 async fn test_cache_hit_and_miss() {
-    let backend = CacheManagerImpl::new_memory();
+    let backend = CacheManager::new_memory();
     let mock_dao = MockUsersDao::new();
     let cached_dao = CachedDao::new(mock_dao.clone(), &backend);
 
@@ -91,7 +91,7 @@ async fn test_cache_hit_and_miss() {
 
 #[tokio::test]
 async fn test_cache_invalidation() {
-    let backend = CacheManagerImpl::new_memory();
+    let backend = CacheManager::new_memory();
     let mock_dao = MockUsersDao::new();
     let cached_dao = CachedDao::new(mock_dao.clone(), &backend);
 
@@ -130,7 +130,7 @@ async fn test_cache_invalidation() {
 
 #[tokio::test]
 async fn test_cache_key_isolation() {
-    let backend = CacheManagerImpl::new_memory();
+    let backend = CacheManager::new_memory();
     let mock_dao = MockUsersDao::new();
     let cached_dao = CachedDao::new(mock_dao.clone(), &backend);
 
@@ -217,7 +217,7 @@ async fn test_cache_key_builder() {
 
 #[tokio::test]
 async fn test_cache_with_none_values() {
-    let backend = CacheManagerImpl::new_memory();
+    let backend = CacheManager::new_memory();
     let mock_dao = MockUsersDao::new();
     let cached_dao = CachedDao::new(mock_dao.clone(), &backend);
 
@@ -253,7 +253,7 @@ async fn test_cache_with_none_values() {
 
 #[tokio::test]
 async fn test_cache_error_handling() {
-    let backend = CacheManagerImpl::new_memory();
+    let backend = CacheManager::new_memory();
     let mock_dao = MockUsersDao::new();
     let cached_dao = CachedDao::new(mock_dao.clone(), &backend);
 
@@ -277,7 +277,7 @@ async fn test_cache_error_handling() {
 
 #[tokio::test]
 async fn test_type_safety_with_different_entities() {
-    let backend = CacheManagerImpl::new_memory();
+    let backend = CacheManager::new_memory();
 
     // Create two different typed caches
     let user_cache = CachedDao::<(), UserRecord>::new((), &backend);
@@ -307,8 +307,8 @@ async fn test_type_safety_with_different_entities() {
     };
 
     // Store different types with same key - they should be isolated
-    let _ = user_cache.cache().set_default("test:1", &user).await;
-    let _ = api_key_cache.cache().set_default("test:1", &api_key).await;
+    let _ = user_cache.cache().set("test:1", &user).await;
+    let _ = api_key_cache.cache().set("test:1", &api_key).await;
 
     // Verify they're isolated (different type hashes)
     let cached_user = user_cache.cache().get("test:1").await.unwrap();
@@ -326,7 +326,7 @@ async fn test_type_safety_with_different_entities() {
 
 #[tokio::test]
 async fn test_concurrent_cache_access() {
-    let backend = CacheManagerImpl::new_memory();
+    let backend = CacheManager::new_memory();
     let mock_dao = MockUsersDao::new();
     let cached_dao = CachedDao::new(mock_dao.clone(), &backend);
 

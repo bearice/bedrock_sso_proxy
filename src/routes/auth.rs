@@ -1,7 +1,5 @@
 use crate::{
-    auth::{
-        oauth::{RefreshRequest, TokenRequest}
-    },
+    auth::oauth::{RefreshRequest, TokenRequest},
     database::entities::UserRecord,
     error::AppError,
     server::Server,

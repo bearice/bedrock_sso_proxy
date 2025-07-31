@@ -1,7 +1,7 @@
 use crate::{
     auth::middleware::{admin_middleware, auth_middleware, jwt_auth_middleware},
-    utils::RequestIdExt,
     server::Server,
+    utils::RequestIdExt,
 };
 use axum::{
     Router,

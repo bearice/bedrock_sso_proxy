@@ -1,6 +1,6 @@
 use crate::{
-    database::entities::UserRecord, error::AppError, utils::RequestId,
-    model_service::ModelRequest, routes::ApiErrorResponse, server::Server,
+    database::entities::UserRecord, error::AppError, model_service::ModelRequest,
+    routes::ApiErrorResponse, server::Server, utils::RequestId,
 };
 use axum::{
     Router,

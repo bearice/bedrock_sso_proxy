@@ -4,8 +4,8 @@
 //! It offers automatic cache invalidation, type safety, and performance optimization
 //! for read-heavy database operations.
 
-use crate::cache::{CacheManagerImpl, TypedCacheProvider};
-use crate::cache::typed::{CachedObject, TypedCache};
+use crate::cache::CacheManager;
+use crate::cache::object::{CachedObject, TypedCache};
 use crate::database::DatabaseResult;
 use async_trait::async_trait;
 use std::fmt::Debug;
@@ -49,10 +49,10 @@ where
     D: Send + Sync + Clone,
 {
     /// Create a new cached DAO wrapper
-    pub fn new(inner: D, cache: &CacheManagerImpl) -> Self {
+    pub fn new(inner: D, cache: &CacheManager) -> Self {
         Self {
             inner,
-            cache: cache.get_typed_cache(),
+            cache: cache.cache(),
         }
     }
 
@@ -97,7 +97,7 @@ where
         // Cache the result (both Some and None values)
         // We create a wrapper to handle Option<T> caching properly
         if let Some(ref entity) = value {
-            if let Err(cache_error) = self.cache.set_default(cache_key, entity).await {
+            if let Err(cache_error) = self.cache.set(cache_key, entity).await {
                 tracing::warn!(
                     "Failed to cache entity for key {}: {}",
                     cache_key,
@@ -129,7 +129,7 @@ where
         let stored_entity = store_fn(entity).await?;
 
         // Cache the stored entity
-        if let Err(cache_error) = self.cache.set_default(cache_key, &stored_entity).await {
+        if let Err(cache_error) = self.cache.set(cache_key, &stored_entity).await {
             tracing::warn!("Failed to cache stored entity: {}", cache_error);
             // Don't fail the operation due to cache errors
         }
@@ -189,7 +189,7 @@ where
     }
 
     /// Get cache statistics
-    pub fn get_cache_stats(&self) -> crate::cache::typed::TypedCacheStats {
+    pub fn get_cache_stats(&self) -> crate::cache::object::TypedCacheStats {
         self.cache.get_stats()
     }
 }
@@ -297,7 +297,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_cached_dao_basic_operations() {
-        let backend = CacheManagerImpl::new_memory();
+        let backend = CacheManager::new_memory();
         let cached_dao = CachedDao::<(), UserRecord>::new((), &backend);
 
         let user = UserRecord {
@@ -333,13 +333,13 @@ mod tests {
 
     #[tokio::test]
     async fn test_cache_invalidation() {
-        let backend = CacheManagerImpl::new_memory();
+        let backend = CacheManager::new_memory();
         let cached_dao = CachedDao::<(), UserRecord>::new((), &backend);
 
         // Cache an entry
         let _ = cached_dao
             .cache
-            .set_default(
+            .set(
                 "test_key",
                 &UserRecord {
                     id: 1,

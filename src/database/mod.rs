@@ -5,7 +5,7 @@
 
 use std::sync::Arc;
 
-use crate::cache::{CacheManager, CacheManagerImpl, TypedCacheStats};
+use crate::cache::{CacheManager, TypedCacheStats};
 use crate::config::Config;
 use crate::health::HealthChecker;
 use async_trait::async_trait;
@@ -47,7 +47,7 @@ pub trait DatabaseManager: Send + Sync {
     async fn health_check(&self) -> DatabaseResult<()>;
 
     /// Get cache manager reference
-    fn cache_manager(&self) -> Arc<dyn CacheManager>;
+    fn cache_manager(&self) -> Arc<CacheManager>;
 
     /// Get users DAO
     fn users(&self) -> CachedUsersDao;
@@ -77,14 +77,14 @@ pub trait DatabaseManager: Send + Sync {
 /// Database connection manager implementation with optional caching
 pub struct DatabaseManagerImpl {
     pub connection: DatabaseConnection,
-    cache_manager: Arc<CacheManagerImpl>,
+    cache_manager: Arc<CacheManager>,
 }
 
 impl DatabaseManagerImpl {
     /// Create database manager from configuration with caching
     pub async fn new_from_config(
         config: &Config,
-        cache_manager: Arc<CacheManagerImpl>,
+        cache_manager: Arc<CacheManager>,
     ) -> Result<Self, DatabaseError> {
         let connection = sea_orm::Database::connect(&config.database.url)
             .await
@@ -123,7 +123,7 @@ impl DatabaseManager for DatabaseManagerImpl {
     }
 
     /// Get cache manager reference
-    fn cache_manager(&self) -> Arc<dyn CacheManager> {
+    fn cache_manager(&self) -> Arc<CacheManager> {
         self.cache_manager.clone()
     }
 
