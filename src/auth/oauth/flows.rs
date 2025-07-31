@@ -271,7 +271,7 @@ impl OAuthFlows {
                 .await
                 .map_err(|e| AppError::Internal(format!("Failed to store user: {}", e)))?;
 
-            let is_admin = self.config.is_admin(&email);
+            let is_admin = self.config.is_admin(email);
 
             // Log successful authentication
             let audit_entry = AuditLogEntry {

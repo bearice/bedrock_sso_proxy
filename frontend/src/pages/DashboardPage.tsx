@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 import { ApiKeyManagement } from '../components/apikeys';
 import { UsageTracking } from '../components/usage';
@@ -16,9 +17,27 @@ import {
 export function DashboardPage() {
   const { token, provider, user, logout } =
     useAuth();
+  const location = useLocation();
+  const navigate = useNavigate();
 
   const [userInfo, setUserInfo] = useState<UserInfo | null>(null);
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'api-keys' | 'usage'>('dashboard');
+  
+  // Determine active tab from URL
+  const getActiveTabFromPath = (pathname: string): 'dashboard' | 'api-keys' | 'usage' => {
+    if (pathname.includes('/api-keys')) return 'api-keys';
+    if (pathname.includes('/usage')) return 'usage';
+    return 'dashboard';
+  };
+
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'api-keys' | 'usage'>(
+    getActiveTabFromPath(location.pathname)
+  );
+
+  // Update active tab when URL changes
+  useEffect(() => {
+    const newTab = getActiveTabFromPath(location.pathname);
+    setActiveTab(newTab);
+  }, [location.pathname]);
 
   // Fetch user info from /auth/me API with 401 handling
   useEffect(() => {
@@ -41,7 +60,11 @@ export function DashboardPage() {
   // Listen for tab switching events from the Dashboard component
   useEffect(() => {
     const handleTabSwitch = (event: CustomEvent) => {
-      setActiveTab(event.detail);
+      const tab = event.detail;
+      let path = '/dashboard/overview';
+      if (tab === 'api-keys') path = '/dashboard/api-keys';
+      if (tab === 'usage') path = '/dashboard/usage';
+      navigate(path);
     };
 
     window.addEventListener('switchTab', handleTabSwitch as EventListener);
@@ -49,7 +72,7 @@ export function DashboardPage() {
     return () => {
       window.removeEventListener('switchTab', handleTabSwitch as EventListener);
     };
-  }, []);
+  }, [navigate]);
 
   const getProviderDisplayName = (provider: string) => {
     const names: { [key: string]: string } = {
@@ -106,7 +129,7 @@ export function DashboardPage() {
           }}
         >
           <button
-            onClick={() => setActiveTab('dashboard')}
+            onClick={() => navigate('/dashboard/overview')}
             style={{
               flex: 1,
               padding: '1rem 1.5rem',
@@ -137,7 +160,7 @@ export function DashboardPage() {
             Dashboard
           </button>
           <button
-            onClick={() => setActiveTab('api-keys')}
+            onClick={() => navigate('/dashboard/api-keys')}
             style={{
               flex: 1,
               padding: '1rem 1.5rem',
@@ -168,7 +191,7 @@ export function DashboardPage() {
             API Keys
           </button>
           <button
-            onClick={() => setActiveTab('usage')}
+            onClick={() => navigate('/dashboard/usage')}
             style={{
               flex: 1,
               padding: '1rem 1.5rem',

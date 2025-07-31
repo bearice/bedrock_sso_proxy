@@ -30,7 +30,7 @@ function AppContent() {
             path="/"
             element={
               isAuthenticated ? (
-                <Navigate to="/dashboard" replace />
+                <Navigate to="/dashboard/overview" replace />
               ) : (
                 <Navigate to="/login" replace />
               )
@@ -44,6 +44,48 @@ function AppContent() {
               isAuthenticated
                 ? (() => {
                     appLogger.debug('Rendering DashboardPage');
+                    return <Navigate to="/dashboard/overview" replace />;
+                  })()
+                : (() => {
+                    appLogger.debug('Redirecting to login from dashboard route');
+                    return <Navigate to="/login" replace />;
+                  })()
+            }
+          />
+          <Route
+            path="/dashboard/overview"
+            element={
+              isAuthenticated
+                ? (() => {
+                    appLogger.debug('Rendering DashboardPage - overview');
+                    return <DashboardPage />;
+                  })()
+                : (() => {
+                    appLogger.debug('Redirecting to login from dashboard route');
+                    return <Navigate to="/login" replace />;
+                  })()
+            }
+          />
+          <Route
+            path="/dashboard/api-keys"
+            element={
+              isAuthenticated
+                ? (() => {
+                    appLogger.debug('Rendering DashboardPage - api-keys');
+                    return <DashboardPage />;
+                  })()
+                : (() => {
+                    appLogger.debug('Redirecting to login from dashboard route');
+                    return <Navigate to="/login" replace />;
+                  })()
+            }
+          />
+          <Route
+            path="/dashboard/usage"
+            element={
+              isAuthenticated
+                ? (() => {
+                    appLogger.debug('Rendering DashboardPage - usage');
                     return <DashboardPage />;
                   })()
                 : (() => {
@@ -59,7 +101,7 @@ function AppContent() {
                 <div className="card">
                   <h1>404 - Page Not Found</h1>
                   <p>The page you&apos;re looking for doesn&apos;t exist.</p>
-                  <a href="/" className="btn btn-primary">
+                  <a href="/dashboard/overview" className="btn btn-primary">
                     Go Home
                   </a>
                 </div>
