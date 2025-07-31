@@ -99,9 +99,11 @@ export function UsageStats({ stats, isLoading, error }: UsageStatsProps) {
     );
   }
 
-  const formatCurrency = (cents: number | null) => {
-    if (cents === null || cents === undefined) return '$0.00';
-    return `$${(cents / 100).toFixed(2)}`;
+  const formatCurrency = (cost: number | string | null) => {
+    if (cost === null || cost === undefined) return '$0.00';
+    const costValue = typeof cost === 'string' ? parseFloat(cost) : cost;
+    if (isNaN(costValue)) return '$0.00';
+    return `$${costValue.toFixed(2)}`;
   };
 
   const formatPercentage = (rate: number) => {
@@ -137,12 +139,16 @@ export function UsageStats({ stats, isLoading, error }: UsageStatsProps) {
       value: (stats.total_tokens ?? 0).toLocaleString(),
       color: '#ea580c',
       background: '#fff7ed',
-      subtitle: `${(stats.total_input_tokens ?? 0).toLocaleString()} in, ${(stats.total_output_tokens ?? 0).toLocaleString()} out`,
+      subtitle: `↑ ${(stats.total_input_tokens ?? 0).toLocaleString()} ↓ ${(stats.total_output_tokens ?? 0).toLocaleString()}${
+        (stats.total_cache_read_tokens ?? 0) > 0 || (stats.total_cache_write_tokens ?? 0) > 0 
+          ? ` • 📖 ${(stats.total_cache_read_tokens ?? 0).toLocaleString()} ✏️ ${(stats.total_cache_write_tokens ?? 0).toLocaleString()}`
+          : ''
+      }`,
     },
     {
       icon: <DollarSign size={24} style={{ color: '#16a34a' }} />,
       label: 'Total Cost',
-      value: formatCurrency(stats.total_cost ?? stats.total_cost_cents),
+      value: formatCurrency(stats.total_cost),
       color: '#16a34a',
       background: '#f0fdf4',
     },
@@ -171,7 +177,7 @@ export function UsageStats({ stats, isLoading, error }: UsageStatsProps) {
         }}
       >
         Usage statistics from {new Date(stats.start_date).toLocaleDateString()} to{' '}
-        {new Date(stats.end_date).toLocaleDateString()}
+        {new Date(stats.end_date).toLocaleDateString()} (times in UTC)
       </div>
 
       {/* Stats Grid */}
@@ -262,36 +268,6 @@ export function UsageStats({ stats, isLoading, error }: UsageStatsProps) {
         ))}
       </div>
 
-      {/* Summary Card */}
-      <div
-        style={{
-          background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-          borderRadius: '12px',
-          padding: '1.5rem',
-          color: 'white',
-          textAlign: 'center',
-        }}
-      >
-        <h3 style={{ margin: '0 0 0.5rem 0', fontSize: '1.25rem' }}>Usage Summary</h3>
-        <p style={{ margin: 0, opacity: 0.9, lineHeight: 1.6 }}>
-          You made <strong>{stats.total_requests.toLocaleString()}</strong> requests
-          {stats.total_requests > 0 && (
-            <>
-              {' '}
-              with a <strong>{formatPercentage(stats.success_rate)}</strong> success rate, consuming{' '}
-              <strong>{stats.total_tokens.toLocaleString()}</strong> tokens across{' '}
-              <strong>{stats.unique_models}</strong> different model
-              {stats.unique_models !== 1 ? 's' : ''}
-              {stats.total_cost_cents > 0 && (
-                <>
-                  , costing a total of <strong>{formatCurrency(stats.total_cost_cents)}</strong>
-                </>
-              )}
-            </>
-          )}
-          .
-        </p>
-      </div>
     </div>
   );
 }

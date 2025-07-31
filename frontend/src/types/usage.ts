@@ -24,10 +24,11 @@ export interface UsageStats {
   failed_requests: number;
   total_input_tokens: number;
   total_output_tokens: number;
+  total_cache_read_tokens?: number;
+  total_cache_write_tokens?: number;
   total_tokens: number;
   success_rate: number;
-  total_cost_cents: number;
-  total_cost?: number; // For backwards compatibility
+  total_cost: string; // Cost as decimal string
   unique_models: number;
   start_date: string;
   end_date: string;

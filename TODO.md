@@ -191,3 +191,331 @@ tests/
 3. Create service integration tests
 4. Extend test utilities for new test types
 5. Add performance benchmarks to integration tests
+
+---
+
+# Real-Time Usage Tracking & Cap System
+
+## Architecture Overview
+
+**Hybrid Strategy:**
+- **Redis**: Real-time tracking (hourly summaries + usage caps)
+- **Database**: Historical analytics (daily/weekly/monthly summaries)
+- **Atomic Operations**: Consistent updates across both systems
+
+## Phase 1: Real-Time Hourly Summaries in Redis
+
+### 1.1 Redis Key Structure
+```
+# Hourly summaries (real-time)
+usage_summary:user_{user_id}:hourly:{YYYY-MM-DDTHH} 
+→ {requests: int, input_tokens: int, output_tokens: int, cost_cents: int}
+
+# Usage caps (real-time tracking)
+usage_cap:user_{user_id}:daily:{YYYY-MM-DD}
+usage_cap:user_{user_id}:hourly:{YYYY-MM-DDTHH}
+→ {requests: int, tokens: int, cost_cents: int}
+```
+
+### 1.2 Update Model Service
+```rust
+// In src/model_service/streaming.rs
+tokio::spawn(async move {
+    // 1. Insert usage record to DB (existing)
+    if let Err(e) = usage_dao.create_usage_record(&usage_record).await {
+        tracing::error!("Failed to save usage record: {}", e);
+        return;
+    }
+    
+    // 2. Update Redis summaries (NEW)
+    if let Err(e) = cache_manager.update_hourly_summary(&usage_record).await {
+        tracing::error!("Failed to update hourly summary: {}", e);
+    }
+    
+    // 3. Update Redis usage caps (NEW)
+    if let Err(e) = cache_manager.update_usage_caps(&usage_record).await {
+        tracing::error!("Failed to update usage caps: {}", e);
+    }
+});
+```
+
+### 1.3 Cache Manager Implementation
+```rust
+// In src/cache/mod.rs
+impl CacheManager {
+    async fn update_hourly_summary(&self, usage: &UsageRecord) -> Result<()>;
+    async fn update_usage_caps(&self, usage: &UsageRecord) -> Result<()>;
+    async fn get_current_usage(&self, user_id: i32, period: CapPeriod) -> Result<UsageStats>;
+}
+```
+
+## Phase 2: Usage Cap System
+
+### 2.1 Database Schema
+```sql
+-- User cap configurations
+CREATE TABLE user_cap_configs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    cap_type VARCHAR(10) NOT NULL, -- 'hourly', 'daily', 'monthly'
+    max_requests INTEGER,
+    max_tokens BIGINT,
+    max_cost_cents BIGINT,
+    is_active BOOLEAN DEFAULT TRUE,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    
+    FOREIGN KEY (user_id) REFERENCES users(id),
+    UNIQUE(user_id, cap_type)
+);
+```
+
+### 2.2 Pre-Request Cap Validation
+```rust
+// In src/model_service/mod.rs
+impl ModelService {
+    async fn invoke_model(&self, request: &InvokeRequest) -> Result<Response> {
+        // 1. Validate usage caps BEFORE expensive Bedrock call
+        self.usage_cap_service.validate_caps(request.user_id, request).await?;
+        
+        // 2. Make Bedrock API call (existing)
+        let response = self.bedrock_client.invoke(request).await?;
+        
+        // ... rest of implementation
+    }
+}
+```
+
+### 2.3 Usage Cap Service
+```rust
+// New: src/usage_cap/mod.rs
+pub struct UsageCapService {
+    cache: Arc<dyn CacheManager>,
+    database: Arc<dyn DatabaseManager>,
+}
+
+impl UsageCapService {
+    async fn validate_caps(&self, user_id: i32, request: &InvokeRequest) -> Result<()>;
+    async fn get_user_caps(&self, user_id: i32) -> Result<Vec<UserCap>>;
+}
+```
+
+## Phase 3: Batch Job System (Historical Summaries)
+
+### 3.1 Job Scheduler Enhancement
+```rust
+// In src/jobs/scheduler.rs
+impl JobScheduler {
+    pub fn new() -> Self {
+        // Hourly: Move completed hours Redis → Database  
+        schedule_job("5 * * * *", PersistHourlyJob);
+        
+        // Daily: Generate from hourly summaries
+        schedule_job("1 0 * * *", DailySummaryJob);
+        
+        // Weekly: Generate every Monday
+        schedule_job("5 0 * * 1", WeeklySummaryJob);
+        
+        // Monthly: Generate on 1st of month
+        schedule_job("10 0 1 * *", MonthlySummaryJob);
+    }
+}
+```
+
+### 3.2 Persistence Jobs
+```rust
+// New: src/jobs/persist_hourly.rs
+pub struct PersistHourlyJob;
+
+impl Job for PersistHourlyJob {
+    async fn run(&self, context: &JobContext) -> Result<()> {
+        // 1. Get completed hour data from Redis
+        // 2. Save to usage_summaries table
+        // 3. Delete from Redis (cleanup)
+    }
+}
+```
+
+## Phase 4: API Endpoints (Usage Caps Management)
+
+### 4.1 New Routes
+```rust
+// In src/routes/usage_caps.rs
+Router::new()
+    .route("/usage/caps", post(create_cap).get(list_caps))
+    .route("/usage/caps/:id", put(update_cap).delete(delete_cap))
+    .route("/usage/caps/status", get(get_cap_status))
+```
+
+### 4.2 API Schemas
+```rust
+#[derive(Deserialize, ToSchema)]
+pub struct CreateCapRequest {
+    pub cap_type: CapType, // hourly, daily, monthly
+    pub max_requests: Option<u32>,
+    pub max_tokens: Option<i64>, 
+    pub max_cost_cents: Option<i64>,
+}
+
+#[derive(Serialize, ToSchema)]
+pub struct CapStatusResponse {
+    pub cap_type: CapType,
+    pub current_usage: UsageStats,
+    pub limits: CapLimits,
+    pub percentage_used: f32,
+    pub reset_time: DateTime<Utc>,
+    pub is_exceeded: bool,
+}
+```
+
+## Phase 5: Frontend Integration
+
+### 5.1 Usage Cap Components
+```typescript
+// New: src/components/usage/UsageCaps.tsx
+export function UsageCaps() {
+    // Display cap status, create/edit caps, show warnings
+}
+
+// New: src/components/usage/CapStatus.tsx  
+export function CapStatus() {
+    // Real-time cap usage progress bars
+}
+```
+
+### 5.2 Dashboard Updates
+```typescript
+// Update: src/components/usage/UsageStats.tsx
+// Show real-time data from Redis + DB hybrid queries
+```
+
+## Phase 6: Error Handling & UX
+
+### 6.1 Cap Exceeded Error Response
+```rust
+#[derive(Debug, Serialize, ToSchema)]
+pub struct UsageCapExceededError {
+    pub error: String,
+    pub cap_type: String,
+    pub limit_type: String, // "requests", "tokens", "cost"
+    pub current_usage: i64,
+    pub limit: i64, 
+    pub reset_time: DateTime<Utc>,
+    pub retry_after_seconds: u64,
+}
+```
+
+### 6.2 Frontend Error Handling
+```typescript
+// Clear error messages when caps are exceeded
+// Show countdown to reset time
+// Display current usage vs. limits
+```
+
+## Implementation Order
+
+1. **Phase 1**: Redis hourly summaries (real-time dashboard)
+2. **Phase 2**: Usage cap validation system  
+3. **Phase 3**: Batch jobs for historical data
+4. **Phase 4**: Cap management APIs
+5. **Phase 5**: Frontend cap management UI
+6. **Phase 6**: Error handling & UX polish
+
+## Benefits
+
+**Performance**: Sub-millisecond cap validation, real-time dashboard
+**Accuracy**: Atomic operations, no race conditions  
+**Scalability**: Redis handles high-frequency updates efficiently
+**User Experience**: Immediate feedback, clear limits, predictable resets
+**Data Integrity**: Historical summaries are perfectly accurate
+**Cost Efficiency**: Prevent expensive API calls when caps exceeded
+
+This architecture gives you **lightning-fast real-time usage tracking** with **reliable historical analytics** and **instant usage cap enforcement**.
+
+## Technical Details
+
+### Redis Operations
+```rust
+// Atomic increment operations
+redis.pipeline()
+    .hincrby("usage_summary:user_123:hourly:2025-01-31T15", "requests", 1)
+    .hincrby("usage_summary:user_123:hourly:2025-01-31T15", "input_tokens", 150)
+    .hincrby("usage_summary:user_123:hourly:2025-01-31T15", "output_tokens", 75)
+    .hincrby("usage_summary:user_123:hourly:2025-01-31T15", "cost_cents", 25)
+    .expire("usage_summary:user_123:hourly:2025-01-31T15", 3600 * 25) // Auto cleanup
+    .query_async(&mut conn).await?;
+```
+
+### Database Migration
+```sql
+-- Migration: Add user cap configurations table
+-- File: src/database/migration/m20250131_create_user_cap_configs.rs
+CREATE TABLE user_cap_configs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    cap_type VARCHAR(10) NOT NULL CHECK (cap_type IN ('hourly', 'daily', 'monthly')),
+    max_requests INTEGER CHECK (max_requests > 0),
+    max_tokens BIGINT CHECK (max_tokens > 0),
+    max_cost_cents BIGINT CHECK (max_cost_cents > 0),
+    is_active BOOLEAN DEFAULT TRUE,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+    UNIQUE(user_id, cap_type)
+);
+
+-- Index for fast cap lookups
+CREATE INDEX idx_user_cap_configs_user_active ON user_cap_configs(user_id, is_active);
+```
+
+### Error Handling
+```rust
+// Custom error types for usage caps
+#[derive(Debug, thiserror::Error)]
+pub enum UsageCapError {
+    #[error("Daily usage cap exceeded: {current}/{limit} {resource_type}. Resets at {reset_time}")]
+    DailyCapExceeded {
+        current: i64,
+        limit: i64,
+        resource_type: String,
+        reset_time: DateTime<Utc>,
+    },
+    
+    #[error("Hourly usage cap exceeded: {current}/{limit} {resource_type}. Resets at {reset_time}")]
+    HourlyCapExceeded {
+        current: i64,
+        limit: i64,
+        resource_type: String, 
+        reset_time: DateTime<Utc>,
+    },
+}
+```
+
+### Configuration
+```yaml
+# Add to config.yaml
+redis:
+  # Usage tracking keys
+  usage_summary_prefix: "usage_summary:"
+  usage_cap_prefix: "usage_cap:"
+  
+  # TTL settings
+  hourly_summary_ttl: 90000  # 25 hours
+  daily_cap_ttl: 90000       # 25 hours  
+  hourly_cap_ttl: 7200       # 2 hours
+
+usage_caps:
+  # Default caps for new users
+  default_daily_requests: 1000
+  default_daily_tokens: 100000
+  default_daily_cost_cents: 1000  # $10
+  
+  # Enable cap enforcement
+  enforce_caps: true
+  
+  # Grace period before enforcement
+  grace_period_minutes: 5
+```
+
+This comprehensive plan provides a complete roadmap for implementing real-time usage tracking with Redis-backed usage caps and efficient historical analytics.

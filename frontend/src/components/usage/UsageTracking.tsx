@@ -235,9 +235,6 @@ export function UsageTracking() {
         </div>
       </div>
 
-      {/* Usage Statistics */}
-      <UsageStats stats={stats} isLoading={isLoadingStats} error={statsError} />
-
       {/* Filters */}
       <UsageFilters
         filters={filters}
@@ -245,6 +242,9 @@ export function UsageTracking() {
         availableModels={availableModels}
         isLoading={isLoadingRecords}
       />
+
+      {/* Usage Statistics */}
+      <UsageStats stats={stats} isLoading={isLoadingStats} error={statsError} />
 
       {/* Usage Records */}
       <UsageRecords

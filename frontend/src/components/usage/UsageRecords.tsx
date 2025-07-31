@@ -64,6 +64,8 @@ export function UsageRecords({
       hour: '2-digit',
       minute: '2-digit',
       second: '2-digit',
+      timeZone: 'UTC',
+      timeZoneName: 'short',
     });
   };
 
@@ -72,7 +74,7 @@ export function UsageRecords({
     if (costUsd === undefined || costUsd === null) return 'N/A';
     const cost = parseFloat(costUsd);
     if (isNaN(cost)) return 'N/A';
-    return `$${cost.toFixed(4)}`;
+    return cost.toFixed(4); // Remove $ sign since icon already shows it
   };
 
   const getStatusIcon = (success: boolean) => {
@@ -266,7 +268,14 @@ export function UsageRecords({
                     </span>
                   </div>
                   <div style={{ fontSize: '0.75rem', color: '#6c757d' }}>
-                    {record.input_tokens.toLocaleString()} + {record.output_tokens.toLocaleString()}
+                    <div>↑ {record.input_tokens.toLocaleString()} ↓ {record.output_tokens.toLocaleString()}</div>
+                    {((record.cache_read_tokens ?? 0) > 0 || (record.cache_write_tokens ?? 0) > 0) && (
+                      <div style={{ fontSize: '0.7rem', opacity: 0.8 }}>
+                        {(record.cache_read_tokens ?? 0) > 0 && `📖 ${record.cache_read_tokens!.toLocaleString()}`}
+                        {(record.cache_read_tokens ?? 0) > 0 && (record.cache_write_tokens ?? 0) > 0 && ' '}
+                        {(record.cache_write_tokens ?? 0) > 0 && `✏️ ${record.cache_write_tokens!.toLocaleString()}`}
+                      </div>
+                    )}
                   </div>
                 </div>
 
@@ -366,6 +375,25 @@ export function UsageRecords({
                       <strong style={{ color: '#374151' }}>Response Time:</strong>
                       <div style={{ color: '#6c757d' }}>
                         {record.response_time_ms ? `${record.response_time_ms}ms` : 'N/A'}
+                      </div>
+                    </div>
+                    <div>
+                      <strong style={{ color: '#374151' }}>Token Breakdown:</strong>
+                      <div style={{ color: '#6c757d', fontSize: '0.8125rem' }}>
+                        Input: {record.input_tokens.toLocaleString()}<br/>
+                        Output: {record.output_tokens.toLocaleString()}
+                        {(record.cache_read_tokens ?? 0) > 0 && (
+                          <><br/>Cache Read: {record.cache_read_tokens!.toLocaleString()}</>
+                        )}
+                        {(record.cache_write_tokens ?? 0) > 0 && (
+                          <><br/>Cache Write: {record.cache_write_tokens!.toLocaleString()}</>
+                        )}
+                      </div>
+                    </div>
+                    <div>
+                      <strong style={{ color: '#374151' }}>Region & Endpoint:</strong>
+                      <div style={{ color: '#6c757d', fontSize: '0.8125rem' }}>
+                        {record.region} • {record.endpoint_type}
                       </div>
                     </div>
                   </div>
