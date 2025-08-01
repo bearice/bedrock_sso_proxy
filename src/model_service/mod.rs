@@ -128,7 +128,7 @@ impl ModelServiceImpl {
         &self,
         headers: &axum::http::HeaderMap,
         response_body: &[u8],
-        response_time_ms: u32,
+        response_time_ms: i32,
     ) -> Result<UsageMetadata, AppError> {
         let usage_tracker =
             usage_tracking::UsageTrackingService::new(self.config.clone(), self.database.clone());
@@ -161,7 +161,7 @@ impl ModelService for ModelServiceImpl {
             )
             .await?;
 
-        let response_time_ms = start_time.elapsed().as_millis() as u32;
+        let response_time_ms = start_time.elapsed().as_millis() as i32;
 
         // 2. Extract usage metadata from AWS response
         let usage_metadata = self.extract_usage_metadata(

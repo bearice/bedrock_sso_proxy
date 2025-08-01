@@ -63,34 +63,34 @@ pub struct SseEvent {
 /// Extracted usage metrics from SSE events
 #[derive(Debug, Default, Clone)]
 pub struct UsageMetrics {
-    pub input_tokens: u32,
-    pub output_tokens: u32,
-    pub cache_write_tokens: Option<u32>,
-    pub cache_read_tokens: Option<u32>,
+    pub input_tokens: i32,
+    pub output_tokens: i32,
+    pub cache_write_tokens: Option<i32>,
+    pub cache_read_tokens: Option<i32>,
 }
 
 /// Usage metadata extracted from AWS response
 #[derive(Debug, Clone)]
 pub struct UsageMetadata {
-    pub input_tokens: u32,
-    pub output_tokens: u32,
-    pub cache_write_tokens: Option<u32>,
-    pub cache_read_tokens: Option<u32>,
+    pub input_tokens: i32,
+    pub output_tokens: i32,
+    pub cache_write_tokens: Option<i32>,
+    pub cache_read_tokens: Option<i32>,
     pub region: String,
-    pub response_time_ms: u32,
+    pub response_time_ms: i32,
 }
 
 /// AWS Bedrock invocation metrics from streaming response
 #[derive(Debug, Deserialize, Serialize)]
 pub(crate) struct BedrockInvocationMetrics {
     #[serde(rename = "inputTokenCount")]
-    pub input_token_count: u32,
+    pub input_token_count: i32,
     #[serde(rename = "outputTokenCount")]
-    pub output_token_count: u32,
+    pub output_token_count: i32,
     #[serde(rename = "invocationLatency")]
-    pub invocation_latency: u32,
+    pub invocation_latency: i32,
     #[serde(rename = "firstByteLatency")]
-    pub first_byte_latency: u32,
+    pub first_byte_latency: i32,
 }
 
 /// Streaming event from AWS Bedrock (message_stop event)

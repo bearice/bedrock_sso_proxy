@@ -154,10 +154,10 @@ impl EventStreamParser {
     ) -> Result<(), Box<dyn std::error::Error>> {
         if let Some(usage) = event["message"]["usage"].as_object() {
             if let Some(cache_creation) = usage["cache_creation_input_tokens"].as_u64() {
-                self.usage_metrics.cache_write_tokens = Some(cache_creation as u32);
+                self.usage_metrics.cache_write_tokens = Some(cache_creation as i32);
             }
             if let Some(cache_read) = usage["cache_read_input_tokens"].as_u64() {
-                self.usage_metrics.cache_read_tokens = Some(cache_read as u32);
+                self.usage_metrics.cache_read_tokens = Some(cache_read as i32);
             }
         }
         Ok(())
@@ -171,10 +171,10 @@ impl EventStreamParser {
         // Try AWS Bedrock format first
         if let Some(metrics) = event["amazon-bedrock-invocationMetrics"].as_object() {
             if let Some(input_tokens) = metrics["inputTokenCount"].as_u64() {
-                self.usage_metrics.input_tokens = input_tokens as u32;
+                self.usage_metrics.input_tokens = input_tokens as i32;
             }
             if let Some(output_tokens) = metrics["outputTokenCount"].as_u64() {
-                self.usage_metrics.output_tokens = output_tokens as u32;
+                self.usage_metrics.output_tokens = output_tokens as i32;
             }
         }
         Ok(())
@@ -284,7 +284,7 @@ impl Stream for ParsedEventStream {
             std::task::Poll::Ready(None) => {
                 // Stream completed, track usage asynchronously
                 if let Some(tracker) = self.usage_tracker.take() {
-                    let response_time_ms = tracker.start_time.elapsed().as_millis() as u32;
+                    let response_time_ms = tracker.start_time.elapsed().as_millis() as i32;
                     let usage_metrics = self.parser.get_usage_metrics();
 
                     let usage_metadata = UsageMetadata {

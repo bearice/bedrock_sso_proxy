@@ -202,9 +202,9 @@ fn transform_content_blocks(content_value: &Value) -> Result<Vec<ContentBlock>, 
 
 /// Transforms usage information from Bedrock to Anthropic format
 fn transform_usage(usage_value: &Value) -> Result<Usage, AnthropicError> {
-    let input_tokens = usage_value["input_tokens"].as_u64().unwrap_or(0) as u32;
+    let input_tokens = usage_value["input_tokens"].as_u64().unwrap_or(0) as i32;
 
-    let output_tokens = usage_value["output_tokens"].as_u64().unwrap_or(0) as u32;
+    let output_tokens = usage_value["output_tokens"].as_u64().unwrap_or(0) as i32;
 
     Ok(Usage {
         input_tokens,

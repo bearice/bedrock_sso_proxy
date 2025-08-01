@@ -32,7 +32,7 @@ impl UsageTrackingService {
         &self,
         headers: &HeaderMap,
         response_body: &[u8],
-        response_time_ms: u32,
+        response_time_ms: i32,
     ) -> Result<UsageMetadata, AppError> {
         // Try to parse usage information from response body first
         let mut input_tokens = 0;
@@ -55,13 +55,13 @@ impl UsageTrackingService {
             input_tokens = headers
                 .get("x-amzn-bedrock-input-token-count")
                 .and_then(|h| h.to_str().ok())
-                .and_then(|s| s.parse::<u32>().ok())
+                .and_then(|s| s.parse::<i32>().ok())
                 .unwrap_or(0);
 
             output_tokens = headers
                 .get("x-amzn-bedrock-output-token-count")
                 .and_then(|h| h.to_str().ok())
-                .and_then(|s| s.parse::<u32>().ok())
+                .and_then(|s| s.parse::<i32>().ok())
                 .unwrap_or(0);
         }
 
@@ -94,10 +94,10 @@ impl UsageTrackingService {
         &self,
         region: &str,
         model_id: &str,
-        input_tokens: u32,
-        output_tokens: u32,
-        cache_write_tokens: Option<u32>,
-        cache_read_tokens: Option<u32>,
+        input_tokens: i32,
+        output_tokens: i32,
+        cache_write_tokens: Option<i32>,
+        cache_read_tokens: Option<i32>,
     ) -> Option<Decimal> {
         // Strip regional prefix from model ID for cost lookup
         let normalized_model_id = self.model_mapping.strip_regional_prefix(model_id);
@@ -217,10 +217,10 @@ impl UsageTrackingService {
 /// Usage information from AWS response body
 #[derive(Debug, Deserialize, Serialize)]
 struct ResponseUsage {
-    pub input_tokens: u32,
-    pub output_tokens: u32,
-    pub cache_creation_input_tokens: Option<u32>,
-    pub cache_read_input_tokens: Option<u32>,
+    pub input_tokens: i32,
+    pub output_tokens: i32,
+    pub cache_creation_input_tokens: Option<i32>,
+    pub cache_read_input_tokens: Option<i32>,
 }
 
 /// Response wrapper for usage information

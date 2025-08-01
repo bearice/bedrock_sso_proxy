@@ -129,10 +129,10 @@ pub struct ContentBlock {
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Usage {
     /// Number of input tokens
-    pub input_tokens: u32,
+    pub input_tokens: i32,
 
     /// Number of output tokens
-    pub output_tokens: u32,
+    pub output_tokens: i32,
 }
 
 /// Tool definition for function calling

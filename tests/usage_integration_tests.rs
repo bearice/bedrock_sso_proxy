@@ -171,7 +171,7 @@ async fn setup_test_data(database: &dyn DatabaseManager) -> (i32, i32) {
             cache_write_tokens: None,
             cache_read_tokens: None,
             total_tokens: input + output,
-            response_time_ms: 200 + (i as u32 * 50),
+            response_time_ms: 200 + (i as i32 * 50),
             success: true,
             error_message: None,
             cost_usd: Some(*cost),
