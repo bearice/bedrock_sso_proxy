@@ -30,6 +30,16 @@ impl<T: CounterField> RedisHashCounter<T> {
         })
     }
 
+    /// Create Redis hash counter from existing client (for pre-initialized clients)
+    pub fn from_client(client: redis::Client, key: String) -> Self {
+        Self {
+            key,
+            client,
+            connection: Arc::new(tokio::sync::Mutex::new(None)),
+            _phantom: std::marker::PhantomData,
+        }
+    }
+
     /// Get the counter key
     pub fn key(&self) -> &str {
         &self.key

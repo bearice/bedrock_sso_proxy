@@ -28,6 +28,16 @@ impl<T> RedisCache<T> {
         })
     }
 
+    /// Create Redis cache from existing client (for pre-initialized clients)
+    pub fn from_client(client: Client, key_prefix: String) -> Self {
+        Self {
+            client,
+            connection: Arc::new(Mutex::new(None)),
+            key_prefix,
+            _phantom: std::marker::PhantomData,
+        }
+    }
+
     /// Get a working Redis connection, creating or reusing existing one
     async fn get_connection(&self) -> CacheResult<redis::aio::MultiplexedConnection> {
         let mut conn_guard = self.connection.lock().await;

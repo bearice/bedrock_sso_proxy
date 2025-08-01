@@ -23,17 +23,30 @@ impl<T: Clone> CacheEntry<T> {
     }
 }
 
-/// Generic in-memory cache implementation
+/// Shared memory store type
+type SharedMemoryStore = Arc<RwLock<HashMap<String, Box<dyn std::any::Any + Send + Sync>>>>;
+
+/// Generic in-memory cache implementation using shared storage
 #[derive(Clone)]
 pub struct MemoryCache<T> {
-    store: Arc<RwLock<HashMap<String, CacheEntry<T>>>>,
+    store: SharedMemoryStore,
+    _phantom: std::marker::PhantomData<T>,
 }
 
 impl<T> MemoryCache<T> {
-    /// Create new memory cache
+    /// Create new memory cache with own storage (for backward compatibility)
     pub fn new() -> Self {
         Self {
             store: Arc::new(RwLock::new(HashMap::new())),
+            _phantom: std::marker::PhantomData,
+        }
+    }
+
+    /// Create memory cache from shared store (managed by CacheManager)
+    pub fn from_shared_store(store: SharedMemoryStore) -> Self {
+        Self {
+            store,
+            _phantom: std::marker::PhantomData,
         }
     }
 }
@@ -50,16 +63,21 @@ impl<T: Clone + Send + Sync + 'static> MemoryCache<T> {
     pub async fn get(&self, key: &str) -> CacheResult<Option<T>> {
         let store = self.store.read().await;
 
-        if let Some(entry) = store.get(key) {
-            if entry.is_expired() {
-                drop(store);
-                // Clean up expired entry
-                let mut store = self.store.write().await;
-                store.remove(key);
-                return Ok(None);
-            }
+        if let Some(boxed_entry) = store.get(key) {
+            if let Some(entry) = boxed_entry.downcast_ref::<CacheEntry<T>>() {
+                if entry.is_expired() {
+                    drop(store);
+                    // Clean up expired entry
+                    let mut store = self.store.write().await;
+                    store.remove(key);
+                    return Ok(None);
+                }
 
-            Ok(Some(entry.data.clone()))
+                Ok(Some(entry.data.clone()))
+            } else {
+                // Type mismatch - this shouldn't happen with proper cache key prefixing
+                Ok(None)
+            }
         } else {
             Ok(None)
         }
@@ -73,9 +91,10 @@ impl<T: Clone + Send + Sync + 'static> MemoryCache<T> {
         ttl: Option<std::time::Duration>,
     ) -> CacheResult<()> {
         let entry = CacheEntry::new(value.clone(), ttl);
+        let boxed_entry: Box<dyn std::any::Any + Send + Sync> = Box::new(entry);
 
         let mut store = self.store.write().await;
-        store.insert(key.to_string(), entry);
+        store.insert(key.to_string(), boxed_entry);
 
         Ok(())
     }
@@ -91,15 +110,20 @@ impl<T: Clone + Send + Sync + 'static> MemoryCache<T> {
     pub async fn exists(&self, key: &str) -> CacheResult<bool> {
         let store = self.store.read().await;
 
-        if let Some(entry) = store.get(key) {
-            if entry.is_expired() {
-                drop(store);
-                // Clean up expired entry
-                let mut store = self.store.write().await;
-                store.remove(key);
-                return Ok(false);
+        if let Some(boxed_entry) = store.get(key) {
+            if let Some(entry) = boxed_entry.downcast_ref::<CacheEntry<T>>() {
+                if entry.is_expired() {
+                    drop(store);
+                    // Clean up expired entry
+                    let mut store = self.store.write().await;
+                    store.remove(key);
+                    return Ok(false);
+                }
+                Ok(true)
+            } else {
+                // Type mismatch - this shouldn't happen with proper cache key prefixing
+                Ok(false)
             }
-            Ok(true)
         } else {
             Ok(false)
         }
@@ -195,5 +219,55 @@ mod tests {
         cache.set("number_key", &42i32, None).await.unwrap();
         let value = cache.get("number_key").await.unwrap();
         assert_eq!(value, Some(42));
+    }
+
+    #[tokio::test]
+    async fn test_shared_memory_store() {
+        // Create a shared store
+        let shared_store = Arc::new(RwLock::new(HashMap::new()));
+        
+        // Create two cache instances that share the same store
+        let cache1 = MemoryCache::<String>::from_shared_store(shared_store.clone());
+        let cache2 = MemoryCache::<String>::from_shared_store(shared_store.clone());
+        
+        // Set a value in cache1
+        cache1.set("shared_key", &"shared_value".to_string(), None).await.unwrap();
+        
+        // Should be able to get the same value from cache2
+        let value = cache2.get("shared_key").await.unwrap();
+        assert_eq!(value, Some("shared_value".to_string()));
+        
+        // Delete from cache2
+        cache2.delete("shared_key").await.unwrap();
+        
+        // Should be gone from cache1 too
+        let value = cache1.get("shared_key").await.unwrap();
+        assert_eq!(value, None);
+    }
+
+    #[tokio::test]
+    async fn test_isolated_vs_shared_cache() {
+        // Create isolated caches (the old behavior)
+        let isolated_cache1 = MemoryCache::<String>::new();
+        let isolated_cache2 = MemoryCache::<String>::new();
+        
+        // Set value in isolated_cache1
+        isolated_cache1.set("isolated_key", &"isolated_value".to_string(), None).await.unwrap();
+        
+        // Should NOT be visible in isolated_cache2
+        let value = isolated_cache2.get("isolated_key").await.unwrap();
+        assert_eq!(value, None);
+        
+        // Now test shared caches
+        let shared_store = Arc::new(RwLock::new(HashMap::new()));
+        let shared_cache1 = MemoryCache::<String>::from_shared_store(shared_store.clone());
+        let shared_cache2 = MemoryCache::<String>::from_shared_store(shared_store.clone());
+        
+        // Set value in shared_cache1
+        shared_cache1.set("shared_key", &"shared_value".to_string(), None).await.unwrap();
+        
+        // Should be visible in shared_cache2
+        let value = shared_cache2.get("shared_key").await.unwrap();
+        assert_eq!(value, Some("shared_value".to_string()));
     }
 }

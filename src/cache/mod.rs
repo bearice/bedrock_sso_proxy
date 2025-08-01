@@ -4,6 +4,9 @@
 //! and temporary storage for operations that don't require persistence.
 
 use thiserror::Error;
+use std::sync::Arc;
+use std::collections::HashMap;
+use tokio::sync::RwLock;
 
 pub mod config;
 pub mod counter;
@@ -31,10 +34,15 @@ pub enum CacheError {
 
 pub type CacheResult<T> = Result<T, CacheError>;
 
+/// Shared memory store backend for both cache and counters
+type SharedMemoryStore = Arc<RwLock<HashMap<String, Box<dyn std::any::Any + Send + Sync>>>>;
+
 /// Cache manager - creates TypedCache instances
 #[derive(Clone)]
 pub struct CacheManager {
     config: CacheConfig,
+    redis_client: Option<redis::Client>,
+    memory_store: Option<SharedMemoryStore>,
 }
 
 impl CacheManager {
@@ -43,75 +51,92 @@ impl CacheManager {
         Self {
             config: CacheConfig {
                 backend: "memory".to_string(),
-                redis_url: "redis://localhost:6379".to_string(),
-                redis_key_prefix: "bedrock_sso:".to_string(),
-                validation_ttl: 3600,
-                max_entries: 10000,
-                cleanup_interval: 3600,
+                ..Default::default()
             },
+            redis_client: None,
+            memory_store: Some(Arc::new(RwLock::new(HashMap::new()))),
         }
     }
 
     /// Create cache manager from configuration
     pub async fn new_from_config(config: &CacheConfig) -> CacheResult<Self> {
+        let redis_client = if config.backend == "redis" {
+            // Create and test Redis client during initialization
+            let client = redis::Client::open(config.redis_url.as_str())
+                .map_err(|e| CacheError::Connection(format!("Redis client creation failed: {}", e)))?;
+
+            // Test the connection to fail early if Redis is not available
+            let mut conn = client
+                .get_multiplexed_tokio_connection()
+                .await
+                .map_err(|e| CacheError::Connection(format!("Redis connection failed: {}", e)))?;
+
+            // Test with a simple ping
+            redis::cmd("PING")
+                .query_async::<String>(&mut conn)
+                .await
+                .map_err(|e| CacheError::Connection(format!("Redis ping failed: {}", e)))?;
+
+            Some(client)
+        } else {
+            None
+        };
+
+        let memory_store = if config.backend == "memory" {
+            Some(Arc::new(RwLock::new(HashMap::new())))
+        } else {
+            None
+        };
+
         Ok(Self {
             config: config.clone(),
+            redis_client,
+            memory_store,
         })
     }
 
-    /// Create typed cache backend based on configuration
-    fn create_backend<T: CachedObject>(&self) -> CacheResult<TypedCacheBackend<T>> {
-        match self.config.backend.as_str() {
-            "redis" => {
-                let redis = object::redis::RedisCache::new(
-                    &self.config.redis_url,
-                    self.config.redis_key_prefix.clone(),
-                )?;
-                Ok(TypedCacheBackend::Redis(redis))
-            }
-            _ => Ok(TypedCacheBackend::Memory(object::memory::MemoryCache::new())),
+    /// Create typed cache backend based on pre-initialized backends
+    fn create_backend<T: CachedObject>(&self) -> TypedCacheBackend<T> {
+        if let Some(client) = &self.redis_client {
+            let redis = object::redis::RedisCache::from_client(
+                client.clone(),
+                self.config.redis_key_prefix.clone(),
+            );
+            TypedCacheBackend::Redis(redis)
+        } else if let Some(store) = &self.memory_store {
+            TypedCacheBackend::Memory(object::memory::MemoryCache::from_shared_store(store.clone()))
+        } else {
+            panic!("No backend initialized - this should never happen")
         }
     }
 
-    /// Create counter backend based on configuration
+    /// Create counter backend based on pre-initialized backends
     fn create_counter_backend<T: CounterField>(
         &self,
         key: &str,
-    ) -> CacheResult<counter::HashCounterBackend<T>> {
+    ) -> counter::HashCounterBackend<T> {
         let prefixed_key: String = format!("{}:{}", T::counter_prefix(), key);
 
-        match self.config.backend.as_str() {
-            "redis" => {
-                let redis = counter::RedisHashCounter::new(&self.config.redis_url, prefixed_key)?;
-                Ok(counter::HashCounterBackend::Redis(redis))
-            }
-            _ => Ok(counter::HashCounterBackend::Memory(
+        if let Some(client) = &self.redis_client {
+            let redis = counter::RedisHashCounter::from_client(client.clone(), prefixed_key);
+            counter::HashCounterBackend::Redis(redis)
+        } else {
+            // Memory counters use isolated storage for now since they have different data model
+            counter::HashCounterBackend::Memory(
                 counter::MemoryHashCounter::new(prefixed_key),
-            )),
+            )
         }
     }
 
     /// Get a typed cache for type T
     pub fn cache<T: CachedObject>(&self) -> TypedCache<T> {
-        // Create backend on-demand for each type
-        let backend = self.create_backend().unwrap_or_else(|_| {
-            // Fallback to memory cache on error
-            TypedCacheBackend::Memory(object::memory::MemoryCache::new())
-        });
+        let backend = self.create_backend();
         TypedCache::new(backend)
     }
 
     /// Get a typed counter for the given key with automatic type prefix
     pub fn counter<T: CounterField>(&self, key: &str) -> TypedHashCounter<T> {
-        // Create counter backend based on configuration
-        let backend = self.create_counter_backend(key).unwrap_or_else(|_| {
-            // Fallback to memory counter on error
-            counter::HashCounterBackend::Memory(counter::MemoryHashCounter::new(format!(
-                "{}:{}",
-                T::counter_prefix(),
-                key
-            )))
-        });
+        let backend = self.create_counter_backend(key);
         TypedHashCounter::new(backend, key)
     }
 
