@@ -83,7 +83,7 @@ impl<T> RedisCache<T> {
     }
 }
 
-/// Generic implementation using bincode serialization for RedisCache<T>
+/// Generic implementation using postcard serialization for RedisCache<T>
 impl<T> RedisCache<T>
 where
     T: CachedObject,
@@ -102,7 +102,7 @@ where
 
         match result {
             Some(data) => {
-                let value: T = bincode::deserialize(&data)
+                let value: T = postcard::from_bytes(&data)
                     .map_err(|e| CacheError::Serialization(e.to_string()))?;
                 Ok(Some(value))
             }
@@ -113,8 +113,8 @@ where
     /// Set value with optional expiration
     pub async fn set(&self, key: &str, value: &T, ttl: Option<Duration>) -> CacheResult<()> {
         let key = self.prefixed_key(key);
-        let data =
-            bincode::serialize(value).map_err(|e| CacheError::Serialization(e.to_string()))?;
+        let data = postcard::to_allocvec(value)
+            .map_err(|e| CacheError::Serialization(e.to_string()))?;
 
         let mut conn = self.get_connection().await?;
 

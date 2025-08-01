@@ -16,7 +16,7 @@ pub use typed_cache_macro::typed_cache;
 #[derive(Clone)]
 pub enum TypedCacheBackend<T> {
     Memory(memory::MemoryCache<T>), // JSON storage
-    Redis(redis::RedisCache<T>),    // Bitcode storage
+    Redis(redis::RedisCache<T>),    // Postcard storage
 }
 
 /// Trait for types that can be cached with automatic structural hashing
@@ -307,5 +307,100 @@ mod tests {
 
         // Test that TTL is set correctly
         assert_eq!(MacroTestUser::default_ttl(), Some(Duration::from_secs(300)));
+    }
+
+    #[tokio::test]
+    async fn test_postcard_serialization_round_trip() {
+        use crate::database::entities::ModelCost;
+        use rust_decimal::Decimal;
+        use chrono::Utc;
+
+        // Test that ModelCost can be serialized and deserialized with postcard
+        let model_cost = ModelCost {
+            id: 1,
+            region: "us-east-1".to_string(),
+            model_id: "anthropic.claude-sonnet-4-20250514-v1:0".to_string(),
+            input_cost_per_1k_tokens: Decimal::new(3, 3), // 0.003
+            output_cost_per_1k_tokens: Decimal::new(15, 3), // 0.015
+            cache_write_cost_per_1k_tokens: Some(Decimal::new(18, 4)), // 0.0018
+            cache_read_cost_per_1k_tokens: Some(Decimal::new(36, 5)), // 0.00036
+            updated_at: Utc::now(),
+        };
+
+        // Test direct postcard serialization (what Redis cache uses)
+        let serialized = postcard::to_allocvec(&model_cost)
+            .expect("ModelCost should serialize with postcard");
+        
+        let deserialized: ModelCost = postcard::from_bytes(&serialized)
+            .expect("ModelCost should deserialize with postcard");
+
+        // Verify data integrity
+        assert_eq!(deserialized.id, model_cost.id);
+        assert_eq!(deserialized.region, model_cost.region);
+        assert_eq!(deserialized.model_id, model_cost.model_id);
+        assert_eq!(deserialized.input_cost_per_1k_tokens, model_cost.input_cost_per_1k_tokens);
+        assert_eq!(deserialized.output_cost_per_1k_tokens, model_cost.output_cost_per_1k_tokens);
+        assert_eq!(deserialized.cache_write_cost_per_1k_tokens, model_cost.cache_write_cost_per_1k_tokens);
+        assert_eq!(deserialized.cache_read_cost_per_1k_tokens, model_cost.cache_read_cost_per_1k_tokens);
+    }
+
+    #[test]
+    fn test_postcard_decimal_edge_cases() {
+        use rust_decimal::Decimal;
+
+        // Test various decimal values that might cause serialization issues
+        let edge_cases = vec![
+            Decimal::ZERO,
+            Decimal::new(1, 0), // 1
+            Decimal::new(-1, 0), // -1
+            Decimal::new(123456789, 9), // 0.123456789 (high precision)
+            Decimal::new(999999999999999999i64, 18), // Very large with max precision
+            Decimal::new(1, 28), // Smallest positive decimal
+            Decimal::new(-1, 28), // Smallest negative decimal
+        ];
+
+        for decimal_value in edge_cases {
+            let serialized = postcard::to_allocvec(&decimal_value)
+                .unwrap_or_else(|_| panic!("Should serialize decimal: {}", decimal_value));
+            
+            let deserialized: Decimal = postcard::from_bytes(&serialized)
+                .unwrap_or_else(|_| panic!("Should deserialize decimal: {}", decimal_value));
+
+            assert_eq!(deserialized, decimal_value, 
+                "Round-trip failed for decimal: {}", decimal_value);
+        }
+    }
+
+    #[test]
+    fn test_postcard_vs_json_serialization_compatibility() {
+        use crate::database::entities::UserRecord;
+        use chrono::Utc;
+
+        let user = UserRecord {
+            id: 123,
+            provider_user_id: "google_12345".to_string(),
+            provider: "google".to_string(),
+            email: "test@example.com".to_string(),
+            display_name: Some("Test User".to_string()),
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
+            last_login: Some(Utc::now()),
+        };
+
+        // Test that both JSON (memory cache) and postcard (Redis cache) work
+        let json_serialized = serde_json::to_vec(&user)
+            .expect("Should serialize with JSON");
+        let json_deserialized: UserRecord = serde_json::from_slice(&json_serialized)
+            .expect("Should deserialize with JSON");
+
+        let postcard_serialized = postcard::to_allocvec(&user)
+            .expect("Should serialize with postcard");
+        let postcard_deserialized: UserRecord = postcard::from_bytes(&postcard_serialized)
+            .expect("Should deserialize with postcard");
+
+        // Both should produce identical results
+        assert_eq!(json_deserialized.id, postcard_deserialized.id);
+        assert_eq!(json_deserialized.email, postcard_deserialized.email);
+        assert_eq!(json_deserialized.display_name, postcard_deserialized.display_name);
     }
 }
