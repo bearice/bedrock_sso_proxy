@@ -4,7 +4,7 @@ use axum::{
 };
 use std::sync::Arc;
 mod common;
-use common::{RequestBuilder, TestHarness, PostgresTestDb};
+use common::{PostgresTestDb, RequestBuilder, TestHarness};
 
 #[tokio::test]
 async fn test_integration_jwt_token_validation() {
@@ -198,7 +198,8 @@ async fn test_postgres_server_with_real_jwt() {
         }
     };
 
-    let harness = TestHarness::with_postgres_and_secret(&postgres_db, "postgres-jwt-secret-456").await;
+    let harness =
+        TestHarness::with_postgres_and_secret(&postgres_db, "postgres-jwt-secret-456").await;
     let created_user_id = harness.create_test_user("postgres_test2@example.com").await;
 
     let token = harness.create_integration_token(created_user_id);
@@ -252,13 +253,16 @@ async fn test_postgres_concurrent_requests() {
     };
 
     let harness = Arc::new(TestHarness::with_postgres(&postgres_db).await);
-    let created_user_id = harness.create_test_user("postgres_test_concurrent@example.com").await;
+    let created_user_id = harness
+        .create_test_user("postgres_test_concurrent@example.com")
+        .await;
     let token = harness.create_integration_token(created_user_id);
 
     // Create multiple concurrent requests
     let mut handles = vec![];
 
-    for i in 0..5 { // Reduce concurrency for PostgreSQL tests
+    for i in 0..5 {
+        // Reduce concurrency for PostgreSQL tests
         let harness_clone = harness.clone();
         let token_clone = token.clone();
 

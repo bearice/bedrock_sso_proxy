@@ -76,7 +76,10 @@ async fn test_model_cost_cache_with_memory_backend() {
 
     let model_cost = result1.unwrap();
     assert_eq!(model_cost.region, "us-east-1");
-    assert_eq!(model_cost.model_id, "anthropic.claude-sonnet-4-20250514-v1:0");
+    assert_eq!(
+        model_cost.model_id,
+        "anthropic.claude-sonnet-4-20250514-v1:0"
+    );
     assert_eq!(model_cost.input_cost_per_1k_tokens, Decimal::new(3, 3));
     assert_eq!(model_cost.output_cost_per_1k_tokens, Decimal::new(15, 3));
 
@@ -133,11 +136,20 @@ async fn test_model_cost_cache_with_redis_backend() {
 
     let model_cost = result1.unwrap();
     assert_eq!(model_cost.region, "us-east-1");
-    assert_eq!(model_cost.model_id, "anthropic.claude-sonnet-4-20250514-v1:0");
+    assert_eq!(
+        model_cost.model_id,
+        "anthropic.claude-sonnet-4-20250514-v1:0"
+    );
     assert_eq!(model_cost.input_cost_per_1k_tokens, Decimal::new(3, 3));
     assert_eq!(model_cost.output_cost_per_1k_tokens, Decimal::new(15, 3));
-    assert_eq!(model_cost.cache_write_cost_per_1k_tokens, Some(Decimal::new(18, 4)));
-    assert_eq!(model_cost.cache_read_cost_per_1k_tokens, Some(Decimal::new(36, 5)));
+    assert_eq!(
+        model_cost.cache_write_cost_per_1k_tokens,
+        Some(Decimal::new(18, 4))
+    );
+    assert_eq!(
+        model_cost.cache_read_cost_per_1k_tokens,
+        Some(Decimal::new(36, 5))
+    );
 
     // Second call - cache hit (verify deserialization works)
     let result2 = cached_dao
@@ -155,13 +167,28 @@ async fn test_model_cost_cache_with_redis_backend() {
 
     // Verify cached data matches original
     let cached_model_cost = result2.unwrap();
-    assert_eq!(cached_model_cost.input_cost_per_1k_tokens, model_cost.input_cost_per_1k_tokens);
-    assert_eq!(cached_model_cost.output_cost_per_1k_tokens, model_cost.output_cost_per_1k_tokens);
-    assert_eq!(cached_model_cost.cache_write_cost_per_1k_tokens, model_cost.cache_write_cost_per_1k_tokens);
-    assert_eq!(cached_model_cost.cache_read_cost_per_1k_tokens, model_cost.cache_read_cost_per_1k_tokens);
+    assert_eq!(
+        cached_model_cost.input_cost_per_1k_tokens,
+        model_cost.input_cost_per_1k_tokens
+    );
+    assert_eq!(
+        cached_model_cost.output_cost_per_1k_tokens,
+        model_cost.output_cost_per_1k_tokens
+    );
+    assert_eq!(
+        cached_model_cost.cache_write_cost_per_1k_tokens,
+        model_cost.cache_write_cost_per_1k_tokens
+    );
+    assert_eq!(
+        cached_model_cost.cache_read_cost_per_1k_tokens,
+        model_cost.cache_read_cost_per_1k_tokens
+    );
 
     // Cleanup
-    cached_dao.invalidate_keys(&[cache_key.to_string()]).await.unwrap();
+    cached_dao
+        .invalidate_keys(&[cache_key.to_string()])
+        .await
+        .unwrap();
 }
 
 #[tokio::test]
@@ -187,7 +214,7 @@ async fn test_model_cost_cache_edge_case_decimals() {
         ("zero", Decimal::ZERO),
         ("negative", Decimal::new(-12345, 4)), // -1.2345
         ("high_precision", Decimal::new(123456789, 9)), // 0.123456789
-        ("very_small", Decimal::new(1, 10)), // 0.0000000001
+        ("very_small", Decimal::new(1, 10)),   // 0.0000000001
         ("large_number", Decimal::new(999999999999999999i64, 6)), // Very large with precision
     ];
 
@@ -209,7 +236,9 @@ async fn test_model_cost_cache_edge_case_decimals() {
         typed_cache
             .set(&cache_key, &model_cost)
             .await
-            .unwrap_or_else(|_| panic!("Failed to cache ModelCost with decimal: {}", decimal_value));
+            .unwrap_or_else(|_| {
+                panic!("Failed to cache ModelCost with decimal: {}", decimal_value)
+            });
 
         let cached = typed_cache
             .get(&cache_key)
@@ -231,7 +260,7 @@ async fn test_model_cost_cache_edge_case_decimals() {
 async fn test_model_cost_cache_comparison_memory_vs_redis() {
     // Test both backends with the same data to ensure they behave identically
     let memory_cache = CacheManager::new_memory();
-    
+
     let redis_config = CacheConfig {
         backend: "redis".to_string(),
         redis_url: "redis://localhost:6379".to_string(),
@@ -267,7 +296,10 @@ async fn test_model_cost_cache_comparison_memory_vs_redis() {
     let cache_key = "comparison_test";
 
     // Store in both caches
-    memory_typed_cache.set(cache_key, &model_cost).await.unwrap();
+    memory_typed_cache
+        .set(cache_key, &model_cost)
+        .await
+        .unwrap();
     redis_typed_cache.set(cache_key, &model_cost).await.unwrap();
 
     // Retrieve from both caches
@@ -278,10 +310,22 @@ async fn test_model_cost_cache_comparison_memory_vs_redis() {
     assert_eq!(memory_result.id, redis_result.id);
     assert_eq!(memory_result.region, redis_result.region);
     assert_eq!(memory_result.model_id, redis_result.model_id);
-    assert_eq!(memory_result.input_cost_per_1k_tokens, redis_result.input_cost_per_1k_tokens);
-    assert_eq!(memory_result.output_cost_per_1k_tokens, redis_result.output_cost_per_1k_tokens);
-    assert_eq!(memory_result.cache_write_cost_per_1k_tokens, redis_result.cache_write_cost_per_1k_tokens);
-    assert_eq!(memory_result.cache_read_cost_per_1k_tokens, redis_result.cache_read_cost_per_1k_tokens);
+    assert_eq!(
+        memory_result.input_cost_per_1k_tokens,
+        redis_result.input_cost_per_1k_tokens
+    );
+    assert_eq!(
+        memory_result.output_cost_per_1k_tokens,
+        redis_result.output_cost_per_1k_tokens
+    );
+    assert_eq!(
+        memory_result.cache_write_cost_per_1k_tokens,
+        redis_result.cache_write_cost_per_1k_tokens
+    );
+    assert_eq!(
+        memory_result.cache_read_cost_per_1k_tokens,
+        redis_result.cache_read_cost_per_1k_tokens
+    );
 
     // Cleanup Redis
     redis_typed_cache.delete(cache_key).await.unwrap();

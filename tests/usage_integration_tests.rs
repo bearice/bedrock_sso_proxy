@@ -59,7 +59,9 @@ async fn create_test_server() -> bedrock_sso_proxy::server::Server {
         .await
 }
 
-async fn create_postgres_test_server(postgres_db: &PostgresTestDb) -> bedrock_sso_proxy::server::Server {
+async fn create_postgres_test_server(
+    postgres_db: &PostgresTestDb,
+) -> bedrock_sso_proxy::server::Server {
     let mut config = bedrock_sso_proxy::config::Config::default();
     config.database.url = postgres_db.database_url.clone();
     config.database.enabled = true;
@@ -245,7 +247,10 @@ async fn test_get_user_usage_records_success_impl(server: &bedrock_sso_proxy::se
 }
 
 // Generate both SQLite and PostgreSQL tests
-database_test!(test_get_user_usage_records_success, test_get_user_usage_records_success_impl);
+database_test!(
+    test_get_user_usage_records_success,
+    test_get_user_usage_records_success_impl
+);
 
 async fn test_get_user_usage_stats_success_impl(server: &bedrock_sso_proxy::server::Server) {
     let (user_id, _) = setup_test_data(server.database.as_ref()).await;
@@ -289,7 +294,10 @@ async fn test_get_user_usage_stats_success_impl(server: &bedrock_sso_proxy::serv
     );
 }
 
-database_test!(test_get_user_usage_stats_success, test_get_user_usage_stats_success_impl);
+database_test!(
+    test_get_user_usage_stats_success,
+    test_get_user_usage_stats_success_impl
+);
 
 async fn test_get_user_usage_with_filters_impl(server: &bedrock_sso_proxy::server::Server) {
     let (user_id, _) = setup_test_data(server.database.as_ref()).await;
@@ -326,7 +334,10 @@ async fn test_get_user_usage_with_filters_impl(server: &bedrock_sso_proxy::serve
     );
 }
 
-database_test!(test_get_user_usage_with_filters, test_get_user_usage_with_filters_impl);
+database_test!(
+    test_get_user_usage_with_filters,
+    test_get_user_usage_with_filters_impl
+);
 
 async fn test_admin_get_system_usage_records_impl(server: &bedrock_sso_proxy::server::Server) {
     let (_user_id, admin_id) = setup_test_data(server.database.as_ref()).await;
@@ -358,7 +369,10 @@ async fn test_admin_get_system_usage_records_impl(server: &bedrock_sso_proxy::se
     assert_eq!(json["records"].as_array().unwrap().len(), 3); // All system records
 }
 
-database_test!(test_admin_get_system_usage_records, test_admin_get_system_usage_records_impl);
+database_test!(
+    test_admin_get_system_usage_records,
+    test_admin_get_system_usage_records_impl
+);
 
 async fn test_admin_get_top_models_impl(server: &bedrock_sso_proxy::server::Server) {
     let (_user_id, admin_id) = setup_test_data(server.database.as_ref()).await;
@@ -422,7 +436,10 @@ async fn test_non_admin_access_denied_impl(server: &bedrock_sso_proxy::server::S
     assert_eq!(response.status(), StatusCode::FORBIDDEN);
 }
 
-database_test!(test_non_admin_access_denied, test_non_admin_access_denied_impl);
+database_test!(
+    test_non_admin_access_denied,
+    test_non_admin_access_denied_impl
+);
 
 async fn test_unauthorized_access_impl(server: &bedrock_sso_proxy::server::Server) {
     setup_test_data(server.database.as_ref()).await;
@@ -484,7 +501,9 @@ async fn test_pagination_limits_impl(server: &bedrock_sso_proxy::server::Server)
 
 database_test!(test_pagination_limits, test_pagination_limits_impl);
 
-async fn test_get_stats_uses_summaries_when_available_impl(server: &bedrock_sso_proxy::server::Server) {
+async fn test_get_stats_uses_summaries_when_available_impl(
+    server: &bedrock_sso_proxy::server::Server,
+) {
     let (user_id, _) = setup_test_data(server.database.as_ref()).await;
 
     // Create a usage summary record for the same user
@@ -544,5 +563,7 @@ async fn test_get_stats_uses_summaries_when_available_impl(server: &bedrock_sso_
     assert_eq!(cost, Decimal::new(150, 3)); // 0.150
 }
 
-database_test!(test_get_stats_uses_summaries_when_available, test_get_stats_uses_summaries_when_available_impl);
-
+database_test!(
+    test_get_stats_uses_summaries_when_available,
+    test_get_stats_uses_summaries_when_available_impl
+);

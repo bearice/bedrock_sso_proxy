@@ -7,11 +7,11 @@ use bedrock_sso_proxy::{
     Config, Server, auth::OAuthClaims, database::entities::UserRecord,
     test_utils::TestServerBuilder,
 };
-use uuid::Uuid;
 use chrono::Utc;
 use jsonwebtoken::{Algorithm, DecodingKey, EncodingKey, Header, Validation, decode, encode};
 use std::time::{SystemTime, UNIX_EPOCH};
 use tower::ServiceExt;
+use uuid::Uuid;
 
 /// Unified test harness that handles app setup and token management
 pub struct TestHarness {
@@ -221,6 +221,7 @@ impl TestHarness {
 /// Unified request builder for both test suites
 pub struct RequestBuilder;
 
+#[allow(dead_code)]
 impl RequestBuilder {
     /// Health check with auth
     pub fn health_with_auth(token: &str) -> Request<Body> {
@@ -253,7 +254,6 @@ impl RequestBuilder {
     }
 
     /// Model invoke streaming with auth
-    #[allow(dead_code)]
     pub fn invoke_streaming_with_auth(model_id: &str, token: &str, body: &str) -> Request<Body> {
         Request::builder()
             .uri(format!(
@@ -345,6 +345,7 @@ pub struct PostgresTestDb {
     pub database_url: String,
 }
 
+#[allow(dead_code)]
 impl PostgresTestDb {
     /// Create a new temporary PostgreSQL database for testing
     pub async fn new() -> Result<Self, Box<dyn std::error::Error>> {
@@ -356,12 +357,12 @@ impl PostgresTestDb {
 
         // Connect to postgres database to create the test database
         let pool = sqlx::postgres::PgPool::connect(&base_url).await?;
-        
+
         // Create the temporary database
         sqlx::query(&format!("CREATE DATABASE \"{}\"", database_name))
             .execute(&pool)
             .await?;
-        
+
         pool.close().await;
 
         Ok(Self {
@@ -375,22 +376,22 @@ impl PostgresTestDb {
         let base_url = std::env::var("TEST_POSTGRES_URL")
             .unwrap_or_else(|_| "postgresql://localhost/postgres".to_string());
         let pool = sqlx::postgres::PgPool::connect(&base_url).await?;
-        
+
         // Terminate any existing connections to the database
         sqlx::query(&format!(
-            "SELECT pg_terminate_backend(pid) 
-             FROM pg_stat_activity 
+            "SELECT pg_terminate_backend(pid)
+             FROM pg_stat_activity
              WHERE datname = '{}' AND pid <> pg_backend_pid()",
             self.database_name
         ))
         .execute(&pool)
         .await?;
-        
+
         // Drop the temporary database
         sqlx::query(&format!("DROP DATABASE \"{}\"", self.database_name))
             .execute(&pool)
             .await?;
-        
+
         pool.close().await;
         Ok(())
     }
@@ -406,18 +407,18 @@ impl Drop for PostgresTestDb {
                 .unwrap_or_else(|_| "postgresql://localhost/postgres".to_string());
             if let Ok(pool) = sqlx::postgres::PgPool::connect(&base_url).await {
                 let _ = sqlx::query(&format!(
-                    "SELECT pg_terminate_backend(pid) 
-                     FROM pg_stat_activity 
+                    "SELECT pg_terminate_backend(pid)
+                     FROM pg_stat_activity
                      WHERE datname = '{}' AND pid <> pg_backend_pid()",
                     database_name
                 ))
                 .execute(&pool)
                 .await;
-                
+
                 let _ = sqlx::query(&format!("DROP DATABASE \"{}\"", database_name))
                     .execute(&pool)
                     .await;
-                
+
                 pool.close().await;
             }
         });

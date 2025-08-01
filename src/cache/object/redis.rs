@@ -113,8 +113,8 @@ where
     /// Set value with optional expiration
     pub async fn set(&self, key: &str, value: &T, ttl: Option<Duration>) -> CacheResult<()> {
         let key = self.prefixed_key(key);
-        let data = postcard::to_allocvec(value)
-            .map_err(|e| CacheError::Serialization(e.to_string()))?;
+        let data =
+            postcard::to_allocvec(value).map_err(|e| CacheError::Serialization(e.to_string()))?;
 
         let mut conn = self.get_connection().await?;
 
