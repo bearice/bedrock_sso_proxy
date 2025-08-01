@@ -629,10 +629,7 @@ rm data/bedrock_sso.db
 cargo run --bin bedrock_proxy -- migrate up
 ```
 
-### Background Process Note
 
-- If you need to run a test server, ask user to do it, you can not spawn
-  background process.
 
 ## Important Project Notes
 
@@ -663,18 +660,18 @@ cargo run --bin bedrock_proxy -- migrate up
 
 ### Coding Guidelines (!!IMPORTANT!!)
 
-- **Imports**: If you are referring to something in the crate, import it instead
-  using an absolute path
-- Use import as possible, unless it causes naming conflicts
-- When using entities in database, use type alias instead of raw Model name,
+- If you are referring to something in the crate, you MUST import it instead using an absolute path
+- You MUST use import as possible, unless it causes naming conflicts
+- When using entities in database, you MUST use type alias instead of raw Model name,
   like UserRecord against users::Model see `src/database/entities/mod.rs` or following defs.
-```
-// Type aliases
-pub type UserRecord = users::Model;
-pub type RefreshTokenData = refresh_tokens::Model;
-pub type AuditLogEntry = audit_logs::Model;
-pub type UsageRecord = usage_records::Model;
-pub type UsageSummary = usage_summaries::Model;
-pub type ModelCost = model_costs::Model;
-pub type ApiKeyRecord = api_keys::Model;
-```
+    ```
+    // Type aliases
+    pub type UserRecord = users::Model;
+    pub type RefreshTokenData = refresh_tokens::Model;
+    pub type AuditLogEntry = audit_logs::Model;
+    pub type UsageRecord = usage_records::Model;
+    pub type UsageSummary = usage_summaries::Model;
+    pub type ModelCost = model_costs::Model;
+    pub type ApiKeyRecord = api_keys::Model;
+    ```
+- If you need to run a test server, you must ask user to do it, you can not spawn background process.

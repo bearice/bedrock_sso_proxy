@@ -16,8 +16,53 @@ use serde_json::Value;
 
 use tower::ServiceExt;
 
+mod common;
+use common::PostgresTestDb;
+
+// Macro to run the same test with both SQLite and PostgreSQL
+macro_rules! database_test {
+    ($test_name:ident, $test_impl:ident) => {
+        paste::paste! {
+            #[tokio::test]
+            async fn [<sqlite_ $test_name>]() {
+                $test_impl(&create_test_server().await).await;
+            }
+
+            #[tokio::test]
+            async fn [<postgres_ $test_name>]() {
+                let postgres_db = match PostgresTestDb::new().await {
+                    Ok(db) => db,
+                    Err(_) => {
+                        println!("Skipping PostgreSQL test - database not available");
+                        return;
+                    }
+                };
+
+                let server = create_postgres_test_server(&postgres_db).await;
+                $test_impl(&server).await;
+
+                // Clean up
+                let _ = postgres_db.cleanup().await;
+            }
+        }
+    };
+}
+
 async fn create_test_server() -> bedrock_sso_proxy::server::Server {
     let mut config = bedrock_sso_proxy::config::Config::default();
+    // Add admin email for tests
+    config.admin.emails = vec!["admin@admin.example.com".to_string()];
+
+    bedrock_sso_proxy::test_utils::TestServerBuilder::new()
+        .with_config(config)
+        .build()
+        .await
+}
+
+async fn create_postgres_test_server(postgres_db: &PostgresTestDb) -> bedrock_sso_proxy::server::Server {
+    let mut config = bedrock_sso_proxy::config::Config::default();
+    config.database.url = postgres_db.database_url.clone();
+    config.database.enabled = true;
     // Add admin email for tests
     config.admin.emails = vec!["admin@admin.example.com".to_string()];
 
@@ -165,9 +210,8 @@ async fn setup_test_data(database: &dyn DatabaseManager) -> (i32, i32) {
     (user1_id, admin_id)
 }
 
-#[tokio::test]
-async fn test_get_user_usage_records_success() {
-    let server = create_test_server().await;
+// Test implementation functions
+async fn test_get_user_usage_records_success_impl(server: &bedrock_sso_proxy::server::Server) {
     let (user_id, _) = setup_test_data(server.database.as_ref()).await;
 
     let token = create_test_token(
@@ -176,7 +220,7 @@ async fn test_get_user_usage_records_success() {
         false,
         user_id,
     );
-    let app = create_test_router(&server);
+    let app = create_test_router(server);
 
     let request = Request::builder()
         .method(Method::GET)
@@ -200,9 +244,10 @@ async fn test_get_user_usage_records_success() {
     assert_eq!(json["offset"], 0);
 }
 
-#[tokio::test]
-async fn test_get_user_usage_stats_success() {
-    let server = create_test_server().await;
+// Generate both SQLite and PostgreSQL tests
+database_test!(test_get_user_usage_records_success, test_get_user_usage_records_success_impl);
+
+async fn test_get_user_usage_stats_success_impl(server: &bedrock_sso_proxy::server::Server) {
     let (user_id, _) = setup_test_data(server.database.as_ref()).await;
 
     let token = create_test_token(
@@ -211,7 +256,7 @@ async fn test_get_user_usage_stats_success() {
         false,
         user_id,
     );
-    let app = create_test_router(&server);
+    let app = create_test_router(server);
 
     let request = Request::builder()
         .method(Method::GET)
@@ -244,9 +289,9 @@ async fn test_get_user_usage_stats_success() {
     );
 }
 
-#[tokio::test]
-async fn test_get_user_usage_with_filters() {
-    let server = create_test_server().await;
+database_test!(test_get_user_usage_stats_success, test_get_user_usage_stats_success_impl);
+
+async fn test_get_user_usage_with_filters_impl(server: &bedrock_sso_proxy::server::Server) {
     let (user_id, _) = setup_test_data(server.database.as_ref()).await;
 
     let token = create_test_token(
@@ -255,7 +300,7 @@ async fn test_get_user_usage_with_filters() {
         false,
         user_id,
     );
-    let app = create_test_router(&server);
+    let app = create_test_router(server);
 
     // Test model filtering
     let request = Request::builder()
@@ -281,9 +326,9 @@ async fn test_get_user_usage_with_filters() {
     );
 }
 
-#[tokio::test]
-async fn test_admin_get_system_usage_records() {
-    let server = create_test_server().await;
+database_test!(test_get_user_usage_with_filters, test_get_user_usage_with_filters_impl);
+
+async fn test_admin_get_system_usage_records_impl(server: &bedrock_sso_proxy::server::Server) {
     let (_user_id, admin_id) = setup_test_data(server.database.as_ref()).await;
 
     let admin_token = create_test_token(
@@ -292,7 +337,7 @@ async fn test_admin_get_system_usage_records() {
         true,
         admin_id,
     );
-    let app = create_test_router(&server);
+    let app = create_test_router(server);
 
     let request = Request::builder()
         .method(Method::GET)
@@ -313,9 +358,9 @@ async fn test_admin_get_system_usage_records() {
     assert_eq!(json["records"].as_array().unwrap().len(), 3); // All system records
 }
 
-#[tokio::test]
-async fn test_admin_get_top_models() {
-    let server = create_test_server().await;
+database_test!(test_admin_get_system_usage_records, test_admin_get_system_usage_records_impl);
+
+async fn test_admin_get_top_models_impl(server: &bedrock_sso_proxy::server::Server) {
     let (_user_id, admin_id) = setup_test_data(server.database.as_ref()).await;
 
     let admin_token = create_test_token(
@@ -324,7 +369,7 @@ async fn test_admin_get_top_models() {
         true,
         admin_id,
     );
-    let app = create_test_router(&server);
+    let app = create_test_router(server);
 
     let request = Request::builder()
         .method(Method::GET)
@@ -352,9 +397,9 @@ async fn test_admin_get_top_models() {
     assert_eq!(models[0]["total_tokens"], 275); // 200 + 75
 }
 
-#[tokio::test]
-async fn test_non_admin_access_denied() {
-    let server = create_test_server().await;
+database_test!(test_admin_get_top_models, test_admin_get_top_models_impl);
+
+async fn test_non_admin_access_denied_impl(server: &bedrock_sso_proxy::server::Server) {
     let (user1_id, _) = setup_test_data(server.database.as_ref()).await;
 
     let user_token = create_test_token(
@@ -363,7 +408,7 @@ async fn test_non_admin_access_denied() {
         false,
         user1_id,
     );
-    let app = create_test_router(&server);
+    let app = create_test_router(server);
 
     // Test admin endpoint access with non-admin token
     let request = Request::builder()
@@ -377,13 +422,13 @@ async fn test_non_admin_access_denied() {
     assert_eq!(response.status(), StatusCode::FORBIDDEN);
 }
 
-#[tokio::test]
-async fn test_unauthorized_access() {
-    let server = create_test_server().await;
+database_test!(test_non_admin_access_denied, test_non_admin_access_denied_impl);
+
+async fn test_unauthorized_access_impl(server: &bedrock_sso_proxy::server::Server) {
     setup_test_data(server.database.as_ref()).await;
 
     // Test without authorization header
-    let app1 = create_test_router(&server);
+    let app1 = create_test_router(server);
     let request = Request::builder()
         .method(Method::GET)
         .uri("/usage/records")
@@ -394,7 +439,7 @@ async fn test_unauthorized_access() {
     assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
 
     // Test with invalid token
-    let app2 = create_test_router(&server);
+    let app2 = create_test_router(server);
     let request = Request::builder()
         .method(Method::GET)
         .uri("/usage/records")
@@ -406,9 +451,9 @@ async fn test_unauthorized_access() {
     assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
 }
 
-#[tokio::test]
-async fn test_pagination_limits() {
-    let server = create_test_server().await;
+database_test!(test_unauthorized_access, test_unauthorized_access_impl);
+
+async fn test_pagination_limits_impl(server: &bedrock_sso_proxy::server::Server) {
     let (user1_id, _) = setup_test_data(server.database.as_ref()).await;
 
     let token = create_test_token(
@@ -417,7 +462,7 @@ async fn test_pagination_limits() {
         false,
         user1_id,
     );
-    let app = create_test_router(&server);
+    let app = create_test_router(server);
 
     // Test limit enforcement (max 500)
     let request = Request::builder()
@@ -437,9 +482,9 @@ async fn test_pagination_limits() {
     assert_eq!(json["limit"], 500); // Should be capped at 500
 }
 
-#[tokio::test]
-async fn test_get_stats_uses_summaries_when_available() {
-    let server = create_test_server().await;
+database_test!(test_pagination_limits, test_pagination_limits_impl);
+
+async fn test_get_stats_uses_summaries_when_available_impl(server: &bedrock_sso_proxy::server::Server) {
     let (user_id, _) = setup_test_data(server.database.as_ref()).await;
 
     // Create a usage summary record for the same user
@@ -498,3 +543,6 @@ async fn test_get_stats_uses_summaries_when_available() {
     // Compare decimal values properly
     assert_eq!(cost, Decimal::new(150, 3)); // 0.150
 }
+
+database_test!(test_get_stats_uses_summaries_when_available, test_get_stats_uses_summaries_when_available_impl);
+

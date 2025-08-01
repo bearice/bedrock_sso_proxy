@@ -14,8 +14,53 @@ use rust_decimal::Decimal;
 use serde_json::Value;
 use tower::ServiceExt;
 
+mod common;
+use common::PostgresTestDb;
+
+// Macro to run the same test with both SQLite and PostgreSQL
+macro_rules! database_test {
+    ($test_name:ident, $test_impl:ident) => {
+        paste::paste! {
+            #[tokio::test]
+            async fn [<sqlite_ $test_name>]() {
+                $test_impl(&create_test_server().await).await;
+            }
+
+            #[tokio::test]
+            async fn [<postgres_ $test_name>]() {
+                let postgres_db = match PostgresTestDb::new().await {
+                    Ok(db) => db,
+                    Err(_) => {
+                        println!("Skipping PostgreSQL test - database not available");
+                        return;
+                    }
+                };
+
+                let server = create_postgres_test_server(&postgres_db).await;
+                $test_impl(&server).await;
+
+                // Clean up
+                let _ = postgres_db.cleanup().await;
+            }
+        }
+    };
+}
+
 async fn create_test_server() -> bedrock_sso_proxy::server::Server {
     let mut config = bedrock_sso_proxy::config::Config::default();
+    // Add admin email for tests
+    config.admin.emails = vec!["admin@admin.example.com".to_string()];
+
+    bedrock_sso_proxy::test_utils::TestServerBuilder::new()
+        .with_config(config)
+        .build()
+        .await
+}
+
+async fn create_postgres_test_server(postgres_db: &PostgresTestDb) -> bedrock_sso_proxy::server::Server {
+    let mut config = bedrock_sso_proxy::config::Config::default();
+    config.database.url = postgres_db.database_url.clone();
+    config.database.enabled = true;
     // Add admin email for tests
     config.admin.emails = vec!["admin@admin.example.com".to_string()];
 
@@ -99,13 +144,12 @@ async fn setup_test_data(database: &dyn DatabaseManager) -> i32 {
     admin_id
 }
 
-#[tokio::test]
-async fn test_get_all_model_costs() {
-    let server = create_test_server().await;
+// Test implementation functions
+async fn test_get_all_model_costs_impl(server: &bedrock_sso_proxy::server::Server) {
     let admin_id = setup_test_data(server.database.as_ref()).await;
 
     let admin_token = create_test_token(server.jwt_service.as_ref(), admin_id);
-    let app = create_test_router(&server);
+    let app = create_test_router(server);
 
     let request = Request::builder()
         .method(Method::GET)
@@ -124,13 +168,14 @@ async fn test_get_all_model_costs() {
     assert!(costs.len() >= 3); // Should have our test costs
 }
 
-#[tokio::test]
-async fn test_get_specific_model_cost() {
-    let server = create_test_server().await;
+// Generate both SQLite and PostgreSQL tests
+database_test!(test_get_all_model_costs, test_get_all_model_costs_impl);
+
+async fn test_get_specific_model_cost_impl(server: &bedrock_sso_proxy::server::Server) {
     let admin_id = setup_test_data(server.database.as_ref()).await;
 
     let admin_token = create_test_token(server.jwt_service.as_ref(), admin_id);
-    let app = create_test_router(&server);
+    let app = create_test_router(server);
 
     let request = Request::builder()
         .method(Method::GET)
@@ -150,13 +195,13 @@ async fn test_get_specific_model_cost() {
     assert_eq!(cost["region"], "us-east-1");
 }
 
-#[tokio::test]
-async fn test_upsert_model_cost() {
-    let server = create_test_server().await;
+database_test!(test_get_specific_model_cost, test_get_specific_model_cost_impl);
+
+async fn test_upsert_model_cost_impl(server: &bedrock_sso_proxy::server::Server) {
     let admin_id = setup_test_data(server.database.as_ref()).await;
 
     let admin_token = create_test_token(server.jwt_service.as_ref(), admin_id);
-    let app = create_test_router(&server);
+    let app = create_test_router(server);
 
     let new_cost = serde_json::json!({
         "region": "us-east-1",
@@ -179,7 +224,7 @@ async fn test_upsert_model_cost() {
     assert_eq!(response.status(), StatusCode::OK);
 
     // Verify the cost was created
-    let app2 = create_test_router(&server);
+    let app2 = create_test_router(server);
     let request = Request::builder()
         .method(Method::GET)
         .uri("/admin/costs/us-east-1/new-test-model")
@@ -198,13 +243,13 @@ async fn test_upsert_model_cost() {
     assert_eq!(cost["region"], "us-east-1");
 }
 
-#[tokio::test]
-async fn test_upsert_model_cost_without_cache_fields() {
-    let server = create_test_server().await;
+database_test!(test_upsert_model_cost, test_upsert_model_cost_impl);
+
+async fn test_upsert_model_cost_without_cache_fields_impl(server: &bedrock_sso_proxy::server::Server) {
     let admin_id = setup_test_data(server.database.as_ref()).await;
 
     let admin_token = create_test_token(server.jwt_service.as_ref(), admin_id);
-    let app = create_test_router(&server);
+    let app = create_test_router(server);
 
     let new_cost = serde_json::json!({
         "region": "us-west-2",
@@ -226,15 +271,15 @@ async fn test_upsert_model_cost_without_cache_fields() {
     assert_eq!(response.status(), StatusCode::OK);
 }
 
-#[tokio::test]
-async fn test_delete_model_cost() {
-    let server = create_test_server().await;
+database_test!(test_upsert_model_cost_without_cache_fields, test_upsert_model_cost_without_cache_fields_impl);
+
+async fn test_delete_model_cost_impl(server: &bedrock_sso_proxy::server::Server) {
     let admin_id = setup_test_data(server.database.as_ref()).await;
 
     let admin_token = create_test_token(server.jwt_service.as_ref(), admin_id);
 
     // First create a cost to delete
-    let app1 = create_test_router(&server);
+    let app1 = create_test_router(server);
     let new_cost = serde_json::json!({
         "region": "us-east-1",
         "model_id": "delete-test-model",
@@ -254,7 +299,7 @@ async fn test_delete_model_cost() {
     assert_eq!(response.status(), StatusCode::OK);
 
     // Now delete it
-    let app2 = create_test_router(&server);
+    let app2 = create_test_router(server);
     let request = Request::builder()
         .method(Method::DELETE)
         .uri("/admin/costs/us-east-1/delete-test-model")
@@ -266,7 +311,7 @@ async fn test_delete_model_cost() {
     assert_eq!(response.status(), StatusCode::NO_CONTENT);
 
     // Verify it's gone
-    let app3 = create_test_router(&server);
+    let app3 = create_test_router(server);
     let request = Request::builder()
         .method(Method::GET)
         .uri("/admin/costs/us-east-1/delete-test-model")
@@ -278,13 +323,13 @@ async fn test_delete_model_cost() {
     assert_eq!(response.status(), StatusCode::NOT_FOUND);
 }
 
-#[tokio::test]
-async fn test_bulk_update_from_csv() {
-    let server = create_test_server().await;
+database_test!(test_delete_model_cost, test_delete_model_cost_impl);
+
+async fn test_bulk_update_from_csv_impl(server: &bedrock_sso_proxy::server::Server) {
     let admin_id = setup_test_data(server.database.as_ref()).await;
 
     let admin_token = create_test_token(server.jwt_service.as_ref(), admin_id);
-    let app = create_test_router(&server);
+    let app = create_test_router(server);
 
     let csv_content = r#"region_id,model_id,model_name,provider,input_price,output_price,batch_input_price,batch_output_price,cache_write_price,cache_read_price,timestamp
 us-east-1,test-csv-model,Test CSV Model,TestProvider,0.001,0.005,,,0.0006,0.0001,2024-01-15T10:30:00Z
@@ -308,13 +353,13 @@ us-west-2,test-csv-model-2,Test CSV Model 2,TestProvider,0.002,0.006,,,,,2024-01
     assert_eq!(result["total_processed"], 2);
 }
 
-#[tokio::test]
-async fn test_bulk_update_empty_csv() {
-    let server = create_test_server().await;
+database_test!(test_bulk_update_from_csv, test_bulk_update_from_csv_impl);
+
+async fn test_bulk_update_empty_csv_impl(server: &bedrock_sso_proxy::server::Server) {
     let admin_id = setup_test_data(server.database.as_ref()).await;
 
     let admin_token = create_test_token(server.jwt_service.as_ref(), admin_id);
-    let app = create_test_router(&server);
+    let app = create_test_router(server);
 
     let request = Request::builder()
         .method(Method::POST)
@@ -328,13 +373,13 @@ async fn test_bulk_update_empty_csv() {
     assert_eq!(response.status(), StatusCode::BAD_REQUEST);
 }
 
-#[tokio::test]
-async fn test_get_non_existent_model_cost() {
-    let server = create_test_server().await;
+database_test!(test_bulk_update_empty_csv, test_bulk_update_empty_csv_impl);
+
+async fn test_get_non_existent_model_cost_impl(server: &bedrock_sso_proxy::server::Server) {
     let admin_id = setup_test_data(server.database.as_ref()).await;
 
     let admin_token = create_test_token(server.jwt_service.as_ref(), admin_id);
-    let app = create_test_router(&server);
+    let app = create_test_router(server);
 
     let request = Request::builder()
         .method(Method::GET)
@@ -347,12 +392,12 @@ async fn test_get_non_existent_model_cost() {
     assert_eq!(response.status(), StatusCode::NOT_FOUND);
 }
 
-#[tokio::test]
-async fn test_unauthorized_access() {
-    let server = create_test_server().await;
+database_test!(test_get_non_existent_model_cost, test_get_non_existent_model_cost_impl);
+
+async fn test_unauthorized_access_impl(server: &bedrock_sso_proxy::server::Server) {
     setup_test_data(server.database.as_ref()).await;
 
-    let app = create_test_router(&server);
+    let app = create_test_router(server);
 
     // Test without authorization header
     let request = Request::builder()
@@ -365,9 +410,9 @@ async fn test_unauthorized_access() {
     assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
 }
 
-#[tokio::test]
-async fn test_non_admin_access_forbidden() {
-    let server = create_test_server().await;
+database_test!(test_unauthorized_access, test_unauthorized_access_impl);
+
+async fn test_non_admin_access_forbidden_impl(server: &bedrock_sso_proxy::server::Server) {
     setup_test_data(server.database.as_ref()).await;
 
     // Create a regular user
@@ -384,7 +429,7 @@ async fn test_non_admin_access_forbidden() {
     let user_id = server.database.users().upsert(&user).await.unwrap();
 
     let user_token = create_test_token(server.jwt_service.as_ref(), user_id);
-    let app = create_test_router(&server);
+    let app = create_test_router(server);
 
     let request = Request::builder()
         .method(Method::GET)
@@ -396,3 +441,7 @@ async fn test_non_admin_access_forbidden() {
     let response = app.oneshot(request).await.unwrap();
     assert_eq!(response.status(), StatusCode::FORBIDDEN);
 }
+
+database_test!(test_non_admin_access_forbidden, test_non_admin_access_forbidden_impl);
+
+// PostgreSQL variants are automatically generated by the database_test! macro for all tests

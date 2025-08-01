@@ -4,7 +4,7 @@ use axum::{
 };
 use std::sync::Arc;
 mod common;
-use common::{RequestBuilder, TestHarness};
+use common::{RequestBuilder, TestHarness, PostgresTestDb};
 
 #[tokio::test]
 async fn test_integration_jwt_token_validation() {
@@ -161,4 +161,126 @@ async fn test_integration_token_expiration_edge_cases() {
         status,
         body_str
     );
+}
+
+// PostgreSQL test variants
+// These tests run the same logic but with a PostgreSQL database backend
+
+#[tokio::test]
+async fn test_postgres_jwt_token_validation() {
+    let postgres_db = match PostgresTestDb::new().await {
+        Ok(db) => db,
+        Err(_) => {
+            println!("Skipping PostgreSQL test - database not available");
+            return;
+        }
+    };
+
+    let harness = TestHarness::with_postgres_and_secret(&postgres_db, "postgres-jwt-secret").await;
+    let created_user_id = harness.create_test_user("postgres_test1@example.com").await;
+    let token = harness.create_integration_token(created_user_id);
+
+    // Verify we can decode the token
+    let claims = harness.verify_token(&token).unwrap();
+    assert_eq!(claims.sub, created_user_id); // sub field now contains the user_id
+
+    // Clean up
+    let _ = postgres_db.cleanup().await;
+}
+
+#[tokio::test]
+async fn test_postgres_server_with_real_jwt() {
+    let postgres_db = match PostgresTestDb::new().await {
+        Ok(db) => db,
+        Err(_) => {
+            println!("Skipping PostgreSQL test - database not available");
+            return;
+        }
+    };
+
+    let harness = TestHarness::with_postgres_and_secret(&postgres_db, "postgres-jwt-secret-456").await;
+    let created_user_id = harness.create_test_user("postgres_test2@example.com").await;
+
+    let token = harness.create_integration_token(created_user_id);
+
+    let request = RequestBuilder::health_with_auth(&token);
+
+    let response = harness.make_request(request).await;
+    assert_eq!(response.status(), StatusCode::OK);
+
+    // Clean up
+    let _ = postgres_db.cleanup().await;
+}
+
+#[tokio::test]
+async fn test_postgres_invalid_signature() {
+    let postgres_db = match PostgresTestDb::new().await {
+        Ok(db) => db,
+        Err(_) => {
+            println!("Skipping PostgreSQL test - database not available");
+            return;
+        }
+    };
+
+    let harness = TestHarness::with_postgres(&postgres_db).await;
+    let created_user_id = harness.create_test_user("postgres_test3@example.com").await;
+
+    // Create token with different secret (will fail validation)
+    let postgres_db2 = PostgresTestDb::new().await.unwrap();
+    let wrong_harness = TestHarness::with_postgres_and_secret(&postgres_db2, "wrong-secret").await;
+    let token = wrong_harness.create_integration_token(created_user_id);
+
+    let request =
+        RequestBuilder::invoke_model_with_auth("test-model", &token, r#"{"messages": []}"#);
+
+    let response = harness.make_request(request).await;
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+
+    // Clean up
+    let _ = postgres_db.cleanup().await;
+    let _ = postgres_db2.cleanup().await;
+}
+
+#[tokio::test]
+async fn test_postgres_concurrent_requests() {
+    let postgres_db = match PostgresTestDb::new().await {
+        Ok(db) => db,
+        Err(_) => {
+            println!("Skipping PostgreSQL test - database not available");
+            return;
+        }
+    };
+
+    let harness = Arc::new(TestHarness::with_postgres(&postgres_db).await);
+    let created_user_id = harness.create_test_user("postgres_test_concurrent@example.com").await;
+    let token = harness.create_integration_token(created_user_id);
+
+    // Create multiple concurrent requests
+    let mut handles = vec![];
+
+    for i in 0..5 { // Reduce concurrency for PostgreSQL tests
+        let harness_clone = harness.clone();
+        let token_clone = token.clone();
+
+        let handle = tokio::spawn(async move {
+            let request = RequestBuilder::health_with_check_and_auth("all", &token_clone);
+
+            let response = harness_clone.make_request(request).await;
+            (i, response.status())
+        });
+
+        handles.push(handle);
+    }
+
+    // Wait for all requests to complete
+    let results = futures_util::future::join_all(handles).await;
+
+    // Verify all requests succeeded
+    for result in results {
+        let (i, status) = result.unwrap();
+        assert_eq!(status, StatusCode::OK, "Request {} failed", i);
+    }
+
+    // Clean up
+    let _ = postgres_db.cleanup().await;
 }

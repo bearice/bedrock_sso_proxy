@@ -7,6 +7,7 @@ use bedrock_sso_proxy::{
     Config, Server, auth::OAuthClaims, database::entities::UserRecord,
     test_utils::TestServerBuilder,
 };
+use uuid::Uuid;
 use chrono::Utc;
 use jsonwebtoken::{Algorithm, DecodingKey, EncodingKey, Header, Validation, decode, encode};
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -79,6 +80,41 @@ impl TestHarness {
             .with_config(config.clone())
             .with_jwt_secret(secret.to_string())
             .with_mock_aws() // Use mock AWS client for security tests
+            .build()
+            .await;
+
+        let app = server.create_app();
+
+        Self {
+            jwt_secret: secret.to_string(),
+            config,
+            app,
+            server,
+        }
+    }
+
+    /// Create test harness with PostgreSQL database
+    pub async fn with_postgres(postgres_db: &PostgresTestDb) -> Self {
+        Self::with_postgres_and_secret(postgres_db, "test-secret-123").await
+    }
+
+    /// Create test harness with PostgreSQL database and custom secret
+    pub async fn with_postgres_and_secret(postgres_db: &PostgresTestDb, secret: &str) -> Self {
+        let mut config = Config::default();
+        config.jwt.secret = secret.to_string();
+        config.database.url = postgres_db.database_url.clone();
+        config.database.enabled = true;
+
+        // Disable API keys for focused JWT testing
+        config.api_keys.enabled = false;
+
+        // Add test AWS credentials for integration tests
+        config.aws.access_key_id = Some("test-access-key".to_string());
+        config.aws.secret_access_key = Some("test-secret-key".to_string());
+
+        let server = TestServerBuilder::new()
+            .with_config(config.clone())
+            .with_jwt_secret(secret.to_string())
             .build()
             .await;
 
@@ -300,6 +336,91 @@ impl RequestBuilder {
             .header("Content-Type", "application/json")
             .body(Body::from(body.to_string()))
             .unwrap()
+    }
+}
+
+/// PostgreSQL test utilities for temporary database management
+pub struct PostgresTestDb {
+    pub database_name: String,
+    pub database_url: String,
+}
+
+impl PostgresTestDb {
+    /// Create a new temporary PostgreSQL database for testing
+    pub async fn new() -> Result<Self, Box<dyn std::error::Error>> {
+        let database_name = format!("test_db_{}", Uuid::new_v4().to_string().replace('-', "_"));
+        let base_url = std::env::var("TEST_POSTGRES_URL")
+            .unwrap_or_else(|_| "postgresql://localhost/postgres".to_string());
+        let base_without_db = base_url.trim_end_matches("/postgres");
+        let database_url = format!("{}/{}", base_without_db, database_name);
+
+        // Connect to postgres database to create the test database
+        let pool = sqlx::postgres::PgPool::connect(&base_url).await?;
+        
+        // Create the temporary database
+        sqlx::query(&format!("CREATE DATABASE \"{}\"", database_name))
+            .execute(&pool)
+            .await?;
+        
+        pool.close().await;
+
+        Ok(Self {
+            database_name,
+            database_url,
+        })
+    }
+
+    /// Clean up the temporary database
+    pub async fn cleanup(&self) -> Result<(), Box<dyn std::error::Error>> {
+        let base_url = std::env::var("TEST_POSTGRES_URL")
+            .unwrap_or_else(|_| "postgresql://localhost/postgres".to_string());
+        let pool = sqlx::postgres::PgPool::connect(&base_url).await?;
+        
+        // Terminate any existing connections to the database
+        sqlx::query(&format!(
+            "SELECT pg_terminate_backend(pid) 
+             FROM pg_stat_activity 
+             WHERE datname = '{}' AND pid <> pg_backend_pid()",
+            self.database_name
+        ))
+        .execute(&pool)
+        .await?;
+        
+        // Drop the temporary database
+        sqlx::query(&format!("DROP DATABASE \"{}\"", self.database_name))
+            .execute(&pool)
+            .await?;
+        
+        pool.close().await;
+        Ok(())
+    }
+}
+
+impl Drop for PostgresTestDb {
+    fn drop(&mut self) {
+        // Attempt cleanup in drop, but don't panic if it fails
+        // The database will be cleaned up when the postgres server restarts
+        let database_name = self.database_name.clone();
+        tokio::spawn(async move {
+            let base_url = std::env::var("TEST_POSTGRES_URL")
+                .unwrap_or_else(|_| "postgresql://localhost/postgres".to_string());
+            if let Ok(pool) = sqlx::postgres::PgPool::connect(&base_url).await {
+                let _ = sqlx::query(&format!(
+                    "SELECT pg_terminate_backend(pid) 
+                     FROM pg_stat_activity 
+                     WHERE datname = '{}' AND pid <> pg_backend_pid()",
+                    database_name
+                ))
+                .execute(&pool)
+                .await;
+                
+                let _ = sqlx::query(&format!("DROP DATABASE \"{}\"", database_name))
+                    .execute(&pool)
+                    .await;
+                
+                pool.close().await;
+            }
+        });
     }
 }
 
