@@ -203,12 +203,20 @@ impl UsageTrackingService {
             cost_usd: cost_usd.map(|c| Decimal::from_f64_retain(c).unwrap_or_default()),
         };
 
+        // Get usage DAO once and reuse it
+        let usage_dao = self.database.usage();
+        
         // Store usage record
-        self.database
-            .usage()
+        usage_dao
             .store_record(&usage_record)
             .await
-            .map_err(|e| AppError::Internal(format!("Failed to store usage record: {}", e)))?;
+            .map_err(AppError::Database)?;
+
+        // Update hourly summary
+        usage_dao
+            .update_hourly_summary(&usage_record)
+            .await
+            .map_err(AppError::Database)?;
 
         Ok(())
     }

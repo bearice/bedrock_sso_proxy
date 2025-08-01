@@ -1,5 +1,6 @@
 use crate::database::entities::{UsageRecord, UsageSummary, usage_records, usage_summaries};
 use crate::database::{DatabaseError, DatabaseResult};
+use crate::summarization::aggregator::PeriodType;
 use chrono::{DateTime, Utc};
 use rust_decimal::Decimal;
 use sea_orm::{
@@ -69,6 +70,110 @@ impl UsageDao {
 
         active_model
             .insert(&self.db)
+            .await
+            .map_err(|e| DatabaseError::Database(e.to_string()))?;
+
+        Ok(())
+    }
+
+    /// Update or insert hourly summary record based on usage record using atomic upsert
+    pub async fn update_hourly_summary(&self, usage_record: &UsageRecord) -> DatabaseResult<()> {
+        let now = Utc::now();
+        
+        // Calculate hourly period boundaries
+        let period_start = PeriodType::Hourly.round_start(usage_record.request_time);
+        let period_end = PeriodType::Hourly.period_end(period_start);
+
+        // Create summary record for new entry (INSERT case)
+        let new_summary = usage_summaries::ActiveModel {
+            id: ActiveValue::NotSet,
+            user_id: Set(usage_record.user_id),
+            model_id: Set(usage_record.model_id.clone()),
+            period_type: Set(PeriodType::Hourly.as_str().to_string()),
+            period_start: Set(period_start),
+            period_end: Set(period_end),
+            total_requests: Set(1), // First request for this hour
+            total_input_tokens: Set(usage_record.input_tokens as i64),
+            total_output_tokens: Set(usage_record.output_tokens as i64),
+            total_tokens: Set(usage_record.total_tokens as i64),
+            avg_response_time_ms: Set(usage_record.response_time_ms as f32),
+            success_rate: Set(if usage_record.success { 1.0 } else { 0.0 }),
+            estimated_cost: Set(usage_record.cost_usd),
+            created_at: Set(now),
+            updated_at: Set(now),
+        };
+
+        // Use SQL upsert with increment expressions for UPDATE case
+        let success_increment = if usage_record.success { 1.0 } else { 0.0 };
+
+        // Build the upsert query with proper aggregation logic
+        let on_conflict = OnConflict::columns([
+            usage_summaries::Column::UserId,
+            usage_summaries::Column::ModelId,
+            usage_summaries::Column::PeriodType,
+            usage_summaries::Column::PeriodStart,
+        ])
+        .update_columns([
+            usage_summaries::Column::PeriodEnd,
+            usage_summaries::Column::UpdatedAt,
+        ])
+        // For numerical fields, we need to use expressions to increment values
+        .value(
+            usage_summaries::Column::TotalRequests,
+            sea_orm::sea_query::Expr::col(usage_summaries::Column::TotalRequests).add(1),
+        )
+        .value(
+            usage_summaries::Column::TotalInputTokens,
+            sea_orm::sea_query::Expr::col(usage_summaries::Column::TotalInputTokens).add(usage_record.input_tokens as i64),
+        )
+        .value(
+            usage_summaries::Column::TotalOutputTokens,
+            sea_orm::sea_query::Expr::col(usage_summaries::Column::TotalOutputTokens).add(usage_record.output_tokens as i64),
+        )
+        .value(
+            usage_summaries::Column::TotalTokens,
+            sea_orm::sea_query::Expr::col(usage_summaries::Column::TotalTokens).add(usage_record.total_tokens as i64),
+        )
+        // Calculate weighted average response time: (old_avg * old_count + new_value) / (old_count + 1)
+        .value(
+            usage_summaries::Column::AvgResponseTimeMs,
+            sea_orm::sea_query::Expr::expr(
+                sea_orm::sea_query::Expr::col(usage_summaries::Column::AvgResponseTimeMs)
+                    .mul(sea_orm::sea_query::Expr::col(usage_summaries::Column::TotalRequests))
+                    .add(usage_record.response_time_ms as f32)
+            ).div(
+                sea_orm::sea_query::Expr::col(usage_summaries::Column::TotalRequests).add(1)
+            ),
+        )
+        // Calculate weighted average success rate: (old_rate * old_count + new_success) / (old_count + 1)
+        .value(
+            usage_summaries::Column::SuccessRate,
+            sea_orm::sea_query::Expr::expr(
+                sea_orm::sea_query::Expr::col(usage_summaries::Column::SuccessRate)
+                    .mul(sea_orm::sea_query::Expr::col(usage_summaries::Column::TotalRequests))
+                    .add(success_increment)
+            ).div(
+                sea_orm::sea_query::Expr::col(usage_summaries::Column::TotalRequests).add(1)
+            ),
+        )
+        // Add to existing cost (handle NULL case)
+        .value(
+            usage_summaries::Column::EstimatedCost,
+            match usage_record.cost_usd {
+                Some(cost) => sea_orm::sea_query::Expr::expr(
+                    sea_orm::sea_query::Func::coalesce([
+                        sea_orm::sea_query::Expr::col(usage_summaries::Column::EstimatedCost).into(),
+                        sea_orm::sea_query::Expr::val(Decimal::ZERO).into(),
+                    ])
+                ).add(cost),
+                None => sea_orm::sea_query::Expr::col(usage_summaries::Column::EstimatedCost).into(),
+            },
+        )
+        .to_owned();
+
+        usage_summaries::Entity::insert(new_summary)
+            .on_conflict(on_conflict)
+            .exec(&self.db)
             .await
             .map_err(|e| DatabaseError::Database(e.to_string()))?;
 
