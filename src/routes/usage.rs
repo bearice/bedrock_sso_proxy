@@ -121,9 +121,9 @@ async fn get_user_usage_records(
         model_id: params.model.clone(),
         start_date: params.start_date,
         end_date: params.end_date,
-        success_only: None,
         limit: Some(limit),
         offset: Some(offset),
+        ..Default::default()
     };
 
     let records = server.database.usage().get_records(&query).await?;
@@ -167,12 +167,9 @@ async fn get_user_usage_stats(
 
     let query = UsageQuery {
         user_id: Some(user_id),
-        model_id: None,
         start_date: params.start_date,
         end_date: params.end_date,
-        success_only: None,
-        limit: None,
-        offset: None,
+        ..Default::default()
     };
 
     let stats = server.database.usage().get_stats(&query).await?;
@@ -208,13 +205,13 @@ async fn get_system_usage_records(
     let offset = params.offset.unwrap_or(0);
 
     let query = UsageQuery {
-        user_id: None, // All users
         model_id: params.model.clone(),
         start_date: params.start_date,
         end_date: params.end_date,
         success_only: params.success_only,
         limit: Some(limit),
         offset: Some(offset),
+        ..Default::default()
     };
 
     let records = server.database.usage().get_records(&query).await?;
@@ -253,13 +250,9 @@ async fn get_system_usage_stats(
     // Admin permissions already checked by middleware
 
     let query = UsageQuery {
-        user_id: None, // All users
-        model_id: None,
         start_date: params.start_date,
         end_date: params.end_date,
-        success_only: None,
-        limit: None,
-        offset: None,
+        ..Default::default()
     };
 
     let stats = server.database.usage().get_stats(&query).await?;
@@ -292,13 +285,10 @@ async fn get_top_models(
     // Admin permissions already checked by middleware
 
     let query = UsageQuery {
-        user_id: None,  // All users
-        model_id: None, // All models
         start_date: params.start_date,
         end_date: params.end_date,
-        success_only: None,
         limit: Some(10), // Top 10 models
-        offset: None,
+        ..Default::default()
     };
 
     // Get usage records and aggregate by model

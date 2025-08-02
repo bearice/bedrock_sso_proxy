@@ -31,6 +31,9 @@ impl TestServerBuilder {
     /// Use a real database instead of in-memory SQLite
     pub fn with_real_database(mut self) -> Self {
         self.use_memory_db = false;
+        // Use a temporary file for the test database
+        let temp_file = std::env::temp_dir().join(format!("test_bedrock_sso_{}.db", std::process::id()));
+        self.config.database.url = format!("sqlite://{}?mode=rwc", temp_file.to_string_lossy());
         self
     }
 
@@ -306,10 +309,35 @@ mod tests {
 
     #[tokio::test]
     async fn test_server_builder_with_real_database() {
+        // Clean up any existing test database files
+        let temp_dir = std::env::temp_dir();
+        if let Ok(entries) = std::fs::read_dir(&temp_dir) {
+            for entry in entries.flatten() {
+                if let Some(name) = entry.file_name().to_str() {
+                    if name.starts_with("test_bedrock_sso_") && name.ends_with(".db") {
+                        let _ = std::fs::remove_file(entry.path());
+                    }
+                }
+            }
+        }
+
         let server = TestServerBuilder::new().with_real_database().build().await;
 
         // Should not use in-memory database
         assert_ne!(server.config.database.url, "sqlite::memory:");
+        // Should use a temporary file path
+        assert!(server.config.database.url.starts_with("sqlite://"));
+        assert!(server.config.database.url.contains("test_bedrock_sso_"));
+
+        // Clean up the test database file after test
+        let db_url = &server.config.database.url;
+        if let Some(path_start) = db_url.find("://") {
+            let path_part = &db_url[path_start + 3..];
+            if let Some(path_end) = path_part.find('?') {
+                let file_path = &path_part[..path_end];
+                let _ = std::fs::remove_file(file_path);
+            }
+        }
     }
 
     #[tokio::test]

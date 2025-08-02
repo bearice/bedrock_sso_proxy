@@ -25,8 +25,6 @@ pub struct RetentionConfig {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ScheduleConfig {
-    /// Cron expression for hourly jobs
-    pub hourly: String,
     /// Cron expression for daily jobs
     pub daily: String,
     /// Cron expression for weekly jobs
@@ -46,7 +44,6 @@ impl Default for SummarizationConfig {
                 summaries_days: 365,
             },
             schedules: ScheduleConfig {
-                hourly: "0 * * * *".to_string(),  // Every hour at minute 0
                 daily: "0 2 * * *".to_string(),   // Daily at 2 AM
                 weekly: "0 3 * * 0".to_string(),  // Weekly on Sunday at 3 AM
                 monthly: "0 4 1 * *".to_string(), // Monthly on 1st at 4 AM

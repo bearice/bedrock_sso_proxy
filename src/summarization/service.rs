@@ -1,244 +1,214 @@
 use crate::{
-    database::{DatabaseManager, entities::UsageSummary},
+    database::DatabaseManager,
     error::AppError,
+    summarization::aggregator::SummaryAggregator,
+    database::entities::PeriodType,
 };
-use chrono::{DateTime, Datelike, Duration, Timelike, Utc};
-use rust_decimal::Decimal;
-use std::collections::HashMap;
+use chrono::{Duration, Utc};
+use std::sync::Arc;
 use tracing::info;
 
-/// Core summarization service extracted from maintenance CLI
+/// Core summarization service using hierarchical aggregation
 pub struct SummarizationService {
-    database: std::sync::Arc<dyn DatabaseManager>,
+    database: Arc<dyn DatabaseManager>,
+    aggregator: SummaryAggregator,
 }
 
 impl SummarizationService {
-    pub fn new(database: std::sync::Arc<dyn DatabaseManager>) -> Self {
-        Self { database }
+    pub fn new(database: Arc<dyn DatabaseManager>) -> Self {
+        let aggregator = SummaryAggregator::new(database.clone());
+        Self { database, aggregator }
     }
 
-    /// Generate usage summaries for a specific period and time range
+    /// Generate usage summaries for a specific period using hierarchical aggregation
     pub async fn generate_summaries(
         &self,
         period: &str,
         days_back: u32,
         user_id_filter: Option<i32>,
         model_id_filter: Option<&str>,
+        backfill: bool,
     ) -> Result<usize, AppError> {
-        use crate::database::dao::usage::UsageQuery;
+        let period_type = match period {
+            "hourly" => {
+                tracing::warn!(
+                    "Hourly summaries are now updated in real-time after each usage record. \
+                    Manual hourly generation is only needed for backfilling historical data."
+                );
+                PeriodType::Hourly
+            },
+            "daily" => PeriodType::Daily,
+            "weekly" => PeriodType::Weekly,
+            "monthly" => PeriodType::Monthly,
+            _ => return Err(AppError::Internal(format!("Invalid period type: {}", period))),
+        };
 
         let end_date = Utc::now();
         let start_date = end_date - Duration::days(days_back as i64);
+        let cutoff_date = period_type.round_start(start_date);
 
+        let mode_description = if backfill { "backfill" } else { "incremental" };
         info!(
-            "Generating {} summaries from {} to {}",
+            "Generating {} summaries from {} to {} using hierarchical aggregation (mode: {})",
             period,
             start_date.format("%Y-%m-%d %H:%M:%S"),
-            end_date.format("%Y-%m-%d %H:%M:%S")
+            end_date.format("%Y-%m-%d %H:%M:%S"),
+            mode_description
         );
 
-        // Get all usage records within the specified time range
-        let query = UsageQuery {
-            user_id: user_id_filter,
-            model_id: model_id_filter.map(|s| s.to_string()),
-            start_date: Some(start_date),
-            end_date: Some(end_date),
-            success_only: None,
-            limit: None,
-            offset: None,
-        };
+        // Use the unified efficient approach for both modes
+        self.generate_summaries_internal(period_type, Some(cutoff_date), Some(end_date), user_id_filter, model_id_filter, backfill).await
+    }
 
-        let records = self
-            .database
-            .usage()
-            .get_records(&query)
-            .await
-            .map_err(|e| AppError::Internal(format!("Failed to get usage records: {}", e)))?;
+    /// Generate summaries for specific periods (used by job system)
+    pub async fn generate_period_summaries(&self, period_type: PeriodType) -> Result<usize, AppError> {
+        info!("Generating {} summaries using hierarchical aggregation", period_type.as_str());
 
-        info!("Found {} usage records to process", records.len());
+        // Use the unified efficient approach without date limits
+        self.generate_summaries_internal(period_type, None, None, None, None, false).await
+    }
 
-        if records.is_empty() {
-            info!("No records found for the specified criteria");
-            return Ok(0);
-        }
+    /// Internal unified method for generating summaries with efficient high-water mark approach
+    async fn generate_summaries_internal(
+        &self,
+        period_type: PeriodType,
+        start_limit: Option<chrono::DateTime<Utc>>,
+        end_limit: Option<chrono::DateTime<Utc>>,
+        user_id_filter: Option<i32>,
+        model_id_filter: Option<&str>,
+        backfill: bool,
+    ) -> Result<usize, AppError> {
+        let mut total_summaries = 0;
 
-        // Group records by (user_id, model_id, period)
-        let mut summary_groups: HashMap<(i32, String, String, DateTime<Utc>), Vec<_>> =
-            HashMap::new();
+        if backfill && start_limit.is_some() && end_limit.is_some() {
+            // Backfill mode: Process all periods within the date range
+            let mut current_period_start = start_limit.unwrap();
+            let end_date = end_limit.unwrap();
 
-        for record in records {
-            let period_start = self.calculate_period_start(period, record.request_time)?;
-            let key = (
-                record.user_id,
-                record.model_id.clone(),
-                period.to_string(),
-                period_start,
-            );
-            summary_groups.entry(key).or_default().push(record);
-        }
+            while current_period_start < end_date {
+                let period_end = period_type.period_end(current_period_start);
 
-        info!("Created {} summary groups", summary_groups.len());
+                if current_period_start >= end_date {
+                    break;
+                }
 
-        // Generate and store summaries for each group
-        let mut summaries_created = 0;
-        for ((user_id, model_id, period_type, period_start), group_records) in summary_groups {
-            let period_end = self.calculate_period_end(period, period_start)?;
-            let summary = self.create_summary(
-                user_id,
-                model_id,
-                period_type,
-                period_start,
-                period_end,
-                group_records,
-            )?;
+                info!(
+                    "Processing {} period (backfill): {} to {}",
+                    period_type.as_str(),
+                    current_period_start.format("%Y-%m-%d %H:%M:%S"),
+                    period_end.format("%Y-%m-%d %H:%M:%S")
+                );
 
-            self.database
-                .usage()
-                .upsert_summary(&summary)
+                let summaries = self.aggregator
+                    .generate_summaries_with_mode(period_type, current_period_start, backfill)
+                    .await
+                    .map_err(|e| AppError::Internal(format!("Failed to generate summaries: {}", e)))?;
+
+                if !summaries.is_empty() {
+                    let filtered_summaries = Self::apply_filters(summaries, user_id_filter, model_id_filter);
+                    let stored_count = self.aggregator
+                        .store_summaries(&filtered_summaries)
+                        .await
+                        .map_err(|e| AppError::Internal(format!("Failed to store summaries: {}", e)))?;
+
+                    total_summaries += stored_count;
+
+                    if stored_count > 0 {
+                        info!(
+                            "Stored {} {} summaries for period {} to {} (backfill)",
+                            stored_count,
+                            period_type.as_str(),
+                            current_period_start.format("%Y-%m-%d %H:%M:%S"),
+                            period_end.format("%Y-%m-%d %H:%M:%S")
+                        );
+                    }
+                }
+
+                current_period_start = period_end;
+            }
+        } else {
+            // Incremental mode: Use high-water mark approach (efficient)
+            while let Some(period_start) = self.aggregator
+                .get_next_period_to_process(period_type)
                 .await
-                .map_err(|e| AppError::Internal(format!("Failed to upsert summary: {}", e)))?;
+                .map_err(|e| AppError::Internal(format!("Failed to get next period: {}", e)))?
+            {
+                // Apply date range limits if specified
+                if let Some(cutoff_date) = start_limit {
+                    if period_start < cutoff_date {
+                        continue;
+                    }
+                }
+                if let Some(end_date) = end_limit {
+                    if period_start >= end_date {
+                        break;
+                    }
+                }
 
-            summaries_created += 1;
+                info!(
+                    "Processing {} period (incremental): {}",
+                    period_type.as_str(),
+                    period_start.format("%Y-%m-%d %H:%M:%S")
+                );
 
-            if summaries_created % 100 == 0 {
-                info!("Created {} summaries...", summaries_created);
+                let summaries = self.aggregator
+                    .generate_summaries(period_type, period_start)
+                    .await
+                    .map_err(|e| AppError::Internal(format!("Failed to generate summaries: {}", e)))?;
+
+                if !summaries.is_empty() {
+                    let filtered_summaries = Self::apply_filters(summaries, user_id_filter, model_id_filter);
+                    let stored_count = self.aggregator
+                        .store_summaries(&filtered_summaries)
+                        .await
+                        .map_err(|e| AppError::Internal(format!("Failed to store summaries: {}", e)))?;
+
+                    total_summaries += stored_count;
+
+                    if stored_count > 0 {
+                        info!(
+                            "Stored {} {} summaries for period {} (incremental)",
+                            stored_count,
+                            period_type.as_str(),
+                            period_start.format("%Y-%m-%d %H:%M:%S")
+                        );
+                    }
+                } else {
+                    // No summaries generated, break to avoid infinite loop
+                    break;
+                }
             }
         }
 
         info!(
-            "Successfully created/updated {} summaries",
-            summaries_created
+            "Successfully created/updated {} {} summaries using hierarchical aggregation",
+            total_summaries, period_type.as_str()
         );
-        Ok(summaries_created)
+        Ok(total_summaries)
     }
 
-    /// Calculate the start of a period for a given timestamp
-    fn calculate_period_start(
-        &self,
-        period: &str,
-        timestamp: DateTime<Utc>,
-    ) -> Result<DateTime<Utc>, AppError> {
-        match period {
-            "hourly" => Ok(timestamp
-                .date_naive()
-                .and_hms_opt(timestamp.hour(), 0, 0)
-                .unwrap()
-                .and_utc()),
-            "daily" => Ok(timestamp
-                .date_naive()
-                .and_hms_opt(0, 0, 0)
-                .unwrap()
-                .and_utc()),
-            "weekly" => {
-                let days_since_monday = timestamp.weekday().num_days_from_monday();
-                let start_of_week = timestamp - Duration::days(days_since_monday as i64);
-                Ok(start_of_week
-                    .date_naive()
-                    .and_hms_opt(0, 0, 0)
-                    .unwrap()
-                    .and_utc())
-            }
-            "monthly" => Ok(timestamp
-                .date_naive()
-                .with_day(1)
-                .unwrap()
-                .and_hms_opt(0, 0, 0)
-                .unwrap()
-                .and_utc()),
-            _ => Err(AppError::Internal(format!(
-                "Invalid period type: {}",
-                period
-            ))),
-        }
-    }
-
-    /// Calculate the end of a period for a given start time
-    fn calculate_period_end(
-        &self,
-        period: &str,
-        period_start: DateTime<Utc>,
-    ) -> Result<DateTime<Utc>, AppError> {
-        match period {
-            "hourly" => Ok(period_start + Duration::hours(1) - Duration::seconds(1)),
-            "daily" => Ok(period_start + Duration::days(1) - Duration::seconds(1)),
-            "weekly" => Ok(period_start + Duration::weeks(1) - Duration::seconds(1)),
-            "monthly" => {
-                let next_month = if period_start.month() == 12 {
-                    period_start
-                        .with_year(period_start.year() + 1)
-                        .unwrap()
-                        .with_month(1)
-                        .unwrap()
-                } else {
-                    period_start.with_month(period_start.month() + 1).unwrap()
-                };
-                Ok(next_month - Duration::seconds(1))
-            }
-            _ => Err(AppError::Internal(format!(
-                "Invalid period type: {}",
-                period
-            ))),
-        }
-    }
-
-    /// Create a summary from a group of usage records
-    fn create_summary(
-        &self,
-        user_id: i32,
-        model_id: String,
-        period_type: String,
-        period_start: DateTime<Utc>,
-        period_end: DateTime<Utc>,
-        records: Vec<crate::database::entities::UsageRecord>,
-    ) -> Result<UsageSummary, AppError> {
-        let total_requests = records.len() as u32;
-        let total_input_tokens = records.iter().map(|r| r.input_tokens as i64).sum();
-        let total_output_tokens = records.iter().map(|r| r.output_tokens as i64).sum();
-        let total_tokens = records.iter().map(|r| r.total_tokens as i64).sum();
-
-        let avg_response_time_ms = if !records.is_empty() {
-            records
-                .iter()
-                .map(|r| r.response_time_ms as f32)
-                .sum::<f32>()
-                / records.len() as f32
-        } else {
-            0.0
-        };
-
-        let success_count = records.iter().filter(|r| r.success).count();
-        let success_rate = if !records.is_empty() {
-            success_count as f32 / records.len() as f32
-        } else {
-            0.0
-        };
-
-        let estimated_cost = records
-            .iter()
-            .filter_map(|r| r.cost_usd)
-            .fold(Decimal::ZERO, |acc, cost| acc + cost);
-
-        Ok(UsageSummary {
-            id: 0, // Will be set by database
-            user_id,
-            model_id,
-            period_type,
-            period_start,
-            period_end,
-            total_requests,
-            total_input_tokens,
-            total_output_tokens,
-            total_tokens,
-            avg_response_time_ms,
-            success_rate,
-            estimated_cost: if estimated_cost > Decimal::ZERO {
-                Some(estimated_cost)
-            } else {
-                None
-            },
-            created_at: Utc::now(),
-            updated_at: Utc::now(),
-        })
+    /// Helper method to apply user_id and model_id filters
+    fn apply_filters(
+        summaries: Vec<crate::database::entities::UsageSummary>,
+        user_id_filter: Option<i32>,
+        model_id_filter: Option<&str>,
+    ) -> Vec<crate::database::entities::UsageSummary> {
+        summaries
+            .into_iter()
+            .filter(|s| {
+                if let Some(uid) = user_id_filter {
+                    if s.user_id != uid {
+                        return false;
+                    }
+                }
+                if let Some(mid) = model_id_filter {
+                    if s.model_id != mid {
+                        return false;
+                    }
+                }
+                true
+            })
+            .collect()
     }
 
     /// Clean up old usage records

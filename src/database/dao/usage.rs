@@ -1,6 +1,7 @@
-use crate::database::entities::{UsageRecord, UsageSummary, usage_records, usage_summaries};
+use crate::database::entities::{
+    PeriodType, UsageRecord, UsageSummary, usage_records, usage_summaries,
+};
 use crate::database::{DatabaseError, DatabaseResult};
-use crate::summarization::aggregator::PeriodType;
 use chrono::{DateTime, Utc};
 use rust_decimal::Decimal;
 use sea_orm::{
@@ -9,32 +10,41 @@ use sea_orm::{
 };
 use sea_orm_migration::sea_query::OnConflict;
 
+#[derive(Debug, Clone, Default)]
+pub enum SortOrder {
+    Asc,
+    #[default]
+    Desc,
+}
+
 /// Usage query parameters
 #[derive(Debug, Default)]
 pub struct UsageQuery {
     pub user_id: Option<i32>,
     pub model_id: Option<String>,
+    pub period_type: Option<PeriodType>,
     pub start_date: Option<DateTime<Utc>>,
     pub end_date: Option<DateTime<Utc>>,
     pub success_only: Option<bool>,
     pub limit: Option<u32>,
     pub offset: Option<u32>,
+    pub sort_order: SortOrder,
 }
 
 /// Usage statistics
 #[derive(Debug, serde::Serialize, utoipa::ToSchema)]
 pub struct UsageStats {
-    pub total_requests: u32,
+    pub total_requests: i32,
     pub total_input_tokens: u64,
     pub total_output_tokens: u64,
     pub total_tokens: u64,
     pub avg_response_time_ms: f32,
     pub success_rate: f32,
     pub total_cost: Option<Decimal>,
-    pub unique_models: u32,
+    pub unique_models: i32,
     /// Start date of the statistics period
     pub start_date: DateTime<Utc>,
-    /// End date of the statistics period  
+    /// End date of the statistics period
     pub end_date: DateTime<Utc>,
 }
 
@@ -79,7 +89,7 @@ impl UsageDao {
     /// Update or insert hourly summary record based on usage record using atomic upsert
     pub async fn update_hourly_summary(&self, usage_record: &UsageRecord) -> DatabaseResult<()> {
         let now = Utc::now();
-        
+
         // Calculate hourly period boundaries
         let period_start = PeriodType::Hourly.round_start(usage_record.request_time);
         let period_end = PeriodType::Hourly.period_end(period_start);
@@ -89,7 +99,7 @@ impl UsageDao {
             id: ActiveValue::NotSet,
             user_id: Set(usage_record.user_id),
             model_id: Set(usage_record.model_id.clone()),
-            period_type: Set(PeriodType::Hourly.as_str().to_string()),
+            period_type: Set(PeriodType::Hourly),
             period_start: Set(period_start),
             period_end: Set(period_end),
             total_requests: Set(1), // First request for this hour
@@ -120,53 +130,98 @@ impl UsageDao {
         // For numerical fields, we need to use expressions to increment values
         .value(
             usage_summaries::Column::TotalRequests,
-            sea_orm::sea_query::Expr::col(usage_summaries::Column::TotalRequests).add(1),
+            sea_orm::sea_query::Expr::col((
+                usage_summaries::Entity,
+                usage_summaries::Column::TotalRequests,
+            ))
+            .add(1),
         )
         .value(
             usage_summaries::Column::TotalInputTokens,
-            sea_orm::sea_query::Expr::col(usage_summaries::Column::TotalInputTokens).add(usage_record.input_tokens as i64),
+            sea_orm::sea_query::Expr::col((
+                usage_summaries::Entity,
+                usage_summaries::Column::TotalInputTokens,
+            ))
+            .add(usage_record.input_tokens as i64),
         )
         .value(
             usage_summaries::Column::TotalOutputTokens,
-            sea_orm::sea_query::Expr::col(usage_summaries::Column::TotalOutputTokens).add(usage_record.output_tokens as i64),
+            sea_orm::sea_query::Expr::col((
+                usage_summaries::Entity,
+                usage_summaries::Column::TotalOutputTokens,
+            ))
+            .add(usage_record.output_tokens as i64),
         )
         .value(
             usage_summaries::Column::TotalTokens,
-            sea_orm::sea_query::Expr::col(usage_summaries::Column::TotalTokens).add(usage_record.total_tokens as i64),
+            sea_orm::sea_query::Expr::col((
+                usage_summaries::Entity,
+                usage_summaries::Column::TotalTokens,
+            ))
+            .add(usage_record.total_tokens as i64),
         )
         // Calculate weighted average response time: (old_avg * old_count + new_value) / (old_count + 1)
         .value(
             usage_summaries::Column::AvgResponseTimeMs,
             sea_orm::sea_query::Expr::expr(
-                sea_orm::sea_query::Expr::col(usage_summaries::Column::AvgResponseTimeMs)
-                    .mul(sea_orm::sea_query::Expr::col(usage_summaries::Column::TotalRequests))
-                    .add(usage_record.response_time_ms as f32)
-            ).div(
-                sea_orm::sea_query::Expr::col(usage_summaries::Column::TotalRequests).add(1)
+                sea_orm::sea_query::Expr::col((
+                    usage_summaries::Entity,
+                    usage_summaries::Column::AvgResponseTimeMs,
+                ))
+                .mul(sea_orm::sea_query::Expr::col((
+                    usage_summaries::Entity,
+                    usage_summaries::Column::TotalRequests,
+                )))
+                .add(usage_record.response_time_ms as f32),
+            )
+            .div(
+                sea_orm::sea_query::Expr::col((
+                    usage_summaries::Entity,
+                    usage_summaries::Column::TotalRequests,
+                ))
+                .add(1),
             ),
         )
         // Calculate weighted average success rate: (old_rate * old_count + new_success) / (old_count + 1)
         .value(
             usage_summaries::Column::SuccessRate,
             sea_orm::sea_query::Expr::expr(
-                sea_orm::sea_query::Expr::col(usage_summaries::Column::SuccessRate)
-                    .mul(sea_orm::sea_query::Expr::col(usage_summaries::Column::TotalRequests))
-                    .add(success_increment)
-            ).div(
-                sea_orm::sea_query::Expr::col(usage_summaries::Column::TotalRequests).add(1)
+                sea_orm::sea_query::Expr::col((
+                    usage_summaries::Entity,
+                    usage_summaries::Column::SuccessRate,
+                ))
+                .mul(sea_orm::sea_query::Expr::col((
+                    usage_summaries::Entity,
+                    usage_summaries::Column::TotalRequests,
+                )))
+                .add(success_increment),
+            )
+            .div(
+                sea_orm::sea_query::Expr::col((
+                    usage_summaries::Entity,
+                    usage_summaries::Column::TotalRequests,
+                ))
+                .add(1),
             ),
         )
         // Add to existing cost (handle NULL case)
         .value(
             usage_summaries::Column::EstimatedCost,
             match usage_record.cost_usd {
-                Some(cost) => sea_orm::sea_query::Expr::expr(
-                    sea_orm::sea_query::Func::coalesce([
-                        sea_orm::sea_query::Expr::col(usage_summaries::Column::EstimatedCost).into(),
-                        sea_orm::sea_query::Expr::val(Decimal::ZERO).into(),
-                    ])
-                ).add(cost),
-                None => sea_orm::sea_query::Expr::col(usage_summaries::Column::EstimatedCost).into(),
+                Some(cost) => sea_orm::sea_query::Expr::expr(sea_orm::sea_query::Func::coalesce([
+                    sea_orm::sea_query::Expr::col((
+                        usage_summaries::Entity,
+                        usage_summaries::Column::EstimatedCost,
+                    ))
+                    .into(),
+                    sea_orm::sea_query::Expr::val(Decimal::ZERO).into(),
+                ]))
+                .add(cost),
+                None => sea_orm::sea_query::Expr::col((
+                    usage_summaries::Entity,
+                    usage_summaries::Column::EstimatedCost,
+                ))
+                .into(),
             },
         )
         .to_owned();
@@ -202,7 +257,10 @@ impl UsageDao {
         }
 
         // Apply ordering and pagination
-        select = select.order_by_desc(usage_records::Column::RequestTime);
+        match query.sort_order {
+            SortOrder::Desc => select = select.order_by_desc(usage_records::Column::RequestTime),
+            SortOrder::Asc => select = select.order_by_asc(usage_records::Column::RequestTime),
+        }
 
         if let Some(limit) = query.limit {
             select = select.limit(Some(limit as u64));
@@ -230,6 +288,9 @@ impl UsageDao {
         if let Some(ref model_id) = query.model_id {
             select = select.filter(usage_summaries::Column::ModelId.eq(model_id));
         }
+        if let Some(ref period_type) = query.period_type {
+            select = select.filter(usage_summaries::Column::PeriodType.eq(*period_type));
+        }
         if let Some(start_date) = query.start_date {
             select = select.filter(usage_summaries::Column::PeriodStart.gte(start_date));
         }
@@ -248,7 +309,7 @@ impl UsageDao {
         }
 
         // Aggregate across multiple summary records
-        let total_requests: u32 = summaries.iter().map(|s| s.total_requests).sum();
+        let total_requests: i32 = summaries.iter().map(|s| s.total_requests).sum();
         let total_input_tokens: u64 = summaries.iter().map(|s| s.total_input_tokens as u64).sum();
         let total_output_tokens: u64 = summaries.iter().map(|s| s.total_output_tokens as u64).sum();
         let total_tokens: u64 = summaries.iter().map(|s| s.total_tokens as u64).sum();
@@ -286,7 +347,7 @@ impl UsageDao {
             .iter()
             .map(|s| &s.model_id)
             .collect::<std::collections::HashSet<_>>()
-            .len() as u32;
+            .len() as i32;
 
         // Get date range from summaries
         let start_date = summaries
@@ -345,7 +406,7 @@ impl UsageDao {
             .count(&self.db)
             .await
             .map_err(|e| DatabaseError::Database(e.to_string()))?
-            as u32;
+            as i32;
 
         if total_requests == 0 {
             return Ok(UsageStats {
@@ -399,7 +460,7 @@ impl UsageDao {
             .iter()
             .map(|r| &r.model_id)
             .collect::<std::collections::HashSet<_>>()
-            .len() as u32;
+            .len() as i32;
 
         let min_date = records
             .iter()
@@ -436,7 +497,7 @@ impl UsageDao {
             id: ActiveValue::NotSet,
             user_id: Set(summary.user_id),
             model_id: Set(summary.model_id.clone()),
-            period_type: Set(summary.period_type.clone()),
+            period_type: Set(summary.period_type),
             period_start: Set(summary.period_start),
             period_end: Set(summary.period_end),
             total_requests: Set(summary.total_requests),
@@ -489,6 +550,9 @@ impl UsageDao {
         if let Some(ref model_id) = query.model_id {
             select = select.filter(usage_summaries::Column::ModelId.eq(model_id));
         }
+        if let Some(ref period_type) = query.period_type {
+            select = select.filter(usage_summaries::Column::PeriodType.eq(*period_type));
+        }
         if let Some(start_date) = query.start_date {
             select = select.filter(usage_summaries::Column::PeriodStart.gte(start_date));
         }
@@ -497,7 +561,10 @@ impl UsageDao {
         }
 
         // Apply ordering and pagination
-        select = select.order_by_desc(usage_summaries::Column::PeriodStart);
+        match query.sort_order {
+            SortOrder::Desc => select = select.order_by_desc(usage_summaries::Column::PeriodStart),
+            SortOrder::Asc => select = select.order_by_asc(usage_summaries::Column::PeriodStart),
+        }
 
         if let Some(limit) = query.limit {
             select = select.limit(Some(limit as u64));

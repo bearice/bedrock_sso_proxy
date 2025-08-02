@@ -7,6 +7,9 @@ pub mod aggregator;
 pub mod config;
 pub mod service;
 
-pub use aggregator::{PeriodType, SummaryAggregator};
+pub use aggregator::SummaryAggregator;
 pub use config::SummarizationConfig;
 pub use service::SummarizationService;
+
+// Re-export PeriodType from entities
+pub use crate::database::entities::PeriodType;

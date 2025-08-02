@@ -23,28 +23,28 @@ use common::PostgresTestDb;
 macro_rules! database_test {
     ($test_name:ident, $test_impl:ident) => {
         paste::paste! {
-            #[tokio::test]
-            async fn [<sqlite_ $test_name>]() {
-                $test_impl(&create_test_server().await).await;
+                #[tokio::test]
+                async fn [<sqlite_ $test_name>]() {
+                    $test_impl(&create_test_server().await).await;
+                }
+
+                #[tokio::test]
+                async fn [<postgres_ $test_name>]() {
+                    let postgres_db = match PostgresTestDb::new().await {
+                        Ok(db) => db,
+                        Err(_) => {
+                            println!("Skipping PostgreSQL test - database not available");
+                            return;
+                        }
+        };
+
+                    let server = create_postgres_test_server(&postgres_db).await;
+                    $test_impl(&server).await;
+
+                    // Clean up
+                    let _ = postgres_db.cleanup().await;
+                }
             }
-
-            #[tokio::test]
-            async fn [<postgres_ $test_name>]() {
-                let postgres_db = match PostgresTestDb::new().await {
-                    Ok(db) => db,
-                    Err(_) => {
-                        println!("Skipping PostgreSQL test - database not available");
-                        return;
-                    }
-                };
-
-                let server = create_postgres_test_server(&postgres_db).await;
-                $test_impl(&server).await;
-
-                // Clean up
-                let _ = postgres_db.cleanup().await;
-            }
-        }
     };
 }
 
@@ -511,7 +511,7 @@ async fn test_get_stats_uses_summaries_when_available_impl(
         id: 0,
         user_id,
         model_id: "anthropic.claude-sonnet-4-20250514-v1:0".to_string(),
-        period_type: "daily".to_string(),
+        period_type: PeriodType::Daily,
         period_start: Utc::now() - chrono::Duration::hours(24),
         period_end: Utc::now(),
         total_requests: 10,
@@ -539,11 +539,7 @@ async fn test_get_stats_uses_summaries_when_available_impl(
     let query = UsageQuery {
         user_id: Some(user_id),
         model_id: Some("anthropic.claude-sonnet-4-20250514-v1:0".to_string()),
-        start_date: None,
-        end_date: None,
-        success_only: None,
-        limit: None,
-        offset: None,
+        ..Default::default()
     };
 
     let stats = server.database.usage().get_stats(&query).await.unwrap();
@@ -571,7 +567,7 @@ database_test!(
 // Test real-time hourly summary updates
 async fn test_realtime_hourly_summary_updates_impl(server: &bedrock_sso_proxy::server::Server) {
     let database = server.database.clone();
-    
+
     // Create test user
     let user = users::Model {
         id: 0, // Will be set by database
@@ -606,22 +602,26 @@ async fn test_realtime_hourly_summary_updates_impl(server: &bedrock_sso_proxy::s
 
     // Store record and update hourly summary
     database.usage().store_record(&usage_record1).await.unwrap();
-    database.usage().update_hourly_summary(&usage_record1).await.unwrap();
+    database
+        .usage()
+        .update_hourly_summary(&usage_record1)
+        .await
+        .unwrap();
 
     // Verify hourly summary was created
-    let summaries = database.usage().get_summaries(&bedrock_sso_proxy::database::dao::usage::UsageQuery {
-        user_id: Some(user_id),
-        model_id: Some("claude-sonnet-4".to_string()),
-        start_date: None,
-        end_date: None,
-        success_only: None,
-        limit: None,
-        offset: None,
-    }).await.unwrap();
+    let summaries = database
+        .usage()
+        .get_summaries(&bedrock_sso_proxy::database::dao::usage::UsageQuery {
+            user_id: Some(user_id),
+            model_id: Some("claude-sonnet-4".to_string()),
+            ..Default::default()
+        })
+        .await
+        .unwrap();
 
     assert_eq!(summaries.len(), 1);
     let summary = &summaries[0];
-    assert_eq!(summary.period_type, "hourly");
+    assert_eq!(summary.period_type, PeriodType::Hourly);
     assert_eq!(summary.total_requests, 1);
     assert_eq!(summary.total_input_tokens, 100);
     assert_eq!(summary.total_output_tokens, 50);
@@ -651,22 +651,26 @@ async fn test_realtime_hourly_summary_updates_impl(server: &bedrock_sso_proxy::s
 
     // Store record and update hourly summary
     database.usage().store_record(&usage_record2).await.unwrap();
-    database.usage().update_hourly_summary(&usage_record2).await.unwrap();
+    database
+        .usage()
+        .update_hourly_summary(&usage_record2)
+        .await
+        .unwrap();
 
     // Verify hourly summary was updated (aggregated)
-    let updated_summaries = database.usage().get_summaries(&bedrock_sso_proxy::database::dao::usage::UsageQuery {
-        user_id: Some(user_id),
-        model_id: Some("claude-sonnet-4".to_string()),
-        start_date: None,
-        end_date: None,
-        success_only: None,
-        limit: None,
-        offset: None,
-    }).await.unwrap();
+    let updated_summaries = database
+        .usage()
+        .get_summaries(&bedrock_sso_proxy::database::dao::usage::UsageQuery {
+            user_id: Some(user_id),
+            model_id: Some("claude-sonnet-4".to_string()),
+            ..Default::default()
+        })
+        .await
+        .unwrap();
 
     assert_eq!(updated_summaries.len(), 1); // Still only 1 summary (same hour)
     let updated_summary = &updated_summaries[0];
-    
+
     // Verify aggregated values
     assert_eq!(updated_summary.total_requests, 2); // 1 + 1
     assert_eq!(updated_summary.total_input_tokens, 300); // 100 + 200
@@ -698,26 +702,31 @@ async fn test_realtime_hourly_summary_updates_impl(server: &bedrock_sso_proxy::s
 
     // Store record and update hourly summary
     database.usage().store_record(&usage_record3).await.unwrap();
-    database.usage().update_hourly_summary(&usage_record3).await.unwrap();
+    database
+        .usage()
+        .update_hourly_summary(&usage_record3)
+        .await
+        .unwrap();
 
     // Verify we now have 2 hourly summaries
-    let all_summaries = database.usage().get_summaries(&bedrock_sso_proxy::database::dao::usage::UsageQuery {
-        user_id: Some(user_id),
-        model_id: Some("claude-sonnet-4".to_string()),
-        start_date: None,
-        end_date: None,
-        success_only: None,
-        limit: None,
-        offset: None,
-    }).await.unwrap();
+    let all_summaries = database
+        .usage()
+        .get_summaries(&bedrock_sso_proxy::database::dao::usage::UsageQuery {
+            user_id: Some(user_id),
+            model_id: Some("claude-sonnet-4".to_string()),
+            ..Default::default()
+        })
+        .await
+        .unwrap();
 
     assert_eq!(all_summaries.len(), 2); // Two different hours
 
     // Verify the new hourly summary
-    let new_hour_summary = all_summaries.iter()
+    let new_hour_summary = all_summaries
+        .iter()
         .find(|s| s.total_requests == 1)
         .expect("Should find the new hour summary");
-    
+
     assert_eq!(new_hour_summary.total_input_tokens, 75);
     assert_eq!(new_hour_summary.total_output_tokens, 25);
     assert_eq!(new_hour_summary.total_tokens, 100);
@@ -732,9 +741,11 @@ database_test!(
 );
 
 // Test real-time hourly summary with different users and models
-async fn test_realtime_hourly_summary_different_keys_impl(server: &bedrock_sso_proxy::server::Server) {
+async fn test_realtime_hourly_summary_different_keys_impl(
+    server: &bedrock_sso_proxy::server::Server,
+) {
     let database = server.database.clone();
-    
+
     // Create test users
     let user1 = users::Model {
         id: 0, // Will be set by database
@@ -765,29 +776,56 @@ async fn test_realtime_hourly_summary_different_keys_impl(server: &bedrock_sso_p
     let records = vec![
         // User 1, Model A
         usage_records::Model {
-            id: 0, user_id: user1_id, model_id: "claude-sonnet-4".to_string(),
-            endpoint_type: "invoke".to_string(), region: "us-east-1".to_string(),
-            request_time: now, input_tokens: 100, output_tokens: 50, 
-            cache_write_tokens: None, cache_read_tokens: None, total_tokens: 150,
-            response_time_ms: 300, success: true, error_message: None,
+            id: 0,
+            user_id: user1_id,
+            model_id: "claude-sonnet-4".to_string(),
+            endpoint_type: "invoke".to_string(),
+            region: "us-east-1".to_string(),
+            request_time: now,
+            input_tokens: 100,
+            output_tokens: 50,
+            cache_write_tokens: None,
+            cache_read_tokens: None,
+            total_tokens: 150,
+            response_time_ms: 300,
+            success: true,
+            error_message: None,
             cost_usd: Some(Decimal::new(20, 3)),
         },
-        // User 1, Model B  
+        // User 1, Model B
         usage_records::Model {
-            id: 0, user_id: user1_id, model_id: "claude-haiku-3".to_string(),
-            endpoint_type: "invoke".to_string(), region: "us-east-1".to_string(),
-            request_time: now, input_tokens: 200, output_tokens: 100,
-            cache_write_tokens: None, cache_read_tokens: None, total_tokens: 300,
-            response_time_ms: 400, success: true, error_message: None,
+            id: 0,
+            user_id: user1_id,
+            model_id: "claude-haiku-3".to_string(),
+            endpoint_type: "invoke".to_string(),
+            region: "us-east-1".to_string(),
+            request_time: now,
+            input_tokens: 200,
+            output_tokens: 100,
+            cache_write_tokens: None,
+            cache_read_tokens: None,
+            total_tokens: 300,
+            response_time_ms: 400,
+            success: true,
+            error_message: None,
             cost_usd: Some(Decimal::new(15, 3)),
         },
         // User 2, Model A
         usage_records::Model {
-            id: 0, user_id: user2_id, model_id: "claude-sonnet-4".to_string(),
-            endpoint_type: "invoke".to_string(), region: "us-east-1".to_string(),
-            request_time: now, input_tokens: 150, output_tokens: 75,
-            cache_write_tokens: None, cache_read_tokens: None, total_tokens: 225,
-            response_time_ms: 500, success: true, error_message: None,
+            id: 0,
+            user_id: user2_id,
+            model_id: "claude-sonnet-4".to_string(),
+            endpoint_type: "invoke".to_string(),
+            region: "us-east-1".to_string(),
+            request_time: now,
+            input_tokens: 150,
+            output_tokens: 75,
+            cache_write_tokens: None,
+            cache_read_tokens: None,
+            total_tokens: 225,
+            response_time_ms: 500,
+            success: true,
+            error_message: None,
             cost_usd: Some(Decimal::new(30, 3)),
         },
     ];
@@ -795,33 +833,43 @@ async fn test_realtime_hourly_summary_different_keys_impl(server: &bedrock_sso_p
     // Store all records and update summaries
     for record in &records {
         database.usage().store_record(record).await.unwrap();
-        database.usage().update_hourly_summary(record).await.unwrap();
+        database
+            .usage()
+            .update_hourly_summary(record)
+            .await
+            .unwrap();
     }
 
     // Verify we have 3 separate hourly summaries (different user/model combinations)
-    let all_summaries = database.usage().get_summaries(&bedrock_sso_proxy::database::dao::usage::UsageQuery {
-        user_id: None, model_id: None, start_date: None, end_date: None,
-        success_only: None, limit: None, offset: None,
-    }).await.unwrap();
+    let all_summaries = database
+        .usage()
+        .get_summaries(&bedrock_sso_proxy::database::dao::usage::UsageQuery {
+            ..Default::default()
+        })
+        .await
+        .unwrap();
 
     assert_eq!(all_summaries.len(), 3);
 
-    // Check User 1, Model A summary  
-    let user1_model_a = all_summaries.iter()
+    // Check User 1, Model A summary
+    let user1_model_a = all_summaries
+        .iter()
         .find(|s| s.user_id == user1_id && s.model_id == "claude-sonnet-4")
         .expect("Should find User 1, Model A summary");
     assert_eq!(user1_model_a.total_requests, 1);
     assert_eq!(user1_model_a.total_tokens, 150);
 
     // Check User 1, Model B summary
-    let user1_model_b = all_summaries.iter()
+    let user1_model_b = all_summaries
+        .iter()
         .find(|s| s.user_id == user1_id && s.model_id == "claude-haiku-3")
         .expect("Should find User 1, Model B summary");
     assert_eq!(user1_model_b.total_requests, 1);
     assert_eq!(user1_model_b.total_tokens, 300);
 
     // Check User 2, Model A summary
-    let user2_model_a = all_summaries.iter()
+    let user2_model_a = all_summaries
+        .iter()
         .find(|s| s.user_id == user2_id && s.model_id == "claude-sonnet-4")
         .expect("Should find User 2, Model A summary");
     assert_eq!(user2_model_a.total_requests, 1);

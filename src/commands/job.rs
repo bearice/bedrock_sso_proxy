@@ -32,13 +32,13 @@ pub enum JobCommand {
 
         #[arg(long, help = "Specific model ID to process (optional)")]
         model_id: Option<String>,
+
+        #[arg(long, help = "Backfill mode - regenerate existing summaries")]
+        backfill: bool,
     },
 
     /// List available job types
     List,
-
-    /// Check job system status
-    Status,
 }
 
 pub async fn handle_job_command(
@@ -57,6 +57,7 @@ pub async fn handle_job_command(
             dry_run,
             user_id,
             model_id,
+            backfill,
         } => {
             info!("Running job: {} (dry_run: {})", job_type, dry_run);
 
@@ -73,7 +74,13 @@ pub async fn handle_job_command(
                     }
 
                     let count = summarization_service
-                        .generate_summaries(&period, days_back, user_id, model_id.as_deref())
+                        .generate_summaries(
+                            &period,
+                            days_back,
+                            user_id,
+                            model_id.as_deref(),
+                            backfill,
+                        )
                         .await?;
 
                     info!("Successfully generated {} summaries", count);
@@ -111,13 +118,6 @@ pub async fn handle_job_command(
             println!("Examples:");
             println!("  bedrock_proxy job run summaries --period daily");
             println!("  bedrock_proxy job run cleanup --days-back 30 --dry-run");
-        }
-
-        JobCommand::Status => {
-            println!("Job System Status:");
-            println!("  Scheduler: Not implemented yet");
-            println!("  Available Jobs: summaries, cleanup");
-            println!("  Last Run: Not tracked yet");
         }
     }
 

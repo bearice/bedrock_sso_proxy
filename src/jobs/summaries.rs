@@ -1,5 +1,5 @@
 use super::{Job, JobResult, UsageSummariesConfig};
-use crate::{error::AppError, summarization::SummarizationService};
+use crate::{error::AppError, summarization::{SummarizationService, PeriodType}};
 use async_trait::async_trait;
 use std::sync::Arc;
 use tracing::info;
@@ -26,13 +26,13 @@ impl Job for SummariesJob {
         let mut total_summaries = 0;
 
         for period in &self.config.periods {
-            info!("Generating {} summaries", period);
+            info!("Generating {} summaries using hierarchical aggregation", period);
 
-            let days_back = match period.as_str() {
-                "hourly" => 1,   // Last 24 hours
-                "daily" => 7,    // Last week
-                "weekly" => 30,  // Last month
-                "monthly" => 90, // Last 3 months
+            let period_type = match period.as_str() {
+                "hourly" => PeriodType::Hourly,
+                "daily" => PeriodType::Daily,
+                "weekly" => PeriodType::Weekly,
+                "monthly" => PeriodType::Monthly,
                 _ => {
                     return Err(AppError::Internal(format!(
                         "Unsupported period type: {}",
@@ -41,13 +41,14 @@ impl Job for SummariesJob {
                 }
             };
 
+            // Use the new period-based summarization that respects completion constraints
             let count = self
                 .service
-                .generate_summaries(period, days_back, None, None)
+                .generate_period_summaries(period_type)
                 .await?;
 
             total_summaries += count;
-            info!("Generated {} {} summaries", count, period);
+            info!("Generated {} {} summaries using hierarchical approach", count, period);
         }
 
         Ok(JobResult::success_with_count(total_summaries as u64))

@@ -1,3 +1,4 @@
+use super::PeriodType;
 use chrono::{DateTime, Utc};
 use rust_decimal::Decimal;
 use sea_orm::entity::prelude::*;
@@ -10,10 +11,10 @@ pub struct Model {
     pub id: i32,
     pub user_id: i32,
     pub model_id: String,
-    pub period_type: String,
+    pub period_type: PeriodType,
     pub period_start: DateTime<Utc>,
     pub period_end: DateTime<Utc>,
-    pub total_requests: u32,
+    pub total_requests: i32,
     pub total_input_tokens: i64,
     pub total_output_tokens: i64,
     pub total_tokens: i64,
