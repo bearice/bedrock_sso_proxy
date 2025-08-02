@@ -120,11 +120,13 @@ impl CacheManager {
         if let Some(client) = &self.redis_client {
             let redis = counter::RedisHashCounter::from_client(client.clone(), prefixed_key);
             counter::HashCounterBackend::Redis(redis)
-        } else {
-            // Memory counters use isolated storage for now since they have different data model
+        } else if let Some(store) = &self.memory_store {
+            // Memory counters now use shared storage for consistency with Redis behavior
             counter::HashCounterBackend::Memory(
-                counter::MemoryHashCounter::new(prefixed_key),
+                counter::MemoryHashCounter::from_shared_store(store.clone(), prefixed_key),
             )
+        } else {
+            panic!("No backend initialized - this should never happen")
         }
     }
 
@@ -211,5 +213,166 @@ impl HealthChecker for CacheManager {
             "service": "Cache Manager",
             "backend": self.backend_type()
         }))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use typed_cache_macro::typed_counter;
+
+    #[typed_counter(ttl = 300)]
+    enum TestCounterField {
+        Requests,
+        Errors,
+        Warnings,
+    }
+
+    #[tokio::test]
+    async fn test_memory_counter_sharing() {
+        // Create a cache manager with memory backend
+        let cache_manager = CacheManager::new_memory();
+        
+        // Get two counter instances with the same key - should be shared
+        let counter1 = cache_manager.counter::<TestCounterField>("test_key");
+        let counter2 = cache_manager.counter::<TestCounterField>("test_key");
+        
+        // Increment field in counter1
+        let result = counter1.increment(TestCounterField::Requests, 5).await.unwrap();
+        assert_eq!(result, 5);
+        
+        // Check that counter2 sees the same value (shared state)
+        let value = counter2.get(TestCounterField::Requests).await.unwrap();
+        assert_eq!(value, Some(5));
+        
+        // Increment field in counter2
+        let result = counter2.increment(TestCounterField::Requests, 3).await.unwrap();
+        assert_eq!(result, 8);
+        
+        // Check that counter1 sees the updated value
+        let value = counter1.get(TestCounterField::Requests).await.unwrap();
+        assert_eq!(value, Some(8));
+        
+        // Test different field
+        counter1.set(TestCounterField::Errors, 10).await.unwrap();
+        let value = counter2.get(TestCounterField::Errors).await.unwrap();
+        assert_eq!(value, Some(10));
+        
+        // Test increment_multiple with shared state
+        let updates = vec![
+            (TestCounterField::Warnings, 2),
+            (TestCounterField::Errors, 3),
+        ];
+        let results = counter1.increment_multiple(&updates).await.unwrap();
+        assert_eq!(results.get(&TestCounterField::Warnings), Some(&2));
+        assert_eq!(results.get(&TestCounterField::Errors), Some(&13)); // 10 + 3
+        
+        // Verify counter2 sees the changes
+        let warnings = counter2.get(TestCounterField::Warnings).await.unwrap();
+        let errors = counter2.get(TestCounterField::Errors).await.unwrap();
+        assert_eq!(warnings, Some(2));
+        assert_eq!(errors, Some(13));
+    }
+
+    #[tokio::test]
+    async fn test_memory_counter_isolation_with_different_keys() {
+        // Create a cache manager with memory backend
+        let cache_manager = CacheManager::new_memory();
+        
+        // Get counter instances with different keys - should be isolated
+        let counter1 = cache_manager.counter::<TestCounterField>("key1");
+        let counter2 = cache_manager.counter::<TestCounterField>("key2");
+        
+        // Set values in each counter
+        counter1.set(TestCounterField::Requests, 100).await.unwrap();
+        counter2.set(TestCounterField::Requests, 200).await.unwrap();
+        
+        // Verify they are isolated
+        let value1 = counter1.get(TestCounterField::Requests).await.unwrap();
+        let value2 = counter2.get(TestCounterField::Requests).await.unwrap();
+        
+        assert_eq!(value1, Some(100));
+        assert_eq!(value2, Some(200));
+        
+        // Modify counter1, should not affect counter2
+        counter1.increment(TestCounterField::Requests, 50).await.unwrap();
+        
+        let value1 = counter1.get(TestCounterField::Requests).await.unwrap();
+        let value2 = counter2.get(TestCounterField::Requests).await.unwrap();
+        
+        assert_eq!(value1, Some(150));
+        assert_eq!(value2, Some(200)); // unchanged
+    }
+
+    #[tokio::test]
+    async fn test_memory_counter_ttl_sharing() {
+        // Create a cache manager with memory backend
+        let cache_manager = CacheManager::new_memory();
+        
+        // Get two counter instances with the same key
+        let counter1 = cache_manager.counter::<TestCounterField>("ttl_test");
+        let counter2 = cache_manager.counter::<TestCounterField>("ttl_test");
+        
+        // Set values and TTL through counter1
+        counter1.set(TestCounterField::Requests, 42).await.unwrap();
+        counter1.set_ttl(std::time::Duration::from_millis(50)).await.unwrap();
+        
+        // Verify counter2 sees the value immediately
+        let value = counter2.get(TestCounterField::Requests).await.unwrap();
+        assert_eq!(value, Some(42));
+        
+        // Check TTL is shared
+        let ttl = counter2.get_ttl().await.unwrap();
+        assert!(ttl.is_some());
+        assert!(ttl.unwrap() <= std::time::Duration::from_millis(50));
+        
+        // Wait for expiration
+        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+        
+        // Both counters should see expiration
+        assert!(!counter1.exists().await.unwrap());
+        assert!(!counter2.exists().await.unwrap());
+    }
+
+    #[tokio::test]
+    async fn test_memory_counter_hash_operations_sharing() {
+        // Create a cache manager with memory backend
+        let cache_manager = CacheManager::new_memory();
+        
+        // Get two counter instances with the same key
+        let counter1 = cache_manager.counter::<TestCounterField>("hash_test");
+        let counter2 = cache_manager.counter::<TestCounterField>("hash_test");
+        
+        // Set multiple fields through counter1
+        let fields = vec![
+            (TestCounterField::Requests, 10),
+            (TestCounterField::Errors, 5),
+            (TestCounterField::Warnings, 2),
+        ];
+        counter1.set_multiple(&fields).await.unwrap();
+        
+        // Get all fields through counter2 - should see the same data
+        let all_fields = counter2.get_all().await.unwrap();
+        assert_eq!(all_fields.get(&TestCounterField::Requests), Some(&10));
+        assert_eq!(all_fields.get(&TestCounterField::Errors), Some(&5));
+        assert_eq!(all_fields.get(&TestCounterField::Warnings), Some(&2));
+        
+        // Delete a field through counter2
+        counter2.delete_field(TestCounterField::Errors).await.unwrap();
+        
+        // Verify counter1 sees the deletion
+        let errors = counter1.get(TestCounterField::Errors).await.unwrap();
+        assert_eq!(errors, None);
+        
+        // But other fields should still exist
+        let requests = counter1.get(TestCounterField::Requests).await.unwrap();
+        assert_eq!(requests, Some(10));
+        
+        // Delete entire hash through counter1
+        counter1.delete_hash().await.unwrap();
+        
+        // Both counters should show empty
+        assert!(!counter1.exists().await.unwrap());
+        assert!(!counter2.exists().await.unwrap());
     }
 }

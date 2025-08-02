@@ -43,6 +43,9 @@ base64 = "^0.22"
 regex = "^1.0"
 rust_decimal = { version = "^1.36", features = ["serde-str"] }
 once_cell = "^1.0"
+async-trait = "^0.1"
+rust-embed = { version = "^8.0", features = ["include-exclude"] }
+csv = "^1.3"
 
 # Metrics and production dependencies
 metrics = "^0.24"
@@ -55,10 +58,6 @@ dashmap = "^6.1"
 sha2 = "^0.10"
 hex = "^0.4"
 rand = "^0.9"
-async-trait = "^0.1"
-rust-embed = { version = "^8.0", features = ["include-exclude"] }
-csv = "^1.3"
-typed_cache_macro = { path = "typed_cache_macro" }
 
 # Storage dependencies
 redis = { version = "^0.32", features = ["tokio-comp", "connection-manager"] }
@@ -95,6 +94,9 @@ utoipa = { version = "^5.4", features = [
 ] }
 utoipa-swagger-ui = { version = "^9.0", features = ["axum"] }
 serde_yaml_ng = "^0.10"
+
+# for macros
+typed_cache_macro = { path = "typed_cache_macro" }
 
 [build-dependencies]
 tokio = { version = "^1.0", features = ["full"] }

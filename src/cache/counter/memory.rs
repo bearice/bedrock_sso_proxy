@@ -49,25 +49,70 @@ impl<T: CounterField> Default for HashEntry<T> {
 pub struct MemoryHashCounter<T: CounterField> {
     key: String,
     store: Arc<RwLock<HashEntry<T>>>,
+    shared_store: Option<Arc<RwLock<std::collections::HashMap<String, Box<dyn std::any::Any + Send + Sync>>>>>,
 }
 
 impl<T: CounterField> MemoryHashCounter<T> {
-    /// Create new memory-based hash counter
+    /// Create new memory-based hash counter (isolated storage)
     pub fn new(key: String) -> Self {
         Self {
             key,
             store: Arc::new(RwLock::new(HashEntry::new())),
+            shared_store: None,
         }
+    }
+
+    /// Create memory-based hash counter from shared store (shared storage)
+    pub fn from_shared_store(
+        shared_store: Arc<RwLock<std::collections::HashMap<String, Box<dyn std::any::Any + Send + Sync>>>>,
+        key: String,
+    ) -> Self {
+        Self {
+            key,
+            store: Arc::new(RwLock::new(HashEntry::new())), // Will be lazily loaded from shared store
+            shared_store: Some(shared_store),
+        }
+    }
+
+    /// Load data from shared store if using shared storage
+    async fn load_from_shared(&self) -> CacheResult<()> {
+        if let Some(shared_store) = &self.shared_store {
+            let shared = shared_store.read().await;
+            if let Some(boxed_entry) = shared.get(&self.key) {
+                if let Some(entry) = boxed_entry.downcast_ref::<HashEntry<T>>() {
+                    let mut store = self.store.write().await;
+                    *store = entry.clone();
+                }
+            }
+        }
+        Ok(())
+    }
+
+    /// Save data to shared store if using shared storage
+    async fn save_to_shared(&self) -> CacheResult<()> {
+        if let Some(shared_store) = &self.shared_store {
+            let store = self.store.read().await;
+            let mut shared = shared_store.write().await;
+            shared.insert(self.key.clone(), Box::new(store.clone()));
+        }
+        Ok(())
     }
 
     /// Check and clean up if expired
     async fn check_expiry(&self) -> CacheResult<bool> {
+        // Load from shared store first if using shared storage
+        self.load_from_shared().await?;
+        
         let store = self.store.read().await;
         if store.is_expired() {
             drop(store);
             let mut store = self.store.write().await;
             store.fields.clear();
             store.expires_at = None;
+            
+            // Save cleared state to shared store
+            drop(store);
+            self.save_to_shared().await?;
             return Ok(false); // Hash was expired
         }
         Ok(true) // Hash is valid
@@ -87,6 +132,8 @@ impl<T: CounterField> HashCounter<T> for MemoryHashCounter<T> {
         let current = store.fields.get(&field).unwrap_or(&0);
         let new_value = current + amount;
         store.fields.insert(field, new_value);
+        drop(store);
+        self.save_to_shared().await?;
         Ok(new_value)
     }
 
@@ -96,6 +143,8 @@ impl<T: CounterField> HashCounter<T> for MemoryHashCounter<T> {
         let current = store.fields.get(&field).unwrap_or(&0);
         let new_value = current - amount;
         store.fields.insert(field, new_value);
+        drop(store);
+        self.save_to_shared().await?;
         Ok(new_value)
     }
 
@@ -111,6 +160,8 @@ impl<T: CounterField> HashCounter<T> for MemoryHashCounter<T> {
         self.check_expiry().await?;
         let mut store = self.store.write().await;
         store.fields.insert(field, value);
+        drop(store);
+        self.save_to_shared().await?;
         Ok(())
     }
 
@@ -128,6 +179,8 @@ impl<T: CounterField> HashCounter<T> for MemoryHashCounter<T> {
         for (field, value) in fields {
             store.fields.insert(field.clone(), *value);
         }
+        drop(store);
+        self.save_to_shared().await?;
         Ok(())
     }
 
@@ -142,6 +195,8 @@ impl<T: CounterField> HashCounter<T> for MemoryHashCounter<T> {
             store.fields.insert(field.clone(), new_value);
             results.insert(field.clone(), new_value);
         }
+        drop(store);
+        self.save_to_shared().await?;
 
         Ok(results)
     }
@@ -150,6 +205,8 @@ impl<T: CounterField> HashCounter<T> for MemoryHashCounter<T> {
         self.check_expiry().await?;
         let mut store = self.store.write().await;
         store.fields.remove(&field);
+        drop(store);
+        self.save_to_shared().await?;
         Ok(())
     }
 
@@ -165,6 +222,8 @@ impl<T: CounterField> HashCounter<T> for MemoryHashCounter<T> {
         self.check_expiry().await?;
         let mut store = self.store.write().await;
         store.fields.insert(field, 0);
+        drop(store);
+        self.save_to_shared().await?;
         Ok(())
     }
 
@@ -172,6 +231,8 @@ impl<T: CounterField> HashCounter<T> for MemoryHashCounter<T> {
         let mut store = self.store.write().await;
         store.fields.clear();
         store.expires_at = None;
+        drop(store);
+        self.save_to_shared().await?;
         Ok(())
     }
 
@@ -186,6 +247,8 @@ impl<T: CounterField> HashCounter<T> for MemoryHashCounter<T> {
     async fn set_ttl(&self, ttl: Duration) -> CacheResult<()> {
         let mut store = self.store.write().await;
         store.set_ttl(ttl);
+        drop(store);
+        self.save_to_shared().await?;
         Ok(())
     }
 
