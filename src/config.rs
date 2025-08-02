@@ -55,7 +55,7 @@ impl Default for Config {
                 port: 3000,
             },
             jwt: JwtConfig {
-                secret: "your-jwt-secret".to_string(),
+                secret: String::new(), // No default secret - must be provided
                 algorithm: "HS256".to_string(),
                 access_token_ttl: 3600,     // 1 hour
                 refresh_token_ttl: 7776000, // 90 days
@@ -84,20 +84,16 @@ impl Default for Config {
 
 impl Config {
     pub fn load() -> Result<Self, ConfigError> {
-        let mut builder =
-            ConfigBuilder::builder().add_source(config::Config::try_from(&Config::default())?);
+        // Check for config file path in environment variable or use default
+        let config_path = std::env::var("CONFIG_FILE").unwrap_or_else(|_| "config.yaml".to_string());
+        Self::load_from_file(config_path)
+    }
 
-        if Path::new("config.yaml").exists() {
-            builder = builder.add_source(File::with_name("config"));
+    pub fn load_from_path<P: AsRef<Path>>(path: Option<P>) -> Result<Self, ConfigError> {
+        match path {
+            Some(p) => Self::load_from_file(p),
+            None => Self::load(),
         }
-
-        builder = builder.add_source(
-            Environment::with_prefix("BEDROCK")
-                .prefix_separator("_")
-                .separator("__"),
-        );
-
-        builder.build()?.try_deserialize()
     }
 
     pub fn load_from_file<P: AsRef<Path>>(path: P) -> Result<Self, ConfigError> {
@@ -114,7 +110,9 @@ impl Config {
                 .separator("__"),
         );
 
-        builder.build()?.try_deserialize()
+        let config: Config = builder.build()?.try_deserialize()?;
+        config.validate()?;
+        Ok(config)
     }
 
     pub fn get_oauth_provider(&self, provider_name: &str) -> Option<OAuthProvider> {
@@ -147,6 +145,19 @@ impl Config {
             std::collections::HashMap::new(), // No custom mappings
             self.aws.region.clone(),
         )
+    }
+
+    /// Validate the configuration
+    /// Returns an error if required fields are missing or invalid
+    fn validate(&self) -> Result<(), ConfigError> {
+        if self.jwt.secret.is_empty() {
+            return Err(ConfigError::Message(
+                "JWT secret is required. Set it via configuration file or BEDROCK_JWT__SECRET environment variable.".to_string()
+            ));
+        }
+
+        // Additional validation can be added here
+        Ok(())
     }
 }
 
@@ -196,7 +207,7 @@ mod tests {
         let config = Config::default();
         assert_eq!(config.server.host, "0.0.0.0");
         assert_eq!(config.server.port, 3000);
-        assert_eq!(config.jwt.secret, "your-jwt-secret");
+        assert_eq!(config.jwt.secret, ""); // No default secret
         assert_eq!(config.jwt.algorithm, "HS256");
         assert_eq!(config.aws.region, "us-east-1");
         assert_eq!(config.logging.level, "info");
@@ -301,10 +312,16 @@ jwt:
     fn test_config_load_nonexistent_file() {
         let _guard = EnvGuard::new();
 
+        // Set JWT secret via environment variable
+        unsafe {
+            std::env::set_var("BEDROCK_JWT__SECRET", "test-secret");
+        }
+
         let config = Config::load_from_file("nonexistent.yaml").unwrap();
 
         assert_eq!(config.server.host, "0.0.0.0");
         assert_eq!(config.server.port, 3000);
+        assert_eq!(config.jwt.secret, "test-secret");
     }
 
     #[test]
@@ -372,6 +389,43 @@ jwt:
     }
 
     #[test]
+    fn test_config_validation_missing_jwt_secret() {
+        let config = Config::default();
+        let result = config.validate();
+        assert!(result.is_err());
+        let error_msg = result.unwrap_err().to_string();
+        assert!(error_msg.contains("JWT secret is required"));
+    }
+
+    #[test]
+    fn test_config_validation_with_jwt_secret() {
+        let mut config = Config::default();
+        config.jwt.secret = "test-secret".to_string();
+        let result = config.validate();
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_config_load_fails_without_jwt_secret() {
+        let _guard = EnvGuard::new();
+        
+        let yaml_content = r#"
+server:
+  host: "127.0.0.1"
+  port: 4000
+aws:
+  region: "eu-west-1"
+"#;
+        let mut temp_file = NamedTempFile::with_suffix(".yaml").unwrap();
+        temp_file.write_all(yaml_content.as_bytes()).unwrap();
+
+        let result = Config::load_from_file(temp_file.path());
+        assert!(result.is_err());
+        let error_msg = result.unwrap_err().to_string();
+        assert!(error_msg.contains("JWT secret is required"));
+    }
+
+    #[test]
     #[serial]
     fn test_config_load_with_partial_yaml() {
         let _guard = EnvGuard::new();
@@ -434,6 +488,8 @@ logging:
         let _guard = EnvGuard::new();
 
         let yaml_content = r#"
+jwt:
+  secret: "test-secret"
 logging:
   level: "debug"
   log_request: false
@@ -512,5 +568,65 @@ logging:
             config.aws.bearer_token,
             Some("ABSK-1234567890abcdef1234567890abcdef12345678".to_string())
         );
+    }
+
+    #[test]
+    #[serial]
+    fn test_config_load_from_path_with_some() {
+        let _guard = EnvGuard::new();
+        
+        let yaml_content = r#"
+server:
+  host: "127.0.0.1"
+  port: 4000
+jwt:
+  secret: "test-secret-from-path"
+aws:
+  region: "eu-west-1"
+"#;
+        let mut temp_file = NamedTempFile::with_suffix(".yaml").unwrap();
+        temp_file.write_all(yaml_content.as_bytes()).unwrap();
+
+        let config = Config::load_from_path(Some(temp_file.path())).unwrap();
+        assert_eq!(config.server.port, 4000);
+        assert_eq!(config.jwt.secret, "test-secret-from-path");
+    }
+
+    #[test]
+    #[serial]
+    fn test_config_load_from_path_with_none() {
+        let _guard = EnvGuard::new();
+        
+        // Set JWT secret via environment variable for default load
+        unsafe {
+            std::env::set_var("BEDROCK_JWT__SECRET", "test-secret-default");
+        }
+
+        let config = Config::load_from_path(None::<&str>).unwrap();
+        assert_eq!(config.jwt.secret, "test-secret-default");
+    }
+
+    #[test]
+    #[serial]
+    fn test_config_file_environment_variable() {
+        let _guard = EnvGuard::new();
+        
+        let yaml_content = r#"
+server:
+  port: 5555
+jwt:
+  secret: "test-secret-env-file"
+"#;
+        let mut temp_file = NamedTempFile::with_suffix(".yaml").unwrap();
+        temp_file.write_all(yaml_content.as_bytes()).unwrap();
+
+        // Set CONFIG_FILE environment variable
+        unsafe {
+            std::env::set_var("CONFIG_FILE", temp_file.path().to_string_lossy().to_string());
+        }
+
+        let config = Config::load().unwrap();
+        assert_eq!(config.server.port, 5555);
+        assert_eq!(config.jwt.secret, "test-secret-env-file");
     }
 }

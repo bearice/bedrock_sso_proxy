@@ -359,12 +359,14 @@ This enables:
 Configuration uses hierarchical loading: defaults → YAML file → environment
 variables
 
+**Security Note**: The JWT secret is required and must be provided via configuration file or the `BEDROCK_JWT__SECRET` environment variable. The application will fail to start if no JWT secret is configured.
+
 ```yaml
 server:
   host: "0.0.0.0"
   port: 3000
 jwt:
-  secret: "your-jwt-secret"
+  secret: "your-jwt-secret"     # REQUIRED - Must be provided via config or env var
 aws:
   region: "us-east-1"
   access_key_id: "optional"     # If not provided, uses AWS credential chain
@@ -408,7 +410,7 @@ shutdown:
 Use `BEDROCK_` prefix with double underscores for nesting:
 
 - `BEDROCK_SERVER__PORT=3000`
-- `BEDROCK_JWT__SECRET=secret`
+- `BEDROCK_JWT__SECRET=your-secret-key`  # REQUIRED
 - `BEDROCK_AWS__REGION=us-east-1`
 - `BEDROCK_CACHE__BACKEND=redis`
 - `BEDROCK_CACHE__REDIS_URL=redis://localhost:6379`
@@ -675,3 +677,8 @@ cargo run --bin bedrock_proxy -- migrate up
     pub type ApiKeyRecord = api_keys::Model;
     ```
 - If you need to run a test server, you must ask user to do it, you can not spawn background process.
+
+## Testing Memories
+
+- If you need to run tests in `/test`, remember to use `cargo test --test ***_integration_tests` not `cargo test ***_integration_tests`
+- Follow Conventional Commits format when writing commit messages
