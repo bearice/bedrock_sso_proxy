@@ -880,3 +880,265 @@ database_test!(
     test_realtime_hourly_summary_different_keys,
     test_realtime_hourly_summary_different_keys_impl
 );
+
+// Test pagination total count functionality
+async fn test_pagination_total_count_accuracy_impl(server: &bedrock_sso_proxy::server::Server) {
+    let (user_id, _) = setup_test_data(server.database.as_ref()).await;
+
+    // Create additional records to test pagination (setup_test_data creates 3)
+    for i in 4..=20 {
+        let record = UsageRecord {
+            id: 0,
+            user_id,
+            model_id: format!("test-model-{}", i),
+            endpoint_type: "bedrock".to_string(),
+            region: "us-east-1".to_string(),
+            request_time: Utc::now() - chrono::Duration::minutes(i as i64),
+            input_tokens: 50,
+            output_tokens: 25,
+            cache_write_tokens: None,
+            cache_read_tokens: None,
+            total_tokens: 75,
+            response_time_ms: 150,
+            success: true,
+            error_message: None,
+            cost_usd: Some(Decimal::new(10, 4)), // 0.001
+        };
+        server.database.usage().store_record(&record).await.unwrap();
+    }
+
+    let token = create_test_token(
+        server.jwt_service.as_ref(),
+        "user1@example.com",
+        false,
+        user_id,
+    );
+    let app = create_test_router(server);
+
+    // Test first page (limit 5)
+    let request = Request::builder()
+        .method(Method::GET)
+        .uri("/usage/records?limit=5&offset=0")
+        .header(AUTHORIZATION, format!("Bearer {}", token))
+        .body(Body::empty())
+        .unwrap();
+
+    let response = app.oneshot(request).await.unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    let json: Value = serde_json::from_slice(&body).unwrap();
+
+    // Should return 5 records but total should be 20 (3 original + 17 new)
+    assert_eq!(json["records"].as_array().unwrap().len(), 5);
+    assert_eq!(json["total"], 20);
+    assert_eq!(json["limit"], 5);
+    assert_eq!(json["offset"], 0);
+
+    // Test second page (limit 5, offset 5)
+    let app2 = create_test_router(server);
+    let request2 = Request::builder()
+        .method(Method::GET)
+        .uri("/usage/records?limit=5&offset=5")
+        .header(AUTHORIZATION, format!("Bearer {}", token))
+        .body(Body::empty())
+        .unwrap();
+
+    let response2 = app2.oneshot(request2).await.unwrap();
+    assert_eq!(response2.status(), StatusCode::OK);
+
+    let body2 = axum::body::to_bytes(response2.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    let json2: Value = serde_json::from_slice(&body2).unwrap();
+
+    // Should return 5 records, same total count
+    assert_eq!(json2["records"].as_array().unwrap().len(), 5);
+    assert_eq!(json2["total"], 20); // Total should be consistent
+    assert_eq!(json2["limit"], 5);
+    assert_eq!(json2["offset"], 5);
+
+    // Test last page (limit 5, offset 15)
+    let app3 = create_test_router(server);
+    let request3 = Request::builder()
+        .method(Method::GET)
+        .uri("/usage/records?limit=5&offset=15")
+        .header(AUTHORIZATION, format!("Bearer {}", token))
+        .body(Body::empty())
+        .unwrap();
+
+    let response3 = app3.oneshot(request3).await.unwrap();
+    assert_eq!(response3.status(), StatusCode::OK);
+
+    let body3 = axum::body::to_bytes(response3.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    let json3: Value = serde_json::from_slice(&body3).unwrap();
+
+    // Should return 5 records (last page), same total count
+    assert_eq!(json3["records"].as_array().unwrap().len(), 5);
+    assert_eq!(json3["total"], 20); // Total should be consistent
+    assert_eq!(json3["limit"], 5);
+    assert_eq!(json3["offset"], 15);
+
+    // Test beyond last page (limit 5, offset 20)
+    let app4 = create_test_router(server);
+    let request4 = Request::builder()
+        .method(Method::GET)
+        .uri("/usage/records?limit=5&offset=20")
+        .header(AUTHORIZATION, format!("Bearer {}", token))
+        .body(Body::empty())
+        .unwrap();
+
+    let response4 = app4.oneshot(request4).await.unwrap();
+    assert_eq!(response4.status(), StatusCode::OK);
+
+    let body4 = axum::body::to_bytes(response4.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    let json4: Value = serde_json::from_slice(&body4).unwrap();
+
+    // Should return 0 records, but total should still be accurate
+    assert_eq!(json4["records"].as_array().unwrap().len(), 0);
+    assert_eq!(json4["total"], 20); // Total should be consistent even with no results
+    assert_eq!(json4["limit"], 5);
+    assert_eq!(json4["offset"], 20);
+}
+
+database_test!(
+    test_pagination_total_count_accuracy,
+    test_pagination_total_count_accuracy_impl
+);
+
+// Test pagination with filters maintains accurate count
+async fn test_pagination_with_filters_total_count_impl(server: &bedrock_sso_proxy::server::Server) {
+    let (user_id, _) = setup_test_data(server.database.as_ref()).await;
+
+    // Create additional records with specific model filter (5 matching records)
+    for i in 1..=5 {
+        let record = UsageRecord {
+            id: 0,
+            user_id,
+            model_id: "anthropic.claude-sonnet-4-20250514-v1:0".to_string(), // Same model as one in setup
+            endpoint_type: "bedrock".to_string(),
+            region: "us-east-1".to_string(),
+            request_time: Utc::now() - chrono::Duration::minutes(i as i64),
+            input_tokens: 50,
+            output_tokens: 25,
+            cache_write_tokens: None,
+            cache_read_tokens: None,
+            total_tokens: 75,
+            response_time_ms: 150,
+            success: true,
+            error_message: None,
+            cost_usd: Some(Decimal::new(10, 4)),
+        };
+        server.database.usage().store_record(&record).await.unwrap();
+    }
+
+    let token = create_test_token(
+        server.jwt_service.as_ref(),
+        "user1@example.com",
+        false,
+        user_id,
+    );
+    let app = create_test_router(server);
+
+    // Test with model filter (should find 6 records: 1 from setup + 5 new)
+    let request = Request::builder()
+        .method(Method::GET)
+        .uri("/usage/records?model=anthropic.claude-sonnet-4-20250514-v1:0&limit=3&offset=0")
+        .header(AUTHORIZATION, format!("Bearer {}", token))
+        .body(Body::empty())
+        .unwrap();
+
+    let response = app.oneshot(request).await.unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    let json: Value = serde_json::from_slice(&body).unwrap();
+
+    // Should return 3 records but total should be 6 (1 original + 5 new for this model)
+    assert_eq!(json["records"].as_array().unwrap().len(), 3);
+    assert_eq!(json["total"], 6);
+    assert_eq!(json["limit"], 3);
+    assert_eq!(json["offset"], 0);
+
+    // Verify all records are for the correct model
+    let records = json["records"].as_array().unwrap();
+    for record in records {
+        assert_eq!(record["model_id"], "anthropic.claude-sonnet-4-20250514-v1:0");
+    }
+
+    // Test second page of filtered results
+    let app2 = create_test_router(server);
+    let request2 = Request::builder()
+        .method(Method::GET)
+        .uri("/usage/records?model=anthropic.claude-sonnet-4-20250514-v1:0&limit=3&offset=3")
+        .header(AUTHORIZATION, format!("Bearer {}", token))
+        .body(Body::empty())
+        .unwrap();
+
+    let response2 = app2.oneshot(request2).await.unwrap();
+    assert_eq!(response2.status(), StatusCode::OK);
+
+    let body2 = axum::body::to_bytes(response2.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    let json2: Value = serde_json::from_slice(&body2).unwrap();
+
+    // Should return 3 records (6 total - 3 offset), same total count
+    assert_eq!(json2["records"].as_array().unwrap().len(), 3);
+    assert_eq!(json2["total"], 6); // Total should be consistent with filter
+    assert_eq!(json2["limit"], 3);
+    assert_eq!(json2["offset"], 3);
+}
+
+database_test!(
+    test_pagination_with_filters_total_count,
+    test_pagination_with_filters_total_count_impl
+);
+
+// Test empty results pagination
+async fn test_empty_results_pagination_impl(server: &bedrock_sso_proxy::server::Server) {
+    let (user_id, _) = setup_test_data(server.database.as_ref()).await;
+
+    let token = create_test_token(
+        server.jwt_service.as_ref(),
+        "user1@example.com",
+        false,
+        user_id,
+    );
+    let app = create_test_router(server);
+
+    // Test with filter that matches no records
+    let request = Request::builder()
+        .method(Method::GET)
+        .uri("/usage/records?model=nonexistent-model&limit=10&offset=0")
+        .header(AUTHORIZATION, format!("Bearer {}", token))
+        .body(Body::empty())
+        .unwrap();
+
+    let response = app.oneshot(request).await.unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    let json: Value = serde_json::from_slice(&body).unwrap();
+
+    // Should return 0 records and total should be 0
+    assert_eq!(json["records"].as_array().unwrap().len(), 0);
+    assert_eq!(json["total"], 0);
+    assert_eq!(json["limit"], 10);
+    assert_eq!(json["offset"], 0);
+}
+
+database_test!(
+    test_empty_results_pagination,
+    test_empty_results_pagination_impl
+);

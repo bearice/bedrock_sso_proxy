@@ -64,9 +64,9 @@ pub struct UsageStatsQuery {
 pub struct UsageRecordsResponse {
     /// List of usage records
     pub records: Vec<UsageRecord>,
-    /// Total number of records (for pagination)
-    pub total: u32,
-    /// Number of records returned
+    /// Total number of matching records (for pagination)
+    pub total: u64,
+    /// Number of records returned in this page
     pub limit: u32,
     /// Number of records skipped
     pub offset: u32,
@@ -126,14 +126,11 @@ async fn get_user_usage_records(
         ..Default::default()
     };
 
-    let records = server.database.usage().get_records(&query).await?;
-
-    // Get total count for pagination (simplified for now)
-    let total = records.len() as u32;
+    let paginated_records = server.database.usage().get_records(&query).await?;
 
     Ok(Json(UsageRecordsResponse {
-        records,
-        total,
+        records: paginated_records.records,
+        total: paginated_records.total_count,
         limit,
         offset,
     }))
@@ -214,12 +211,11 @@ async fn get_system_usage_records(
         ..Default::default()
     };
 
-    let records = server.database.usage().get_records(&query).await?;
-    let total = records.len() as u32; // Simplified
+    let paginated_records = server.database.usage().get_records(&query).await?;
 
     Ok(Json(UsageRecordsResponse {
-        records,
-        total,
+        records: paginated_records.records,
+        total: paginated_records.total_count,
         limit,
         offset,
     }))
@@ -292,11 +288,11 @@ async fn get_top_models(
     };
 
     // Get usage records and aggregate by model
-    let records = server.database.usage().get_records(&query).await?;
+    let paginated_records = server.database.usage().get_records(&query).await?;
 
     // Group by model_id and sum total_tokens
     let mut model_usage_map = std::collections::HashMap::new();
-    for record in records {
+    for record in paginated_records.records {
         let entry = model_usage_map
             .entry(record.model_id.clone())
             .or_insert(0u64);

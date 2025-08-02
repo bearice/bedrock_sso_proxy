@@ -103,14 +103,14 @@ impl SummaryAggregator {
             ..Default::default()
         };
 
-        let records = self.database.usage().get_records(&query).await?;
+        let paginated_records = self.database.usage().get_records(&query).await?;
 
-        if records.is_empty() {
+        if paginated_records.records.is_empty() {
             info!("No raw records found for hourly period, skipping");
             return Ok(vec![]);
         }
 
-        self.aggregate_from_records(records, PeriodType::Hourly, period_start, period_end)
+        self.aggregate_from_records(paginated_records.records, PeriodType::Hourly, period_start, period_end)
             .await
     }
 
@@ -363,8 +363,8 @@ impl SummaryAggregator {
                     ..Default::default()
                 };
 
-                let records = self.database.usage().get_records(&next_record_query).await?;
-                if let Some(first_record) = records.first() {
+                let paginated_records = self.database.usage().get_records(&next_record_query).await?;
+                if let Some(first_record) = paginated_records.records.first() {
                     let period_start = period_type.round_start(first_record.request_time);
                     let period_end = period_type.period_end(period_start);
                     

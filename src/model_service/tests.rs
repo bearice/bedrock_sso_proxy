@@ -193,7 +193,7 @@ async fn test_track_usage() {
         .unwrap();
 
     // Verify usage was recorded
-    let records = database
+    let paginated_records = database
         .usage()
         .get_records(&UsageQuery {
             user_id: Some(user_id),
@@ -201,10 +201,10 @@ async fn test_track_usage() {
         })
         .await
         .unwrap();
-    assert_eq!(records.len(), 1);
-    assert_eq!(records[0].input_tokens, 100);
-    assert_eq!(records[0].output_tokens, 50);
-    assert_eq!(records[0].model_id, "test-model");
+    assert_eq!(paginated_records.records.len(), 1);
+    assert_eq!(paginated_records.records[0].input_tokens, 100);
+    assert_eq!(paginated_records.records[0].output_tokens, 50);
+    assert_eq!(paginated_records.records[0].model_id, "test-model");
 }
 
 #[test]

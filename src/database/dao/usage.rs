@@ -31,6 +31,19 @@ pub struct UsageQuery {
     pub sort_order: SortOrder,
 }
 
+/// Paginated response wrapper
+#[derive(Debug, serde::Serialize, utoipa::ToSchema)]
+pub struct PaginatedRecords<T> {
+    /// The actual data records
+    pub records: Vec<T>,
+    /// Total number of matching records (for pagination)
+    pub total_count: u64,
+    /// Number of records returned in this page
+    pub page_size: u32,
+    /// Number of records skipped (offset)
+    pub offset: u32,
+}
+
 /// Usage statistics
 #[derive(Debug, serde::Serialize, utoipa::ToSchema)]
 pub struct UsageStats {
@@ -222,53 +235,67 @@ impl UsageDao {
         Ok(())
     }
 
-    /// Get usage records with filtering
-    pub async fn get_records(&self, query: &UsageQuery) -> DatabaseResult<Vec<UsageRecord>> {
-        let mut select = usage_records::Entity::find();
+    /// Get usage records with filtering and total count for pagination
+    pub async fn get_records(&self, query: &UsageQuery) -> DatabaseResult<PaginatedRecords<UsageRecord>> {
+        // Build base filter query (without pagination)
+        let mut base_select = usage_records::Entity::find();
 
-        // Apply filters
+        // Apply filters to both count and data queries
         if let Some(user_id) = query.user_id {
-            select = select.filter(usage_records::Column::UserId.eq(user_id));
+            base_select = base_select.filter(usage_records::Column::UserId.eq(user_id));
         }
         if let Some(ref model_id) = query.model_id {
-            select = select.filter(usage_records::Column::ModelId.eq(model_id));
+            base_select = base_select.filter(usage_records::Column::ModelId.eq(model_id));
         }
         if let Some(start_date) = query.start_date {
-            select = select.filter(usage_records::Column::RequestTime.gte(start_date));
+            base_select = base_select.filter(usage_records::Column::RequestTime.gte(start_date));
         }
         if let Some(end_date) = query.end_date {
-            select = select.filter(usage_records::Column::RequestTime.lte(end_date));
+            base_select = base_select.filter(usage_records::Column::RequestTime.lte(end_date));
         }
         if let Some(success_only) = query.success_only {
-            select = select.filter(usage_records::Column::Success.eq(success_only));
+            base_select = base_select.filter(usage_records::Column::Success.eq(success_only));
         }
 
-        // Apply ordering and pagination
+        // Get total count (without pagination)
+        let total_count = base_select
+            .clone()
+            .count(&self.db)
+            .await
+            .map_err(|e| DatabaseError::Database(e.to_string()))?;
+
+        // Apply ordering and pagination for data query
+        let mut data_select = base_select;
         match query.sort_order {
-            SortOrder::Desc => select = select.order_by_desc(usage_records::Column::RequestTime),
-            SortOrder::Asc => select = select.order_by_asc(usage_records::Column::RequestTime),
+            SortOrder::Desc => data_select = data_select.order_by_desc(usage_records::Column::RequestTime),
+            SortOrder::Asc => data_select = data_select.order_by_asc(usage_records::Column::RequestTime),
         }
 
-        if let Some(limit) = query.limit {
-            select = select.limit(Some(limit as u64));
-        }
-        if let Some(offset) = query.offset {
-            select = select.offset(Some(offset as u64));
-        }
+        let limit = query.limit.unwrap_or(50);
+        let offset = query.offset.unwrap_or(0);
+        
+        data_select = data_select.limit(Some(limit as u64));
+        data_select = data_select.offset(Some(offset as u64));
 
-        let records = select
+        let records = data_select
             .all(&self.db)
             .await
             .map_err(|e| DatabaseError::Database(e.to_string()))?;
 
-        Ok(records)
+        Ok(PaginatedRecords {
+            records,
+            total_count,
+            page_size: limit,
+            offset,
+        })
     }
 
     /// Get aggregated usage statistics from pre-computed summaries
+    /// Note: Stats are NOT paginated - they aggregate ALL matching records
     pub async fn get_stats(&self, query: &UsageQuery) -> DatabaseResult<UsageStats> {
         let mut select = usage_summaries::Entity::find();
 
-        // Apply filters to summaries
+        // Apply filters to summaries (ignore pagination params for stats)
         if let Some(user_id) = query.user_id {
             select = select.filter(usage_summaries::Column::UserId.eq(user_id));
         }
@@ -284,6 +311,9 @@ impl UsageDao {
         if let Some(end_date) = query.end_date {
             select = select.filter(usage_summaries::Column::PeriodEnd.lte(end_date));
         }
+
+        // NOTE: Deliberately ignoring query.limit and query.offset for stats
+        // Stats should always aggregate ALL matching records, not just a page
 
         let summaries = select
             .all(&self.db)
@@ -362,11 +392,12 @@ impl UsageDao {
         })
     }
 
-    /// Fallback method to get stats from raw records (used when summaries don't exist)
+    /// Fallback method to get stats from raw records (used when summaries don't exist)  
+    /// Note: Ignores pagination params since stats should aggregate ALL matching records
     async fn get_stats_from_records(&self, query: &UsageQuery) -> DatabaseResult<UsageStats> {
         let mut base_query = usage_records::Entity::find();
 
-        // Apply filters
+        // Apply filters (ignore pagination for stats)
         if let Some(user_id) = query.user_id {
             base_query = base_query.filter(usage_records::Column::UserId.eq(user_id));
         }
@@ -382,6 +413,9 @@ impl UsageDao {
         if let Some(success_only) = query.success_only {
             base_query = base_query.filter(usage_records::Column::Success.eq(success_only));
         }
+
+        // NOTE: Deliberately ignoring query.limit and query.offset for stats
+        // Stats should aggregate ALL matching records, not just a page
 
         // Get count and aggregations
         let total_requests = base_query
