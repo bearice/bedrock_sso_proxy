@@ -6,7 +6,7 @@ use chrono::{DateTime, Utc};
 use rust_decimal::Decimal;
 use sea_orm::{
     ActiveModelTrait, ActiveValue, ColumnTrait, DatabaseConnection, EntityTrait, FromQueryResult,
-    PaginatorTrait, QueryFilter, QueryOrder, QuerySelect, Set,
+    PaginatorTrait, QueryFilter, QueryOrder, QuerySelect, Set, TransactionTrait,
 };
 use sea_orm_migration::sea_query::OnConflict;
 
@@ -107,14 +107,14 @@ impl UsageDao {
             total_output_tokens: Set(usage_record.output_tokens as i64),
             total_tokens: Set(usage_record.total_tokens as i64),
             avg_response_time_ms: Set(usage_record.response_time_ms as f32),
-            success_rate: Set(if usage_record.success { 1.0 } else { 0.0 }),
+            successful_requests: Set(if usage_record.success { 1 } else { 0 }),
             estimated_cost: Set(usage_record.cost_usd),
             created_at: Set(now),
             updated_at: Set(now),
         };
 
         // Use SQL upsert with increment expressions for UPDATE case
-        let success_increment = if usage_record.success { 1.0 } else { 0.0 };
+        let success_increment = if usage_record.success { 1 } else { 0 };
 
         // Build the upsert query with proper aggregation logic
         let on_conflict = OnConflict::columns([
@@ -184,25 +184,12 @@ impl UsageDao {
         )
         // Calculate weighted average success rate: (old_rate * old_count + new_success) / (old_count + 1)
         .value(
-            usage_summaries::Column::SuccessRate,
-            sea_orm::sea_query::Expr::expr(
-                sea_orm::sea_query::Expr::col((
-                    usage_summaries::Entity,
-                    usage_summaries::Column::SuccessRate,
-                ))
-                .mul(sea_orm::sea_query::Expr::col((
-                    usage_summaries::Entity,
-                    usage_summaries::Column::TotalRequests,
-                )))
-                .add(success_increment),
-            )
-            .div(
-                sea_orm::sea_query::Expr::col((
-                    usage_summaries::Entity,
-                    usage_summaries::Column::TotalRequests,
-                ))
-                .add(1),
-            ),
+            usage_summaries::Column::SuccessfulRequests,
+            sea_orm::sea_query::Expr::col((
+                usage_summaries::Entity,
+                usage_summaries::Column::SuccessfulRequests,
+            ))
+            .add(success_increment),
         )
         // Add to existing cost (handle NULL case)
         .value(
@@ -325,13 +312,9 @@ impl UsageDao {
             0.0
         };
 
-        // Calculate weighted average success rate
-        let total_success_weighted: f32 = summaries
-            .iter()
-            .map(|s| s.success_rate * s.total_requests as f32)
-            .sum();
+        let total_successful_requests: i32 = summaries.iter().map(|s| s.successful_requests).sum();
         let success_rate = if total_requests > 0 {
-            total_success_weighted / total_requests as f32
+            total_successful_requests as f32 / total_requests as f32
         } else {
             0.0
         };
@@ -491,25 +474,38 @@ impl UsageDao {
         })
     }
 
-    /// Store/update usage summary using native upsert
-    pub async fn upsert_summary(&self, summary: &UsageSummary) -> DatabaseResult<()> {
-        let active_model = usage_summaries::ActiveModel {
-            id: ActiveValue::NotSet,
-            user_id: Set(summary.user_id),
-            model_id: Set(summary.model_id.clone()),
-            period_type: Set(summary.period_type),
-            period_start: Set(summary.period_start),
-            period_end: Set(summary.period_end),
-            total_requests: Set(summary.total_requests),
-            total_input_tokens: Set(summary.total_input_tokens),
-            total_output_tokens: Set(summary.total_output_tokens),
-            total_tokens: Set(summary.total_tokens),
-            avg_response_time_ms: Set(summary.avg_response_time_ms),
-            success_rate: Set(summary.success_rate),
-            estimated_cost: Set(summary.estimated_cost),
-            created_at: Set(summary.created_at),
-            updated_at: Set(summary.updated_at),
-        };
+    /// Store/update a batch of usage summaries using native upsert
+    pub async fn upsert_many_summaries(&self, summaries: &[UsageSummary]) -> DatabaseResult<usize> {
+        if summaries.is_empty() {
+            return Ok(0);
+        }
+
+        let tx = self
+            .db
+            .begin()
+            .await
+            .map_err(|e| DatabaseError::Database(e.to_string()))?;
+
+        let active_models: Vec<usage_summaries::ActiveModel> = summaries
+            .iter()
+            .map(|summary| usage_summaries::ActiveModel {
+                id: ActiveValue::NotSet,
+                user_id: Set(summary.user_id),
+                model_id: Set(summary.model_id.clone()),
+                period_type: Set(summary.period_type),
+                period_start: Set(summary.period_start),
+                period_end: Set(summary.period_end),
+                total_requests: Set(summary.total_requests),
+                successful_requests: Set(summary.successful_requests),
+                total_input_tokens: Set(summary.total_input_tokens),
+                total_output_tokens: Set(summary.total_output_tokens),
+                total_tokens: Set(summary.total_tokens),
+                avg_response_time_ms: Set(summary.avg_response_time_ms),
+                estimated_cost: Set(summary.estimated_cost),
+                created_at: Set(summary.created_at),
+                updated_at: Set(summary.updated_at),
+            })
+            .collect();
 
         let on_conflict = OnConflict::columns([
             usage_summaries::Column::UserId,
@@ -520,23 +516,29 @@ impl UsageDao {
         .update_columns([
             usage_summaries::Column::PeriodEnd,
             usage_summaries::Column::TotalRequests,
+            usage_summaries::Column::SuccessfulRequests,
             usage_summaries::Column::TotalInputTokens,
             usage_summaries::Column::TotalOutputTokens,
             usage_summaries::Column::TotalTokens,
             usage_summaries::Column::AvgResponseTimeMs,
-            usage_summaries::Column::SuccessRate,
             usage_summaries::Column::EstimatedCost,
             usage_summaries::Column::UpdatedAt,
         ])
         .to_owned();
 
-        usage_summaries::Entity::insert(active_model)
-            .on_conflict(on_conflict)
-            .exec(&self.db)
+        for model in active_models {
+            usage_summaries::Entity::insert(model)
+                .on_conflict(on_conflict.clone())
+                .exec(&tx)
+                .await
+                .map_err(|e| DatabaseError::Database(e.to_string()))?;
+        }
+
+        tx.commit()
             .await
             .map_err(|e| DatabaseError::Database(e.to_string()))?;
 
-        Ok(())
+        Ok(summaries.len())
     }
 
     /// Get usage summaries with filtering

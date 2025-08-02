@@ -62,8 +62,8 @@ impl MigrationTrait for Migration {
                             .not_null(),
                     )
                     .col(
-                        ColumnDef::new(UsageSummaries::SuccessRate)
-                            .float()
+                        ColumnDef::new(UsageSummaries::SuccessfulRequests)
+                            .integer()
                             .not_null(),
                     )
                     .col(

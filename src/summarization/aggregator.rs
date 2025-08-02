@@ -2,7 +2,7 @@ use crate::database::{DatabaseManager, DatabaseResult, entities::*};
 use chrono::{DateTime, Utc};
 use rust_decimal::Decimal;
 use std::collections::HashMap;
-use tracing::{error, info};
+use tracing::{info};
 
 /// Key for grouping usage records
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
@@ -255,8 +255,7 @@ impl SummaryAggregator {
             let weighted_response_time = summary.avg_response_time_ms * summary.total_requests as f32;
             data.total_response_time += weighted_response_time as f64;
 
-            // Calculate successful requests from success rate
-            data.successful_requests += (summary.success_rate * summary.total_requests as f32) as i32;
+            data.successful_requests += summary.successful_requests;
 
             if let Some(cost) = summary.estimated_cost {
                 data.total_cost += cost;
@@ -284,12 +283,6 @@ impl SummaryAggregator {
                 0.0
             };
 
-            let success_rate = if data.total_requests > 0 {
-                data.successful_requests as f32 / data.total_requests as f32
-            } else {
-                0.0
-            };
-
             let summary = UsageSummary {
                 id: 0, // Will be set by database
                 user_id: key.user_id,
@@ -298,11 +291,11 @@ impl SummaryAggregator {
                 period_start,
                 period_end,
                 total_requests: data.total_requests,
+                successful_requests: data.successful_requests,
                 total_input_tokens: data.total_input_tokens,
                 total_output_tokens: data.total_output_tokens,
                 total_tokens: data.total_tokens,
                 avg_response_time_ms,
-                success_rate,
                 estimated_cost: if data.total_cost > Decimal::ZERO {
                     Some(data.total_cost)
                 } else {
@@ -326,23 +319,7 @@ impl SummaryAggregator {
 
     /// Store summaries in the database, handling upserts
     pub async fn store_summaries(&self, summaries: &[UsageSummary]) -> DatabaseResult<usize> {
-        let mut stored_count = 0;
-
-        for summary in summaries {
-            match self.database.usage().upsert_summary(summary).await {
-                Ok(()) => stored_count += 1,
-                Err(e) => {
-                    error!(
-                        "Failed to store summary for user {} model {}: {}",
-                        summary.user_id, summary.model_id, e
-                    );
-                    return Err(e);
-                }
-            }
-        }
-
-        info!("Successfully stored {} summaries", stored_count);
-        Ok(stored_count)
+        self.database.usage().upsert_many_summaries(summaries).await
     }
 
     /// Generate and store summaries for a period

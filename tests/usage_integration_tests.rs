@@ -515,11 +515,11 @@ async fn test_get_stats_uses_summaries_when_available_impl(
         period_start: Utc::now() - chrono::Duration::hours(24),
         period_end: Utc::now(),
         total_requests: 10,
+        successful_requests: 9,
         total_input_tokens: 1000,
         total_output_tokens: 500,
         total_tokens: 1500,
         avg_response_time_ms: 250.0,
-        success_rate: 0.9,
         estimated_cost: Some(Decimal::new(150, 3)), // 0.150
         created_at: Utc::now(),
         updated_at: Utc::now(),
@@ -529,7 +529,7 @@ async fn test_get_stats_uses_summaries_when_available_impl(
     server
         .database
         .usage()
-        .upsert_summary(&summary)
+        .upsert_many_summaries(&[summary])
         .await
         .unwrap();
 
@@ -627,7 +627,7 @@ async fn test_realtime_hourly_summary_updates_impl(server: &bedrock_sso_proxy::s
     assert_eq!(summary.total_output_tokens, 50);
     assert_eq!(summary.total_tokens, 150);
     assert_eq!(summary.avg_response_time_ms, 500.0);
-    assert_eq!(summary.success_rate, 1.0);
+    assert_eq!(summary.successful_requests, 1);
     assert_eq!(summary.estimated_cost, Some(Decimal::new(25, 3)));
 
     // Create second usage record in the same hour
@@ -677,7 +677,7 @@ async fn test_realtime_hourly_summary_updates_impl(server: &bedrock_sso_proxy::s
     assert_eq!(updated_summary.total_output_tokens, 150); // 50 + 100
     assert_eq!(updated_summary.total_tokens, 450); // 150 + 300
     assert_eq!(updated_summary.avg_response_time_ms, 400.0); // (500 + 300) / 2
-    assert_eq!(updated_summary.success_rate, 0.5); // 1 success out of 2 total
+    assert_eq!(updated_summary.successful_requests, 1); // 1 success out of 2 total
     assert_eq!(updated_summary.estimated_cost, Some(Decimal::new(75, 3))); // 0.025 + 0.050
 
     // Create third usage record in a different hour
@@ -731,7 +731,7 @@ async fn test_realtime_hourly_summary_updates_impl(server: &bedrock_sso_proxy::s
     assert_eq!(new_hour_summary.total_output_tokens, 25);
     assert_eq!(new_hour_summary.total_tokens, 100);
     assert_eq!(new_hour_summary.avg_response_time_ms, 200.0);
-    assert_eq!(new_hour_summary.success_rate, 1.0);
+    assert_eq!(new_hour_summary.successful_requests, 1);
     assert_eq!(new_hour_summary.estimated_cost, Some(Decimal::new(10, 3)));
 }
 
