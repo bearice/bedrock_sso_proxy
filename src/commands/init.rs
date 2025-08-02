@@ -1,11 +1,11 @@
 use crate::Config;
 use crate::cost::CostTrackingService;
-use crate::database::entities::ModelCosts;
 use crate::database::DatabaseManager;
+use crate::database::entities::ModelCosts;
 use clap::Subcommand;
 use sea_orm::{EntityTrait, PaginatorTrait};
 use std::sync::Arc;
-use tracing::{info, warn, error};
+use tracing::{error, info, warn};
 
 #[derive(Subcommand)]
 pub enum InitAction {
@@ -37,7 +37,10 @@ pub async fn handle_init_command(
     use std::sync::Arc;
 
     match action {
-        InitAction::Database { skip_costs, force_seed } => {
+        InitAction::Database {
+            skip_costs,
+            force_seed,
+        } => {
             info!("Initializing database...");
 
             // Create dependencies
@@ -59,12 +62,16 @@ pub async fn handle_init_command(
                         if count > 0 {
                             info!("✅ Seeded {} default model cost records", count);
                         } else {
-                            info!("✅ Default model cost data already exists (use --force-seed to re-seed)");
+                            info!(
+                                "✅ Default model cost data already exists (use --force-seed to re-seed)"
+                            );
                         }
                     }
                     Err(e) => {
                         warn!("⚠️  Failed to seed default model costs: {}", e);
-                        warn!("Database initialization completed, but default costs may need manual setup");
+                        warn!(
+                            "Database initialization completed, but default costs may need manual setup"
+                        );
                     }
                 }
             } else {
@@ -83,7 +90,6 @@ async fn seed_default_model_costs(
     db_manager: Arc<dyn DatabaseManager>,
     force_seed: bool,
 ) -> Result<usize, Box<dyn std::error::Error>> {
-
     let connection = db_manager.connection();
 
     // Check if data already exists and whether to proceed
@@ -100,10 +106,13 @@ async fn seed_default_model_costs(
 
     // Use the existing cost tracking service to initialize with embedded CSV data
     let cost_service = CostTrackingService::new(db_manager);
-    
+
     match cost_service.initialize_model_costs_from_embedded().await {
         Ok(result) => {
-            info!("Successfully seeded {} model costs from embedded data", result.total_processed);
+            info!(
+                "Successfully seeded {} model costs from embedded data",
+                result.total_processed
+            );
             Ok(result.total_processed)
         }
         Err(e) => {
@@ -130,7 +139,8 @@ mod tests {
                 force_seed: false,
             },
             config,
-        ).await;
+        )
+        .await;
         assert!(result.is_ok());
 
         // Second initialization should also succeed (idempotent)
@@ -140,7 +150,8 @@ mod tests {
                 force_seed: false,
             },
             config,
-        ).await;
+        )
+        .await;
         assert!(result.is_ok());
     }
 
@@ -155,7 +166,8 @@ mod tests {
                 force_seed: false,
             },
             config,
-        ).await;
+        )
+        .await;
         assert!(result.is_ok());
     }
 
@@ -171,7 +183,8 @@ mod tests {
                 force_seed: true,
             },
             config,
-        ).await;
+        )
+        .await;
         assert!(result.is_ok());
 
         // Second run with force seed should clear and re-seed
@@ -181,21 +194,26 @@ mod tests {
                 force_seed: true,
             },
             config,
-        ).await;
+        )
+        .await;
         assert!(result.is_ok());
     }
 
-    #[tokio::test] 
+    #[tokio::test]
     async fn test_seed_default_model_costs() {
         let server = TestServerBuilder::new().build().await;
         let db_manager = server.database.clone();
 
         // Test initial seeding
-        let count = seed_default_model_costs(db_manager.clone(), false).await.unwrap();
+        let count = seed_default_model_costs(db_manager.clone(), false)
+            .await
+            .unwrap();
         assert!(count > 0);
 
         // Test idempotent behavior
-        let count = seed_default_model_costs(db_manager.clone(), false).await.unwrap();
+        let count = seed_default_model_costs(db_manager.clone(), false)
+            .await
+            .unwrap();
         assert_eq!(count, 0); // Should not seed again
 
         // Test force seeding

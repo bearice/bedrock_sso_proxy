@@ -218,7 +218,9 @@ impl Server {
                 self.config.shutdown.background_task_timeout_seconds,
             );
         } else {
-            info!("Database initialization on startup disabled - use 'init database' command instead");
+            info!(
+                "Database initialization on startup disabled - use 'init database' command instead"
+            );
         }
 
         // Register all server components for shutdown
