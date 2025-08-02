@@ -94,6 +94,7 @@ export function UsageTracking() {
         model: filters.model,
         success: filters.success_only,
         format: 'csv' as const,
+        limit: totalCount, // Export all records that match the filter
       };
 
       const blob = await usageApi.exportUsageData(token, exportQuery);

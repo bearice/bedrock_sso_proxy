@@ -50,6 +50,8 @@ pub struct UsageRecordsQuery {
     pub success_only: Option<bool>,
     /// Response format (json or csv)
     pub format: Option<String>,
+    /// Filter by specific user ID (admin only)
+    pub user_id: Option<i32>,
 }
 
 /// Query parameters for usage summaries
@@ -67,6 +69,8 @@ pub struct UsageSummariesQuery {
     pub limit: Option<u32>,
     /// Number of summaries to skip for pagination
     pub offset: Option<u32>,
+    /// Filter by specific user ID (admin only)
+    pub user_id: Option<i32>,
 }
 
 /// Response for usage records endpoint
@@ -95,47 +99,31 @@ pub struct UsageSummariesResponse {
     pub offset: u32,
 }
 
-/// Get user's usage records
-#[utoipa::path(
-    get,
-    path = "/usage/records",
-    summary = "Get User Usage Records",
-    description = "Retrieve usage records for the authenticated user",
-    tags = ["Usage Tracking"],
-    params(UsageRecordsQuery),
-    responses(
-        (status = 200, description = "List of usage records", body = UsageRecordsResponse),
-        (status = 401, description = "Unauthorized", body = ApiErrorResponse),
-        (status = 500, description = "Internal server error", body = ApiErrorResponse)
-    ),
-    security(
-        ("jwt_auth" = []),
-        ("api_key_auth" = [])
-    )
-)]
-async fn get_user_usage_records(
-    State(server): State<crate::server::Server>,
-    UserExtractor(user): UserExtractor,
-    Query(params): Query<UsageRecordsQuery>,
+/// Common implementation for handling usage records requests
+async fn handle_usage_records(
+    server: crate::server::Server,
+    params: UsageRecordsQuery,
+    user_id_override: Option<i32>,
 ) -> Result<impl IntoResponse, AppError> {
-    // Get user ID from JWT claims (sub field contains database user ID)
-    let user_id: i32 = user.id;
-
-    let limit = params.limit.unwrap_or(50).min(500); // Max 500 records
+    let limit = params.limit.unwrap_or(50).min(500);
     let offset = params.offset.unwrap_or(0);
-
+    
+    // Use override (for user endpoints) or query param (for admin endpoints)
+    let user_id = user_id_override.or(params.user_id);
+    
     let query = UsageQuery {
-        user_id: Some(user_id),
+        user_id,
         model_id: params.model.clone(),
         start_date: params.start_date,
         end_date: params.end_date,
+        success_only: params.success_only,
         limit: Some(limit),
         offset: Some(offset),
         ..Default::default()
     };
-
+    
     let paginated_records = server.database.usage().get_records(&query).await?;
-
+    
     if params.format.as_deref() == Some("csv") {
         let mut wtr = csv::WriterBuilder::new().from_writer(vec![]);
 
@@ -169,6 +157,81 @@ async fn get_user_usage_records(
         offset,
     })
     .into_response())
+}
+
+/// Get user's usage records
+#[utoipa::path(
+    get,
+    path = "/usage/records",
+    summary = "Get User Usage Records",
+    description = "Retrieve usage records for the authenticated user",
+    tags = ["Usage Tracking"],
+    params(UsageRecordsQuery),
+    responses(
+        (status = 200, description = "List of usage records", body = UsageRecordsResponse),
+        (status = 401, description = "Unauthorized", body = ApiErrorResponse),
+        (status = 500, description = "Internal server error", body = ApiErrorResponse)
+    ),
+    security(
+        ("jwt_auth" = []),
+        ("api_key_auth" = [])
+    )
+)]
+async fn get_user_usage_records(
+    State(server): State<crate::server::Server>,
+    UserExtractor(user): UserExtractor,
+    Query(params): Query<UsageRecordsQuery>,
+) -> Result<impl IntoResponse, AppError> {
+    // Get user ID from JWT claims (sub field contains database user ID)
+    let user_id: i32 = user.id;
+    handle_usage_records(server, params, Some(user_id)).await
+}
+
+/// Common implementation for handling usage summaries requests
+async fn handle_usage_summaries(
+    server: crate::server::Server,
+    params: UsageSummariesQuery,
+    user_id_override: Option<i32>,
+) -> Result<Json<UsageSummariesResponse>, AppError> {
+    let limit = params.limit.unwrap_or(1000).min(5000); // Max 5000 summaries
+    let offset = params.offset.unwrap_or(0);
+    
+    // Use override (for user endpoints) or query param (for admin endpoints)
+    let user_id = user_id_override.or(params.user_id);
+    
+    // Parse period type
+    let period_type = if let Some(ref period_str) = params.period_type {
+        match period_str.as_str() {
+            "hourly" => Some(PeriodType::Hourly),
+            "daily" => Some(PeriodType::Daily),
+            "weekly" => Some(PeriodType::Weekly),
+            "monthly" => Some(PeriodType::Monthly),
+            _ => Some(PeriodType::Daily), // Invalid period type, default to daily
+        }
+    } else {
+        Some(PeriodType::Daily) // Default to daily
+    };
+
+    let query = UsageQuery {
+        user_id,
+        model_id: params.model_id.clone(),
+        start_date: params.start_date,
+        end_date: params.end_date,
+        period_type,
+        limit: Some(limit),
+        offset: Some(offset),
+        ..Default::default()
+    };
+
+    let summaries = server.database.usage().get_summaries(&query).await?;
+    let total = summaries.len() as u64; // For simplicity, return the count we got
+
+    Ok(Json(UsageSummariesResponse {
+        summaries,
+        total,
+        limit,
+        offset,
+    }))
 }
 
 /// Get user's usage summaries
@@ -195,42 +258,7 @@ async fn get_user_usage_summaries(
     Query(params): Query<UsageSummariesQuery>,
 ) -> Result<Json<UsageSummariesResponse>, AppError> {
     let user_id: i32 = user.id;
-    let limit = params.limit.unwrap_or(1000).min(5000); // Max 5000 summaries
-    let offset = params.offset.unwrap_or(0);
-
-    // Parse period type
-    let period_type = if let Some(ref period_str) = params.period_type {
-        match period_str.as_str() {
-            "hourly" => Some(PeriodType::Hourly),
-            "daily" => Some(PeriodType::Daily),
-            "weekly" => Some(PeriodType::Weekly),
-            "monthly" => Some(PeriodType::Monthly),
-            _ => Some(PeriodType::Daily), // Invalid period type, default to daily
-        }
-    } else {
-        Some(PeriodType::Daily) // Default to daily
-    };
-
-    let query = UsageQuery {
-        user_id: Some(user_id),
-        model_id: params.model_id.clone(),
-        start_date: params.start_date,
-        end_date: params.end_date,
-        period_type,
-        limit: Some(limit),
-        offset: Some(offset),
-        ..Default::default()
-    };
-
-    let summaries = server.database.usage().get_summaries(&query).await?;
-    let total = summaries.len() as u64; // For simplicity, return the count we got
-
-    Ok(Json(UsageSummariesResponse {
-        summaries,
-        total,
-        limit,
-        offset,
-    }))
+    handle_usage_summaries(server, params, Some(user_id)).await
 }
 
 /// Get system-wide usage records (admin only)
@@ -256,55 +284,7 @@ async fn get_system_usage_records(
     Query(params): Query<UsageRecordsQuery>,
 ) -> Result<impl IntoResponse, AppError> {
     // Admin permissions already checked by middleware
-
-    let limit = params.limit.unwrap_or(50).min(500);
-    let offset = params.offset.unwrap_or(0);
-
-    let query = UsageQuery {
-        model_id: params.model.clone(),
-        start_date: params.start_date,
-        end_date: params.end_date,
-        success_only: params.success_only,
-        limit: Some(limit),
-        offset: Some(offset),
-        ..Default::default()
-    };
-
-    let paginated_records = server.database.usage().get_records(&query).await?;
-
-    if params.format.as_deref() == Some("csv") {
-        let mut wtr = csv::WriterBuilder::new().from_writer(vec![]);
-
-        // Write records (header is written automatically)
-        for record in paginated_records.records {
-            wtr.serialize(record)
-                .map_err(|e| AppError::Internal(e.to_string()))?;
-        }
-
-        wtr.flush().map_err(|e| AppError::Internal(e.to_string()))?;
-        let csv_data = wtr
-            .into_inner()
-            .map_err(|e| AppError::Internal(e.to_string()))?;
-
-        // Create response
-        let headers = [
-            (header::CONTENT_TYPE, "text/csv; charset=utf-8"),
-            (
-                header::CONTENT_DISPOSITION,
-                "attachment; filename=\"usage_export.csv\"",
-            ),
-        ];
-
-        return Ok((headers, csv_data).into_response());
-    }
-
-    Ok(Json(UsageRecordsResponse {
-        records: paginated_records.records,
-        total: paginated_records.total_count,
-        limit,
-        offset,
-    })
-    .into_response())
+    handle_usage_records(server, params, None).await
 }
 
 /// Get system-wide usage summaries (admin only)
@@ -330,41 +310,7 @@ async fn get_admin_usage_summaries(
     Query(params): Query<UsageSummariesQuery>,
 ) -> Result<Json<UsageSummariesResponse>, AppError> {
     // Admin permissions already checked by middleware
-    let limit = params.limit.unwrap_or(1000).min(5000); // Max 5000 summaries
-    let offset = params.offset.unwrap_or(0);
-
-    // Parse period type
-    let period_type = if let Some(ref period_str) = params.period_type {
-        match period_str.as_str() {
-            "hourly" => Some(PeriodType::Hourly),
-            "daily" => Some(PeriodType::Daily),
-            "weekly" => Some(PeriodType::Weekly),
-            "monthly" => Some(PeriodType::Monthly),
-            _ => Some(PeriodType::Daily), // Invalid period type, default to daily
-        }
-    } else {
-        Some(PeriodType::Daily) // Default to daily
-    };
-
-    let query = UsageQuery {
-        model_id: params.model_id.clone(),
-        start_date: params.start_date,
-        end_date: params.end_date,
-        period_type,
-        limit: Some(limit),
-        offset: Some(offset),
-        ..Default::default()
-    };
-
-    let summaries = server.database.usage().get_summaries(&query).await?;
-    let total = summaries.len() as u64; // For simplicity, return the count we got
-
-    Ok(Json(UsageSummariesResponse {
-        summaries,
-        total,
-        limit,
-        offset,
-    }))
+    handle_usage_summaries(server, params, None).await
 }
 
 // Note: user_id is now extracted from JWT sub field (database user ID)
