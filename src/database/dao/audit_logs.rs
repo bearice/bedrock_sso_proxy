@@ -1,4 +1,4 @@
-use crate::database::entities::{AuditLogEntry, audit_logs};
+use crate::database::entities::{AuditEventType, AuditLogEntry, audit_logs};
 use crate::database::{DatabaseError, DatabaseResult};
 use chrono::{DateTime, Utc};
 use sea_orm::{
@@ -13,8 +13,8 @@ use utoipa::{IntoParams, ToSchema};
 pub struct AuditLogQueryParams {
     /// Filter by user ID
     pub user_id: Option<i32>,
-    /// Filter by event type (partial match)
-    pub event_type: Option<String>,
+    /// Filter by event type
+    pub event_type: Option<AuditEventType>,
     /// Filter by provider
     pub provider: Option<String>,
     /// Filter by success status
@@ -49,7 +49,7 @@ impl AuditLogsDao {
         let active_model = audit_logs::ActiveModel {
             id: ActiveValue::NotSet,
             user_id: Set(entry.user_id),
-            event_type: Set(entry.event_type.clone()),
+            event_type: Set(entry.event_type),
             provider: Set(entry.provider.clone()),
             ip_address: Set(entry.ip_address.clone()),
             user_agent: Set(entry.user_agent.clone()),
@@ -97,8 +97,8 @@ impl AuditLogsDao {
         if let Some(uid) = query_params.user_id {
             query = query.filter(audit_logs::Column::UserId.eq(uid));
         }
-        if let Some(ref event) = query_params.event_type {
-            query = query.filter(audit_logs::Column::EventType.contains(event));
+        if let Some(event) = query_params.event_type {
+            query = query.filter(audit_logs::Column::EventType.eq(event));
         }
         if let Some(ref prov) = query_params.provider {
             query = query.filter(audit_logs::Column::Provider.eq(prov));
@@ -132,8 +132,8 @@ impl AuditLogsDao {
         if let Some(uid) = query_params.user_id {
             query = query.filter(audit_logs::Column::UserId.eq(uid));
         }
-        if let Some(ref event) = query_params.event_type {
-            query = query.filter(audit_logs::Column::EventType.contains(event));
+        if let Some(event) = query_params.event_type {
+            query = query.filter(audit_logs::Column::EventType.eq(event));
         }
         if let Some(ref prov) = query_params.provider {
             query = query.filter(audit_logs::Column::Provider.eq(prov));

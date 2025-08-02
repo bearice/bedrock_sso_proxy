@@ -122,5 +122,8 @@ pub type UsageSummary = usage_summaries::Model;
 pub type ModelCost = model_costs::Model;
 pub type ApiKeyRecord = api_keys::Model;
 
+// Export audit event type
+pub use audit_logs::AuditEventType;
+
 // Database entities use derive macro with TTL attributes
 // All implementations are generated automatically via #[derive(CacheableDeriv)]

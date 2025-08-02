@@ -4,7 +4,7 @@ use crate::{
     config::Config,
     database::{
         DatabaseManager,
-        entities::{AuditLogEntry, RefreshTokenData, UserRecord},
+        entities::{AuditEventType, AuditLogEntry, RefreshTokenData, UserRecord},
     },
     error::AppError,
     utils::request_context::RequestContext,
@@ -147,7 +147,7 @@ impl OAuthFlows {
                     let audit_entry = AuditLogEntry {
                         id: 0, // Will be set by database
                         user_id: None,
-                        event_type: "oauth_login_failed".to_string(),
+                        event_type: AuditEventType::OAuthLoginFailed,
                         provider: Some(request.provider.clone()),
                         ip_address: context.ip_address.clone(),
                         user_agent: context.user_agent.clone(),
@@ -281,7 +281,7 @@ impl OAuthFlows {
             let audit_entry = AuditLogEntry {
                 id: 0, // Will be set by database
                 user_id: Some(db_user_id),
-                event_type: "oauth_login".to_string(),
+                event_type: AuditEventType::OAuthLogin,
                 provider: Some(request.provider.clone()),
                 ip_address: context.ip_address.clone(),
                 user_agent: context.user_agent.clone(),
@@ -374,7 +374,7 @@ impl OAuthFlows {
                     let audit_entry = AuditLogEntry {
                         id: 0, // Will be set by database
                         user_id: None,
-                        event_type: "token_refresh_failed".to_string(),
+                        event_type: AuditEventType::AuthFailure,
                         provider: None, // Provider unknown at this point
                         ip_address: context.ip_address.clone(),
                         user_agent: context.user_agent.clone(),
@@ -459,7 +459,7 @@ impl OAuthFlows {
             let audit_entry = AuditLogEntry {
                 id: 0,         // Will be set by database
                 user_id: None, // Would need user lookup by composite ID
-                event_type: "token_refresh".to_string(),
+                event_type: AuditEventType::TokenRefresh,
                 provider: Some(token_data.provider.clone()),
                 ip_address: context.ip_address,
                 user_agent: context.user_agent,

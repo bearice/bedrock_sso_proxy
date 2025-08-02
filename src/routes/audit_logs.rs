@@ -1,6 +1,7 @@
 use crate::Server;
 use crate::auth::middleware::UserExtractor;
 use crate::database::AuditLogQueryParams;
+use crate::database::entities::AuditEventType;
 use crate::error::AppError;
 use crate::routes::ApiErrorResponse;
 use axum::Router;
@@ -38,7 +39,7 @@ pub struct AuditLogEntry {
     /// User ID (nullable for system events)
     pub user_id: Option<i32>,
     /// Event type
-    pub event_type: String,
+    pub event_type: AuditEventType,
     /// OAuth provider (nullable)
     pub provider: Option<String>,
     /// Client IP address (nullable)
@@ -159,7 +160,7 @@ mod tests {
     use super::*;
     use crate::auth::middleware::{admin_middleware, jwt_auth_middleware};
     use crate::database::DatabaseManager;
-    use crate::database::entities::AuditLogEntry as DbAuditLogEntry;
+    use crate::database::entities::{AuditEventType, AuditLogEntry as DbAuditLogEntry};
     use crate::test_utils::TestServerBuilder;
     use axum::body::Body;
     use axum::http::Request;
@@ -173,13 +174,13 @@ mod tests {
     async fn create_test_audit_log(
         database: &Arc<dyn DatabaseManager>,
         user_id: Option<i32>,
-        event_type: &str,
+        event_type: AuditEventType,
         success: bool,
     ) -> i32 {
         let entry = DbAuditLogEntry {
             id: 0, // Will be assigned by database
             user_id,
-            event_type: event_type.to_string(),
+            event_type,
             provider: Some("test".to_string()),
             ip_address: Some("127.0.0.1".to_string()),
             user_agent: Some("test-agent".to_string()),
@@ -219,8 +220,14 @@ mod tests {
         let user_id = server.database.users().upsert(&user).await.unwrap();
 
         // Create test audit logs
-        create_test_audit_log(&server.database, Some(user_id), "login", true).await;
-        create_test_audit_log(&server.database, Some(user_id), "logout", true).await;
+        create_test_audit_log(&server.database, Some(user_id), AuditEventType::Login, true).await;
+        create_test_audit_log(
+            &server.database,
+            Some(user_id),
+            AuditEventType::Logout,
+            true,
+        )
+        .await;
 
         // Create JWT token
         let claims = crate::auth::jwt::OAuthClaims::new(user_id, 3600);
@@ -278,8 +285,14 @@ mod tests {
         let user_id = server.database.users().upsert(&user).await.unwrap();
 
         // Create test audit logs
-        create_test_audit_log(&server.database, Some(user_id), "login", true).await;
-        create_test_audit_log(&server.database, Some(user_id), "api_call", false).await;
+        create_test_audit_log(&server.database, Some(user_id), AuditEventType::Login, true).await;
+        create_test_audit_log(
+            &server.database,
+            Some(user_id),
+            AuditEventType::ApiCall,
+            false,
+        )
+        .await;
 
         // Create JWT token
         let claims = crate::auth::jwt::OAuthClaims::new(user_id, 3600);
