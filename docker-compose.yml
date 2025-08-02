@@ -1,14 +1,12 @@
-version: '3.8'
-
 services:
   bedrock-proxy:
     build:
       context: .
       dockerfile: Dockerfile
-      target: rust-builder  # Stop at build stage for development
-      args:
-        - BUILDKIT_INLINE_CACHE=1
-    command: cargo run --bin bedrock_proxy
+      #target: rust-builder  # Stop at build stage for development
+      #args:
+      #  - BUILDKIT_INLINE_CACHE=1
+    command: ./bedrock_proxy
     ports:
       - "3000:3000"
       - "9090:9090"  # Metrics port
@@ -17,7 +15,7 @@ services:
       - BEDROCK_CACHE__BACKEND=redis
       - BEDROCK_CACHE__REDIS_URL=redis://redis:6379
     volumes:
-      - .:/app
+      - ./config.yaml:/app/config.yaml
     working_dir: /app
     depends_on:
       postgres:
@@ -44,7 +42,7 @@ services:
       retries: 5
 
   postgres:
-    image: postgres:15-alpine
+    image: postgres:17-alpine
     environment:
       - POSTGRES_DB=bedrock_sso
       - POSTGRES_USER=bedrock
