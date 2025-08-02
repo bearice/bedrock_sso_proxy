@@ -17,19 +17,20 @@ COPY frontend/ ./
 RUN npm run build
 
 # Stage 2: Rust build
-FROM rust:1.79-slim AS rust-builder
+FROM rust:1.87-slim AS rust-builder
 
 # Install system dependencies for building
 RUN apt-get update && apt-get install -y \
     pkg-config \
     libssl-dev \
     ca-certificates \
+    curl \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
-# Copy Rust manifest files for dependency caching
-COPY Cargo.toml Cargo.lock ./
+# Copy all required files for the build
+COPY Cargo.toml Cargo.lock build.rs ./
 COPY typed_cache_macro/ ./typed_cache_macro/
 
 # Create a dummy main.rs to build dependencies
@@ -38,9 +39,8 @@ RUN mkdir src && echo "fn main() {}" > src/main.rs
 # Build dependencies (cached layer)
 RUN cargo build --release && rm -rf src/
 
-# Copy source code
 COPY src/ ./src/
-COPY build.rs ./
+COPY bedrock_pricing.csv ./
 
 # Copy built frontend from previous stage
 COPY --from=frontend-builder /app/frontend/dist ./frontend/dist
