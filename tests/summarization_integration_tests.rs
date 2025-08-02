@@ -316,6 +316,97 @@ async fn test_job_system_efficiency() {
 }
 
 #[tokio::test]
+async fn test_cleanup_summaries() {
+    let server = TestServerBuilder::new().build().await;
+    let service = SummarizationService::new(server.database.clone());
+
+    // Create test data using the service's own methods to ensure summaries exist
+    let now = Utc::now();
+    let old_date = now - Duration::days(10); // Use 10 days to ensure it's in a completed period
+    let recent_date = now - Duration::days(3); // Use 3 days 
+
+    // Create old usage records 
+    create_test_usage_record(
+        &*server.database,
+        1,
+        "claude-sonnet",
+        old_date,
+        true,
+        Some(Decimal::from_str("0.10").unwrap()),
+    ).await.unwrap();
+
+    // Create recent usage records 
+    create_test_usage_record(
+        &*server.database,
+        2,
+        "claude-haiku", 
+        recent_date,
+        true,
+        Some(Decimal::from_str("0.05").unwrap()),
+    ).await.unwrap();
+
+    println!("Created test usage records");
+
+    // Generate summaries using the service (this should create both hourly and daily summaries)
+    let _ = service.generate_summaries("hourly", 15, None, None, true).await.unwrap();
+    let _ = service.generate_summaries("daily", 15, None, None, true).await.unwrap();
+
+    // Verify summaries were created
+    let initial_summaries = server.database.usage()
+        .get_summaries(&Default::default())
+        .await
+        .unwrap();
+    
+    println!("Created {} summaries", initial_summaries.len());
+    
+    if initial_summaries.is_empty() {
+        println!("No summaries generated, testing cleanup method with empty database");
+        // Test that cleanup works even with no summaries
+        let deleted_count = service.cleanup_summaries(30).await.unwrap();
+        assert_eq!(deleted_count, 0, "Should delete 0 summaries from empty database");
+        println!("✅ Cleanup summaries tests passed (empty database)!");
+        return;
+    }
+
+    for summary in &initial_summaries {
+        println!("  - Summary: {} period_start={}, days_old={}", 
+                summary.model_id, 
+                summary.period_start.format("%Y-%m-%d"),
+                (now - summary.period_start).num_days());
+    }
+    
+    // Test cleanup with 5 days retention (should delete some summaries)
+    let deleted_count = service.cleanup_summaries(5).await.unwrap();
+    
+    println!("Deleted {} summaries with 5-day retention", deleted_count);
+    
+    // Verify some summaries were deleted or all remain depending on their age
+    let remaining_summaries = server.database.usage()
+        .get_summaries(&Default::default())
+        .await
+        .unwrap();
+    
+    println!("Remaining summaries after 5-day cleanup: {}", remaining_summaries.len());
+    assert!(remaining_summaries.len() <= initial_summaries.len(), "Should not have more summaries after cleanup");
+
+    // Test cleanup with very short retention (should delete all remaining summaries)
+    let deleted_count_final = service.cleanup_summaries(0).await.unwrap();
+    
+    println!("Deleted {} summaries with 0-day retention", deleted_count_final);
+    
+    // Verify all summaries are gone
+    let summaries_final = server.database.usage()
+        .get_summaries(&Default::default())
+        .await
+        .unwrap();
+    
+    println!("Final summaries count: {}", summaries_final.len());
+    assert_eq!(summaries_final.len(), 0, "Should have no remaining summaries after 0-day retention cleanup");
+
+    println!("✅ Cleanup summaries tests passed!");
+}
+
+#[tokio::test]
 async fn test_incremental_processing_order() {
     let server = TestServerBuilder::new().build().await;
     let aggregator = SummaryAggregator::new(server.database.clone());

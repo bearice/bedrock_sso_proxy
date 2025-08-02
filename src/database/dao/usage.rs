@@ -629,6 +629,18 @@ impl UsageDao {
         Ok(result.rows_affected)
     }
 
+    /// Clean up old usage summaries
+    pub async fn cleanup_old_summaries(&self, retention_days: u32) -> DatabaseResult<u64> {
+        let cutoff = Utc::now() - chrono::Duration::days(retention_days as i64);
+        let result = usage_summaries::Entity::delete_many()
+            .filter(usage_summaries::Column::PeriodStart.lt(cutoff))
+            .exec(&self.db)
+            .await
+            .map_err(|e| DatabaseError::Database(e.to_string()))?;
+
+        Ok(result.rows_affected)
+    }
+
     /// Get top models by usage from pre-computed summaries
     pub async fn get_top_models(
         &self,

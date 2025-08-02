@@ -225,10 +225,15 @@ impl SummarizationService {
     }
 
     /// Clean up old usage summaries
-    pub async fn cleanup_summaries(&self, _retention_days: u32) -> Result<u64, AppError> {
-        // Similar to cleanup_records but for summaries table
-        // This would require adding a cleanup method to the DAO
-        info!("Summary cleanup not yet implemented");
-        Ok(0)
+    pub async fn cleanup_summaries(&self, retention_days: u32) -> Result<u64, AppError> {
+        let deleted_count = self
+            .database
+            .usage()
+            .cleanup_old_summaries(retention_days)
+            .await
+            .map_err(|e| AppError::Internal(format!("Failed to cleanup summaries: {}", e)))?;
+
+        info!("Cleaned up {} old usage summaries", deleted_count);
+        Ok(deleted_count)
     }
 }
