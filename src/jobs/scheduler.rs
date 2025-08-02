@@ -1,6 +1,8 @@
 use super::{Job, JobsConfig};
 use crate::error::AppError;
-use std::sync::Arc;
+use chrono::Utc;
+use cron::Schedule;
+use std::{str::FromStr, sync::Arc};
 use tokio::{
     sync::{RwLock, broadcast, watch},
     task::JoinHandle,
@@ -150,33 +152,143 @@ impl JobScheduler {
         }
     }
 
-    /// Parse a simplified cron expression to a Duration
-    /// This is a basic implementation - in production you'd want a proper cron parser
+    /// Parse a cron expression and calculate duration until next execution
+    /// Uses 6-field format (sec min hour day month dow)
     fn parse_cron_to_duration(&self, cron: &str) -> Result<Duration, AppError> {
-        // For now, support common patterns
-        match cron {
-            "0 * * * *" => Ok(Duration::from_secs(3600)), // Every hour
-            "0 2 * * *" => Ok(Duration::from_secs(24 * 3600)), // Daily at 2 AM
-            "0 3 * * *" => Ok(Duration::from_secs(24 * 3600)), // Daily at 3 AM
-            "0 0 * * 0" => Ok(Duration::from_secs(7 * 24 * 3600)), // Weekly on Sunday
-            "0 0 1 * *" => Ok(Duration::from_secs(30 * 24 * 3600)), // Monthly on 1st
-            _ => {
-                // For development/testing, allow short intervals
-                if cron.starts_with("*/") {
-                    if let Some(mins) = cron
-                        .strip_prefix("*/")
-                        .and_then(|s| s.split_whitespace().next())
-                    {
-                        if let Ok(minutes) = mins.parse::<u64>() {
-                            return Ok(Duration::from_secs(minutes * 60));
-                        }
-                    }
-                }
-                Err(AppError::Internal(format!(
-                    "Unsupported cron expression: {}. Supported: '0 * * * *', '0 2 * * *', '0 3 * * *', '0 0 * * 0', '0 0 1 * *', '*/N * * * *'",
-                    cron
-                )))
-            }
+        let schedule = Schedule::from_str(cron)
+            .map_err(|e| AppError::Internal(format!("Invalid cron expression '{}': {}", cron, e)))?;
+
+        let now = Utc::now();
+        let next_execution = schedule
+            .upcoming(Utc)
+            .take(1)
+            .next()
+            .ok_or_else(|| AppError::Internal(format!("No upcoming execution found for cron expression: {}", cron)))?;
+
+        let duration_until_next = (next_execution - now)
+            .to_std()
+            .map_err(|e| AppError::Internal(format!("Failed to convert duration: {}", e)))?;
+
+        Ok(duration_until_next)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::jobs::JobsConfig;
+
+    fn create_test_scheduler() -> JobScheduler {
+        let config = JobsConfig {
+            enabled: true,
+            usage_summaries: crate::jobs::UsageSummariesConfig {
+                schedule: "0 0 2 * * *".to_string(),
+                periods: vec!["daily".to_string()],
+            },
+            usage_cleanup: crate::jobs::UsageCleanupConfig {
+                schedule: "0 0 3 * * *".to_string(),
+                raw_records_days: 30,
+                summaries_days: 365,
+            },
+        };
+        JobScheduler::new(config)
+    }
+
+    #[test]
+    fn test_valid_cron_expressions() {
+        let scheduler = create_test_scheduler();
+
+        // Test common cron expressions (6-field format: sec min hour day month dow)
+        let test_cases = vec![
+            "0 0 * * * *",       // Every hour
+            "0 0 2 * * *",       // Daily at 2 AM
+            "0 0 */2 * * *",     // Every 2 hours
+            "0 30 14 * * MON",   // Every Monday at 2:30 PM
+            "0 0 0 1 * *",       // Monthly on 1st
+            "0 0 0 * * SUN",     // Weekly on Sunday
+            "0 */15 * * * *",    // Every 15 minutes
+        ];
+
+        for cron_expr in test_cases {
+            let result = scheduler.parse_cron_to_duration(cron_expr);
+            assert!(
+                result.is_ok(),
+                "Failed to parse valid cron expression '{}': {:?}",
+                cron_expr, result.err()
+            );
+            
+            // Duration should be positive (not in the past)
+            let duration = result.unwrap();
+            assert!(
+                duration.as_secs() > 0,
+                "Duration should be positive for cron: {}",
+                cron_expr
+            );
+        }
+    }
+
+    #[test]
+    fn test_invalid_cron_expressions() {
+        let scheduler = create_test_scheduler();
+
+        let invalid_cases = vec![
+            "",                // Empty string
+            "invalid",         // Not a cron expression
+            "60 * * * *",      // Invalid minute (>59)
+            "0 25 * * *",      // Invalid hour (>23)
+            "0 0 32 * *",      // Invalid day (>31)
+            "0 0 * 13 *",      // Invalid month (>12)
+            "0 0 * * 8",       // Invalid day of week (>7)
+        ];
+
+        for cron_expr in invalid_cases {
+            let result = scheduler.parse_cron_to_duration(cron_expr);
+            assert!(
+                result.is_err(),
+                "Should fail for invalid cron expression: {}",
+                cron_expr
+            );
+        }
+    }
+
+    #[test]
+    fn test_get_schedule_for_job() {
+        let scheduler = create_test_scheduler();
+
+        // Test known job names
+        assert_eq!(
+            scheduler.get_schedule_for_job("usage_summaries").unwrap(),
+            "0 0 2 * * *"
+        );
+        assert_eq!(
+            scheduler.get_schedule_for_job("usage_cleanup").unwrap(),
+            "0 0 3 * * *"
+        );
+
+        // Test unknown job name
+        assert!(scheduler.get_schedule_for_job("unknown_job").is_err());
+    }
+
+    #[test]
+    fn test_complex_cron_expressions() {
+        let scheduler = create_test_scheduler();
+
+        // Test more complex expressions that the old parser couldn't handle (6-field format)
+        let complex_cases = vec![
+            "0 0 9-17 * * 1-5",      // Business hours (9 AM to 5 PM, Monday to Friday)
+            "0 0 */6 * * *",         // Every 6 hours
+            "0 30 2 1,15 * *",       // 2:30 AM on 1st and 15th of each month
+            "0 0 0 * * MON,WED,FRI", // Monday, Wednesday, Friday at midnight
+            "0 45 23 * * SUN",       // Sunday at 11:45 PM
+        ];
+
+        for cron_expr in complex_cases {
+            let result = scheduler.parse_cron_to_duration(cron_expr);
+            assert!(
+                result.is_ok(),
+                "Failed to parse complex cron expression '{}': {:?}",
+                cron_expr, result.err()
+            );
         }
     }
 }

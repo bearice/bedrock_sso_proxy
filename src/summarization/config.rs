@@ -44,9 +44,9 @@ impl Default for SummarizationConfig {
                 summaries_days: 365,
             },
             schedules: ScheduleConfig {
-                daily: "0 2 * * *".to_string(),   // Daily at 2 AM
-                weekly: "0 3 * * 0".to_string(),  // Weekly on Sunday at 3 AM
-                monthly: "0 4 1 * *".to_string(), // Monthly on 1st at 4 AM
+                daily: "0 0 2 * * *".to_string(),   // Daily at 2 AM
+                weekly: "0 0 3 * * 0".to_string(),  // Weekly on Sunday at 3 AM
+                monthly: "0 0 4 1 * *".to_string(), // Monthly on 1st at 4 AM
             },
         }
     }

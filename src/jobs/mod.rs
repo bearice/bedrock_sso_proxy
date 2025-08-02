@@ -46,11 +46,11 @@ impl Default for JobsConfig {
         Self {
             enabled: true,
             usage_summaries: UsageSummariesConfig {
-                schedule: "0 2 * * *".to_string(), // Daily at 2 AM
+                schedule: "0 0 2 * * *".to_string(), // Daily at 2 AM
                 periods: vec!["daily".to_string()],
             },
             usage_cleanup: UsageCleanupConfig {
-                schedule: "0 3 * * *".to_string(), // Daily at 3 AM
+                schedule: "0 0 3 * * *".to_string(), // Daily at 3 AM
                 raw_records_days: 30,
                 summaries_days: 365,
             },
