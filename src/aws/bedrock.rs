@@ -58,7 +58,7 @@ impl BedrockRuntimeImpl {
         let sdk_config = config
             .build_sdk_config()
             .await
-            .map_err(|e| AppError::Internal(format!("Failed to build AWS SDK config: {}", e)))?;
+            .map_err(|e| AppError::Internal(format!("Failed to build AWS SDK config: {e}")))?;
 
         Ok(Self {
             client,
@@ -122,14 +122,14 @@ impl BedrockRuntimeImpl {
 
         // Determine the target region from the model ID
         let target_region = self.get_target_region(&regionalized_model_id);
-        let base_url = format!("https://bedrock-runtime.{}.amazonaws.com", target_region);
+        let base_url = format!("https://bedrock-runtime.{target_region}.amazonaws.com");
 
-        let path = format!("/model/{}/invoke", regionalized_model_id);
-        let url = format!("{}{}", base_url, path);
+        let path = format!("/model/{regionalized_model_id}/invoke");
+        let url = format!("{base_url}{path}");
 
         // Prepare headers
         let mut headers = HeaderMap::new();
-        let host = format!("bedrock-runtime.{}.amazonaws.com", target_region);
+        let host = format!("bedrock-runtime.{target_region}.amazonaws.com");
         headers.insert("Host", HeaderValue::from_str(&host)?);
         headers.insert(
             "Content-Length",
@@ -227,13 +227,10 @@ impl BedrockRuntimeImpl {
 
         // Determine the target region from the model ID
         let target_region = self.get_target_region(&regionalized_model_id);
-        let base_url = format!("https://bedrock-runtime.{}.amazonaws.com", target_region);
+        let base_url = format!("https://bedrock-runtime.{target_region}.amazonaws.com");
 
-        let path = format!(
-            "/model/{}/invoke-with-response-stream",
-            regionalized_model_id
-        );
-        let url = format!("{}{}", base_url, path);
+        let path = format!("/model/{regionalized_model_id}/invoke-with-response-stream");
+        let url = format!("{base_url}{path}");
 
         let mut processed_headers = Self::process_headers_for_aws(headers);
 
@@ -329,7 +326,7 @@ impl BedrockRuntimeImpl {
         let mut headers = request.headers.clone();
         headers.insert(
             "Authorization",
-            HeaderValue::from_str(&format!("Bearer {}", bearer_token))?,
+            HeaderValue::from_str(&format!("Bearer {bearer_token}"))?,
         );
         Ok(headers)
     }
@@ -383,12 +380,12 @@ impl BedrockRuntimeImpl {
         let method: Method = request
             .method
             .parse()
-            .map_err(|e| AppError::BadRequest(format!("Invalid HTTP method: {}", e)))?;
+            .map_err(|e| AppError::BadRequest(format!("Invalid HTTP method: {e}")))?;
         let mut http_request = Request::builder()
             .method(method)
             .uri(&request.url)
             .body(request.body.clone())
-            .map_err(|e| AppError::Internal(format!("Failed to create HTTP request: {}", e)))?;
+            .map_err(|e| AppError::Internal(format!("Failed to create HTTP request: {e}")))?;
 
         // Apply the signing instructions
         signing_instructions.apply_to_request_http1x(&mut http_request);
@@ -416,7 +413,7 @@ impl BedrockRuntimeImpl {
             let credentials = credential_provider
                 .provide_credentials()
                 .await
-                .map_err(|e| AppError::Internal(format!("Failed to resolve credentials: {}", e)))?;
+                .map_err(|e| AppError::Internal(format!("Failed to resolve credentials: {e}")))?;
 
             return Ok(credentials);
         }
@@ -768,7 +765,7 @@ mod tests {
             AppError::Aws(msg) => {
                 assert!(msg.contains("403") || msg.contains("Forbidden"));
             }
-            _ => panic!("Expected AWS error, got: {:?}", error),
+            _ => panic!("Expected AWS error, got: {error:?}"),
         }
     }
 
@@ -796,7 +793,7 @@ mod tests {
             AppError::Aws(msg) => {
                 assert!(msg.contains("403") || msg.contains("Forbidden"));
             }
-            _ => panic!("Expected AWS streaming error, got: {:?}", error),
+            _ => panic!("Expected AWS streaming error, got: {error:?}"),
         }
     }
 
@@ -1022,7 +1019,7 @@ mod tests {
 
         // Test EU model ID generates correct endpoint
         let target_region = client.get_target_region("eu.anthropic.claude-sonnet-4-20250514-v1:0");
-        let expected_url = format!("https://bedrock-runtime.{}.amazonaws.com", target_region);
+        let expected_url = format!("https://bedrock-runtime.{target_region}.amazonaws.com");
         assert_eq!(
             expected_url,
             "https://bedrock-runtime.eu-west-1.amazonaws.com"
@@ -1031,7 +1028,7 @@ mod tests {
         // Test APAC model ID generates correct endpoint
         let target_region =
             client.get_target_region("apac.anthropic.claude-sonnet-4-20250514-v1:0");
-        let expected_url = format!("https://bedrock-runtime.{}.amazonaws.com", target_region);
+        let expected_url = format!("https://bedrock-runtime.{target_region}.amazonaws.com");
         assert_eq!(
             expected_url,
             "https://bedrock-runtime.ap-northeast-1.amazonaws.com"
@@ -1039,7 +1036,7 @@ mod tests {
 
         // Test US model ID generates correct endpoint
         let target_region = client.get_target_region("us.anthropic.claude-sonnet-4-20250514-v1:0");
-        let expected_url = format!("https://bedrock-runtime.{}.amazonaws.com", target_region);
+        let expected_url = format!("https://bedrock-runtime.{target_region}.amazonaws.com");
         assert_eq!(
             expected_url,
             "https://bedrock-runtime.us-east-1.amazonaws.com"
@@ -1073,7 +1070,7 @@ mod tests {
                 assert!(!msg.is_empty());
                 assert!(msg.contains("AWS Bedrock error"));
             }
-            _ => panic!("Expected AWS error, got: {:?}", error),
+            _ => panic!("Expected AWS error, got: {error:?}"),
         }
     }
 
@@ -1105,7 +1102,7 @@ mod tests {
                 assert!(!msg.is_empty());
                 assert!(msg.contains("AWS Bedrock streaming error"));
             }
-            _ => panic!("Expected AWS streaming error, got: {:?}", error),
+            _ => panic!("Expected AWS streaming error, got: {error:?}"),
         }
     }
 

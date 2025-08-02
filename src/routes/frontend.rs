@@ -213,10 +213,7 @@ mod tests {
                 serve_static_file(Path(malicious_path.to_string()), config.clone()).await;
             match response.into_response().status() {
                 StatusCode::BAD_REQUEST => {} // Expected
-                other => panic!(
-                    "Expected BAD_REQUEST for path '{}', got {}",
-                    malicious_path, other
-                ),
+                other => panic!("Expected BAD_REQUEST for path '{malicious_path}', got {other}"),
             }
         }
 

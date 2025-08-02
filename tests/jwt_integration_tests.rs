@@ -118,7 +118,7 @@ async fn test_integration_concurrent_requests() {
     // Verify all requests succeeded
     for result in results {
         let (i, status) = result.unwrap();
-        assert_eq!(status, StatusCode::OK, "Request {} failed", i);
+        assert_eq!(status, StatusCode::OK, "Request {i} failed");
     }
 }
 
@@ -151,15 +151,13 @@ async fn test_integration_token_expiration_edge_cases() {
         .await
         .unwrap();
     let body_str = String::from_utf8_lossy(&body);
-    println!("Response status: {}, body: {}", status, body_str);
+    println!("Response status: {status}, body: {body_str}");
 
     // Should fail with UNAUTHORIZED for expired token
     assert_eq!(
         status,
         StatusCode::UNAUTHORIZED,
-        "Expired JWT token should result in 401 Unauthorized, not {} - Body: {}",
-        status,
-        body_str
+        "Expired JWT token should result in 401 Unauthorized, not {status} - Body: {body_str}"
     );
 }
 
@@ -282,7 +280,7 @@ async fn test_postgres_concurrent_requests() {
     // Verify all requests succeeded
     for result in results {
         let (i, status) = result.unwrap();
-        assert_eq!(status, StatusCode::OK, "Request {} failed", i);
+        assert_eq!(status, StatusCode::OK, "Request {i} failed");
     }
 
     // Clean up

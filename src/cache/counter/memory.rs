@@ -1,6 +1,7 @@
 //! Memory-based hash counter implementation
 
 use super::{CacheResult, CounterField, HashCounter};
+use crate::cache::SharedMemoryStore;
 use async_trait::async_trait;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -49,7 +50,7 @@ impl<T: CounterField> Default for HashEntry<T> {
 pub struct MemoryHashCounter<T: CounterField> {
     key: String,
     store: Arc<RwLock<HashEntry<T>>>,
-    shared_store: Option<Arc<RwLock<std::collections::HashMap<String, Box<dyn std::any::Any + Send + Sync>>>>>,
+    shared_store: Option<SharedMemoryStore>,
 }
 
 impl<T: CounterField> MemoryHashCounter<T> {
@@ -63,10 +64,7 @@ impl<T: CounterField> MemoryHashCounter<T> {
     }
 
     /// Create memory-based hash counter from shared store (shared storage)
-    pub fn from_shared_store(
-        shared_store: Arc<RwLock<std::collections::HashMap<String, Box<dyn std::any::Any + Send + Sync>>>>,
-        key: String,
-    ) -> Self {
+    pub fn from_shared_store(shared_store: SharedMemoryStore, key: String) -> Self {
         Self {
             key,
             store: Arc::new(RwLock::new(HashEntry::new())), // Will be lazily loaded from shared store
@@ -102,14 +100,14 @@ impl<T: CounterField> MemoryHashCounter<T> {
     async fn check_expiry(&self) -> CacheResult<bool> {
         // Load from shared store first if using shared storage
         self.load_from_shared().await?;
-        
+
         let store = self.store.read().await;
         if store.is_expired() {
             drop(store);
             let mut store = self.store.write().await;
             store.fields.clear();
             store.expires_at = None;
-            
+
             // Save cleared state to shared store
             drop(store);
             self.save_to_shared().await?;

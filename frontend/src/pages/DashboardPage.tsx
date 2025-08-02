@@ -6,22 +6,15 @@ import { UsageTracking } from '../components/usage';
 import { Dashboard } from '../components/dashboard';
 import { authApi } from '../services/api';
 import { UserInfo } from '../types/auth';
-import {
-  LogOut,
-  User,
-  Key,
-  Activity,
-  Settings,
-} from 'lucide-react';
+import { LogOut, User, Key, Activity, Settings } from 'lucide-react';
 
 export function DashboardPage() {
-  const { token, provider, user, logout } =
-    useAuth();
+  const { token, provider, user, logout } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
 
   const [userInfo, setUserInfo] = useState<UserInfo | null>(null);
-  
+
   // Determine active tab from URL
   const getActiveTabFromPath = (pathname: string): 'dashboard' | 'api-keys' | 'usage' => {
     if (pathname.includes('/api-keys')) return 'api-keys';
@@ -68,7 +61,7 @@ export function DashboardPage() {
     };
 
     window.addEventListener('switchTab', handleTabSwitch as EventListener);
-    
+
     return () => {
       window.removeEventListener('switchTab', handleTabSwitch as EventListener);
     };

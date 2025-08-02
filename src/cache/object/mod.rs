@@ -373,15 +373,14 @@ mod tests {
 
         for decimal_value in edge_cases {
             let serialized = postcard::to_allocvec(&decimal_value)
-                .unwrap_or_else(|_| panic!("Should serialize decimal: {}", decimal_value));
+                .unwrap_or_else(|_| panic!("Should serialize decimal: {decimal_value}"));
 
             let deserialized: Decimal = postcard::from_bytes(&serialized)
-                .unwrap_or_else(|_| panic!("Should deserialize decimal: {}", decimal_value));
+                .unwrap_or_else(|_| panic!("Should deserialize decimal: {decimal_value}"));
 
             assert_eq!(
                 deserialized, decimal_value,
-                "Round-trip failed for decimal: {}",
-                decimal_value
+                "Round-trip failed for decimal: {decimal_value}"
             );
         }
     }

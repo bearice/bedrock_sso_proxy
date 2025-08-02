@@ -70,14 +70,13 @@ pub async fn create_api_key(
         .api_keys()
         .find_by_user(user.id)
         .await
-        .map_err(|e| AppError::Internal(format!("Failed to check existing API keys: {}", e)))?;
+        .map_err(|e| AppError::Internal(format!("Failed to check existing API keys: {e}")))?;
 
     // Get max keys from config
     let max_keys_per_user = server.config.api_keys.max_keys_per_user as usize;
     if existing_keys.len() >= max_keys_per_user {
         return Err(AppError::BadRequest(format!(
-            "Maximum number of API keys exceeded ({})",
-            max_keys_per_user
+            "Maximum number of API keys exceeded ({max_keys_per_user})"
         )));
     }
 
@@ -90,7 +89,7 @@ pub async fn create_api_key(
         .api_keys()
         .store(&api_key)
         .await
-        .map_err(|e| AppError::Internal(format!("Failed to store API key: {}", e)))?;
+        .map_err(|e| AppError::Internal(format!("Failed to store API key: {e}")))?;
 
     // Return response with the raw key (only time it's returned)
     Ok(Json(CreateApiKeyResponse {
@@ -127,7 +126,7 @@ pub async fn list_api_keys(
         .api_keys()
         .find_by_user(user.id)
         .await
-        .map_err(|e| AppError::Internal(format!("Failed to get API keys: {}", e)))?;
+        .map_err(|e| AppError::Internal(format!("Failed to get API keys: {e}")))?;
 
     let api_key_infos: Vec<ApiKey> = api_keys.into_iter().collect();
 
@@ -177,7 +176,7 @@ pub async fn revoke_api_key(
         .api_keys()
         .revoke(key)
         .await
-        .map_err(|e| AppError::Internal(format!("Failed to revoke API key: {}", e)))?;
+        .map_err(|e| AppError::Internal(format!("Failed to revoke API key: {e}")))?;
 
     Ok(Json(serde_json::json!({
         "message": "API key revoked successfully",
@@ -243,7 +242,7 @@ mod tests {
         let request = Request::builder()
             .uri("/keys")
             .method("POST")
-            .header("Authorization", format!("Bearer {}", token))
+            .header("Authorization", format!("Bearer {token}"))
             .header("Content-Type", "application/json")
             .body(Body::from(serde_json::to_string(&request_body).unwrap()))
             .unwrap();
@@ -279,7 +278,7 @@ mod tests {
         let request = Request::builder()
             .uri("/keys")
             .method("GET")
-            .header("Authorization", format!("Bearer {}", token))
+            .header("Authorization", format!("Bearer {token}"))
             .body(Body::empty())
             .unwrap();
 
@@ -313,7 +312,7 @@ mod tests {
         let request = Request::builder()
             .uri("/keys")
             .method("POST")
-            .header("Authorization", format!("Bearer {}", token))
+            .header("Authorization", format!("Bearer {token}"))
             .header("Content-Type", "application/json")
             .body(Body::from(serde_json::to_string(&request_body).unwrap()))
             .unwrap();

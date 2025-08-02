@@ -1,8 +1,6 @@
 use crate::{
-    database::DatabaseManager,
-    error::AppError,
+    database::DatabaseManager, database::entities::PeriodType, error::AppError,
     summarization::aggregator::SummaryAggregator,
-    database::entities::PeriodType,
 };
 use chrono::{Duration, Utc};
 use std::sync::Arc;
@@ -17,7 +15,10 @@ pub struct SummarizationService {
 impl SummarizationService {
     pub fn new(database: Arc<dyn DatabaseManager>) -> Self {
         let aggregator = SummaryAggregator::new(database.clone());
-        Self { database, aggregator }
+        Self {
+            database,
+            aggregator,
+        }
     }
 
     /// Generate usage summaries for a specific period using hierarchical aggregation
@@ -36,11 +37,13 @@ impl SummarizationService {
                     Manual hourly generation is only needed for backfilling historical data."
                 );
                 PeriodType::Hourly
-            },
+            }
             "daily" => PeriodType::Daily,
             "weekly" => PeriodType::Weekly,
             "monthly" => PeriodType::Monthly,
-            _ => return Err(AppError::Internal(format!("Invalid period type: {}", period))),
+            _ => {
+                return Err(AppError::Internal(format!("Invalid period type: {period}")));
+            }
         };
 
         let end_date = Utc::now();
@@ -57,15 +60,30 @@ impl SummarizationService {
         );
 
         // Use the unified efficient approach for both modes
-        self.generate_summaries_internal(period_type, Some(cutoff_date), Some(end_date), user_id_filter, model_id_filter, backfill).await
+        self.generate_summaries_internal(
+            period_type,
+            Some(cutoff_date),
+            Some(end_date),
+            user_id_filter,
+            model_id_filter,
+            backfill,
+        )
+        .await
     }
 
     /// Generate summaries for specific periods (used by job system)
-    pub async fn generate_period_summaries(&self, period_type: PeriodType) -> Result<usize, AppError> {
-        info!("Generating {} summaries using hierarchical aggregation", period_type.as_str());
+    pub async fn generate_period_summaries(
+        &self,
+        period_type: PeriodType,
+    ) -> Result<usize, AppError> {
+        info!(
+            "Generating {} summaries using hierarchical aggregation",
+            period_type.as_str()
+        );
 
         // Use the unified efficient approach without date limits
-        self.generate_summaries_internal(period_type, None, None, None, None, false).await
+        self.generate_summaries_internal(period_type, None, None, None, None, false)
+            .await
     }
 
     /// Internal unified method for generating summaries with efficient high-water mark approach
@@ -99,17 +117,24 @@ impl SummarizationService {
                     period_end.format("%Y-%m-%d %H:%M:%S")
                 );
 
-                let summaries = self.aggregator
+                let summaries = self
+                    .aggregator
                     .generate_summaries_with_mode(period_type, current_period_start, backfill)
                     .await
-                    .map_err(|e| AppError::Internal(format!("Failed to generate summaries: {}", e)))?;
+                    .map_err(|e| {
+                        AppError::Internal(format!("Failed to generate summaries: {e}"))
+                    })?;
 
                 if !summaries.is_empty() {
-                    let filtered_summaries = Self::apply_filters(summaries, user_id_filter, model_id_filter);
-                    let stored_count = self.aggregator
+                    let filtered_summaries =
+                        Self::apply_filters(summaries, user_id_filter, model_id_filter);
+                    let stored_count = self
+                        .aggregator
                         .store_summaries(&filtered_summaries)
                         .await
-                        .map_err(|e| AppError::Internal(format!("Failed to store summaries: {}", e)))?;
+                        .map_err(|e| {
+                        AppError::Internal(format!("Failed to store summaries: {e}"))
+                    })?;
 
                     total_summaries += stored_count;
 
@@ -128,10 +153,11 @@ impl SummarizationService {
             }
         } else {
             // Incremental mode: Use high-water mark approach (efficient)
-            while let Some(period_start) = self.aggregator
+            while let Some(period_start) = self
+                .aggregator
                 .get_next_period_to_process(period_type)
                 .await
-                .map_err(|e| AppError::Internal(format!("Failed to get next period: {}", e)))?
+                .map_err(|e| AppError::Internal(format!("Failed to get next period: {e}")))?
             {
                 // Apply date range limits if specified
                 if let Some(cutoff_date) = start_limit {
@@ -151,17 +177,24 @@ impl SummarizationService {
                     period_start.format("%Y-%m-%d %H:%M:%S")
                 );
 
-                let summaries = self.aggregator
+                let summaries = self
+                    .aggregator
                     .generate_summaries(period_type, period_start)
                     .await
-                    .map_err(|e| AppError::Internal(format!("Failed to generate summaries: {}", e)))?;
+                    .map_err(|e| {
+                        AppError::Internal(format!("Failed to generate summaries: {e}"))
+                    })?;
 
                 if !summaries.is_empty() {
-                    let filtered_summaries = Self::apply_filters(summaries, user_id_filter, model_id_filter);
-                    let stored_count = self.aggregator
+                    let filtered_summaries =
+                        Self::apply_filters(summaries, user_id_filter, model_id_filter);
+                    let stored_count = self
+                        .aggregator
                         .store_summaries(&filtered_summaries)
                         .await
-                        .map_err(|e| AppError::Internal(format!("Failed to store summaries: {}", e)))?;
+                        .map_err(|e| {
+                        AppError::Internal(format!("Failed to store summaries: {e}"))
+                    })?;
 
                     total_summaries += stored_count;
 
@@ -182,7 +215,8 @@ impl SummarizationService {
 
         info!(
             "Successfully created/updated {} {} summaries using hierarchical aggregation",
-            total_summaries, period_type.as_str()
+            total_summaries,
+            period_type.as_str()
         );
         Ok(total_summaries)
     }
@@ -218,7 +252,7 @@ impl SummarizationService {
             .usage()
             .cleanup_old_records(retention_days)
             .await
-            .map_err(|e| AppError::Internal(format!("Failed to cleanup records: {}", e)))?;
+            .map_err(|e| AppError::Internal(format!("Failed to cleanup records: {e}")))?;
 
         info!("Cleaned up {} old usage records", deleted_count);
         Ok(deleted_count)
@@ -231,7 +265,7 @@ impl SummarizationService {
             .usage()
             .cleanup_old_summaries(retention_days)
             .await
-            .map_err(|e| AppError::Internal(format!("Failed to cleanup summaries: {}", e)))?;
+            .map_err(|e| AppError::Internal(format!("Failed to cleanup summaries: {e}")))?;
 
         info!("Cleaned up {} old usage summaries", deleted_count);
         Ok(deleted_count)

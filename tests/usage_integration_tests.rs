@@ -227,7 +227,7 @@ async fn test_get_user_usage_records_success_impl(server: &bedrock_sso_proxy::se
     let request = Request::builder()
         .method(Method::GET)
         .uri("/usage/records?limit=10&offset=0")
-        .header(AUTHORIZATION, format!("Bearer {}", token))
+        .header(AUTHORIZATION, format!("Bearer {token}"))
         .body(Body::empty())
         .unwrap();
 
@@ -266,7 +266,7 @@ async fn test_get_user_usage_stats_success_impl(server: &bedrock_sso_proxy::serv
     let request = Request::builder()
         .method(Method::GET)
         .uri("/usage/stats")
-        .header(AUTHORIZATION, format!("Bearer {}", token))
+        .header(AUTHORIZATION, format!("Bearer {token}"))
         .body(Body::empty())
         .unwrap();
 
@@ -288,9 +288,7 @@ async fn test_get_user_usage_stats_success_impl(server: &bedrock_sso_proxy::serv
     let expected_cost_f64: f64 = expected_cost.parse().unwrap();
     assert!(
         (parsed_cost - expected_cost_f64).abs() < 0.0001,
-        "Expected cost {}, got {}",
-        expected_cost,
-        total_cost
+        "Expected cost {expected_cost}, got {total_cost}"
     );
 }
 
@@ -314,7 +312,7 @@ async fn test_get_user_usage_with_filters_impl(server: &bedrock_sso_proxy::serve
     let request = Request::builder()
         .method(Method::GET)
         .uri("/usage/records?model=anthropic.claude-sonnet-4-20250514-v1:0")
-        .header(AUTHORIZATION, format!("Bearer {}", token))
+        .header(AUTHORIZATION, format!("Bearer {token}"))
         .body(Body::empty())
         .unwrap();
 
@@ -353,7 +351,7 @@ async fn test_admin_get_system_usage_records_impl(server: &bedrock_sso_proxy::se
     let request = Request::builder()
         .method(Method::GET)
         .uri("/admin/usage/records")
-        .header(AUTHORIZATION, format!("Bearer {}", admin_token))
+        .header(AUTHORIZATION, format!("Bearer {admin_token}"))
         .body(Body::empty())
         .unwrap();
 
@@ -388,7 +386,7 @@ async fn test_admin_get_top_models_impl(server: &bedrock_sso_proxy::server::Serv
     let request = Request::builder()
         .method(Method::GET)
         .uri("/admin/usage/top-models")
-        .header(AUTHORIZATION, format!("Bearer {}", admin_token))
+        .header(AUTHORIZATION, format!("Bearer {admin_token}"))
         .body(Body::empty())
         .unwrap();
 
@@ -428,7 +426,7 @@ async fn test_non_admin_access_denied_impl(server: &bedrock_sso_proxy::server::S
     let request = Request::builder()
         .method(Method::GET)
         .uri("/admin/usage/records")
-        .header(AUTHORIZATION, format!("Bearer {}", user_token))
+        .header(AUTHORIZATION, format!("Bearer {user_token}"))
         .body(Body::empty())
         .unwrap();
 
@@ -485,7 +483,7 @@ async fn test_pagination_limits_impl(server: &bedrock_sso_proxy::server::Server)
     let request = Request::builder()
         .method(Method::GET)
         .uri("/usage/records?limit=1000")
-        .header(AUTHORIZATION, format!("Bearer {}", token))
+        .header(AUTHORIZATION, format!("Bearer {token}"))
         .body(Body::empty())
         .unwrap();
 
@@ -890,7 +888,7 @@ async fn test_pagination_total_count_accuracy_impl(server: &bedrock_sso_proxy::s
         let record = UsageRecord {
             id: 0,
             user_id,
-            model_id: format!("test-model-{}", i),
+            model_id: format!("test-model-{i}"),
             endpoint_type: "bedrock".to_string(),
             region: "us-east-1".to_string(),
             request_time: Utc::now() - chrono::Duration::minutes(i as i64),
@@ -919,7 +917,7 @@ async fn test_pagination_total_count_accuracy_impl(server: &bedrock_sso_proxy::s
     let request = Request::builder()
         .method(Method::GET)
         .uri("/usage/records?limit=5&offset=0")
-        .header(AUTHORIZATION, format!("Bearer {}", token))
+        .header(AUTHORIZATION, format!("Bearer {token}"))
         .body(Body::empty())
         .unwrap();
 
@@ -942,7 +940,7 @@ async fn test_pagination_total_count_accuracy_impl(server: &bedrock_sso_proxy::s
     let request2 = Request::builder()
         .method(Method::GET)
         .uri("/usage/records?limit=5&offset=5")
-        .header(AUTHORIZATION, format!("Bearer {}", token))
+        .header(AUTHORIZATION, format!("Bearer {token}"))
         .body(Body::empty())
         .unwrap();
 
@@ -965,7 +963,7 @@ async fn test_pagination_total_count_accuracy_impl(server: &bedrock_sso_proxy::s
     let request3 = Request::builder()
         .method(Method::GET)
         .uri("/usage/records?limit=5&offset=15")
-        .header(AUTHORIZATION, format!("Bearer {}", token))
+        .header(AUTHORIZATION, format!("Bearer {token}"))
         .body(Body::empty())
         .unwrap();
 
@@ -988,7 +986,7 @@ async fn test_pagination_total_count_accuracy_impl(server: &bedrock_sso_proxy::s
     let request4 = Request::builder()
         .method(Method::GET)
         .uri("/usage/records?limit=5&offset=20")
-        .header(AUTHORIZATION, format!("Bearer {}", token))
+        .header(AUTHORIZATION, format!("Bearer {token}"))
         .body(Body::empty())
         .unwrap();
 
@@ -1050,7 +1048,7 @@ async fn test_pagination_with_filters_total_count_impl(server: &bedrock_sso_prox
     let request = Request::builder()
         .method(Method::GET)
         .uri("/usage/records?model=anthropic.claude-sonnet-4-20250514-v1:0&limit=3&offset=0")
-        .header(AUTHORIZATION, format!("Bearer {}", token))
+        .header(AUTHORIZATION, format!("Bearer {token}"))
         .body(Body::empty())
         .unwrap();
 
@@ -1071,7 +1069,10 @@ async fn test_pagination_with_filters_total_count_impl(server: &bedrock_sso_prox
     // Verify all records are for the correct model
     let records = json["records"].as_array().unwrap();
     for record in records {
-        assert_eq!(record["model_id"], "anthropic.claude-sonnet-4-20250514-v1:0");
+        assert_eq!(
+            record["model_id"],
+            "anthropic.claude-sonnet-4-20250514-v1:0"
+        );
     }
 
     // Test second page of filtered results
@@ -1079,7 +1080,7 @@ async fn test_pagination_with_filters_total_count_impl(server: &bedrock_sso_prox
     let request2 = Request::builder()
         .method(Method::GET)
         .uri("/usage/records?model=anthropic.claude-sonnet-4-20250514-v1:0&limit=3&offset=3")
-        .header(AUTHORIZATION, format!("Bearer {}", token))
+        .header(AUTHORIZATION, format!("Bearer {token}"))
         .body(Body::empty())
         .unwrap();
 
@@ -1119,7 +1120,7 @@ async fn test_empty_results_pagination_impl(server: &bedrock_sso_proxy::server::
     let request = Request::builder()
         .method(Method::GET)
         .uri("/usage/records?model=nonexistent-model&limit=10&offset=0")
-        .header(AUTHORIZATION, format!("Bearer {}", token))
+        .header(AUTHORIZATION, format!("Bearer {token}"))
         .body(Body::empty())
         .unwrap();
 

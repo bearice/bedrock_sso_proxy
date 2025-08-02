@@ -20,7 +20,7 @@ impl<T: CounterField> RedisHashCounter<T> {
     /// Create new Redis-based hash counter
     pub fn new(redis_url: &str, key: String) -> CacheResult<Self> {
         let client = redis::Client::open(redis_url)
-            .map_err(|e| CacheError::Cache(format!("Redis client error: {}", e)))?;
+            .map_err(|e| CacheError::Cache(format!("Redis client error: {e}")))?;
 
         Ok(Self {
             key,
@@ -62,7 +62,7 @@ impl<T: CounterField> RedisHashCounter<T> {
             .client
             .get_multiplexed_tokio_connection()
             .await
-            .map_err(|e| CacheError::Connection(format!("Connection failed: {}", e)))?;
+            .map_err(|e| CacheError::Connection(format!("Connection failed: {e}")))?;
 
         Ok(new_conn)
     }
@@ -88,7 +88,7 @@ impl<T: CounterField> RedisHashCounter<T> {
         let _: String = redis::cmd("PING")
             .query_async(&mut conn)
             .await
-            .map_err(|e| CacheError::Cache(format!("Ping failed: {}", e)))?;
+            .map_err(|e| CacheError::Cache(format!("Ping failed: {e}")))?;
 
         self.return_connection(conn).await;
         Ok(())

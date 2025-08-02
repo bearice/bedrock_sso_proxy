@@ -32,7 +32,8 @@ impl TestServerBuilder {
     pub fn with_real_database(mut self) -> Self {
         self.use_memory_db = false;
         // Use a temporary file for the test database
-        let temp_file = std::env::temp_dir().join(format!("test_bedrock_sso_{}.db", std::process::id()));
+        let temp_file =
+            std::env::temp_dir().join(format!("test_bedrock_sso_{}.db", std::process::id()));
         self.config.database.url = format!("sqlite://{}?mode=rwc", temp_file.to_string_lossy());
         self
     }

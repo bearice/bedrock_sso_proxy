@@ -12,7 +12,7 @@ use serde::{Deserialize, Serialize};
 
 pub fn parse_algorithm(alg: &str) -> Result<Algorithm, AppError> {
     Algorithm::from_str(alg)
-        .map_err(|_| AppError::BadRequest(format!("Unsupported JWT algorithm: {}", alg)))
+        .map_err(|_| AppError::BadRequest(format!("Unsupported JWT algorithm: {alg}")))
 }
 
 fn create_decoding_key(key_data: &str, algorithm: Algorithm) -> Result<DecodingKey, AppError> {
@@ -154,7 +154,7 @@ impl JwtService for JwtServiceImpl {
     fn create_oauth_token(&self, claims: &OAuthClaims) -> Result<String, AppError> {
         let header = Header::new(self.algorithm);
         encode(&header, claims, &self.encoding_key)
-            .map_err(|e| AppError::Internal(format!("Failed to create token: {}", e)))
+            .map_err(|e| AppError::Internal(format!("Failed to create token: {e}")))
     }
 
     fn validate_oauth_token(&self, token: &str) -> Result<OAuthClaims, AppError> {

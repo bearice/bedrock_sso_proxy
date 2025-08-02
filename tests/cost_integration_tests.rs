@@ -156,7 +156,7 @@ async fn test_get_all_model_costs_impl(server: &bedrock_sso_proxy::server::Serve
     let request = Request::builder()
         .method(Method::GET)
         .uri("/admin/costs")
-        .header(AUTHORIZATION, format!("Bearer {}", admin_token))
+        .header(AUTHORIZATION, format!("Bearer {admin_token}"))
         .body(Body::empty())
         .unwrap();
 
@@ -182,7 +182,7 @@ async fn test_get_specific_model_cost_impl(server: &bedrock_sso_proxy::server::S
     let request = Request::builder()
         .method(Method::GET)
         .uri("/admin/costs/us-east-1/anthropic.claude-sonnet-4-20250514-v1:0")
-        .header(AUTHORIZATION, format!("Bearer {}", admin_token))
+        .header(AUTHORIZATION, format!("Bearer {admin_token}"))
         .body(Body::empty())
         .unwrap();
 
@@ -220,7 +220,7 @@ async fn test_upsert_model_cost_impl(server: &bedrock_sso_proxy::server::Server)
     let request = Request::builder()
         .method(Method::PUT)
         .uri("/admin/costs/us-east-1/new-test-model")
-        .header(AUTHORIZATION, format!("Bearer {}", admin_token))
+        .header(AUTHORIZATION, format!("Bearer {admin_token}"))
         .header("content-type", "application/json")
         .body(Body::from(new_cost.to_string()))
         .unwrap();
@@ -233,7 +233,7 @@ async fn test_upsert_model_cost_impl(server: &bedrock_sso_proxy::server::Server)
     let request = Request::builder()
         .method(Method::GET)
         .uri("/admin/costs/us-east-1/new-test-model")
-        .header(AUTHORIZATION, format!("Bearer {}", admin_token))
+        .header(AUTHORIZATION, format!("Bearer {admin_token}"))
         .body(Body::empty())
         .unwrap();
 
@@ -269,7 +269,7 @@ async fn test_upsert_model_cost_without_cache_fields_impl(
     let request = Request::builder()
         .method(Method::PUT)
         .uri("/admin/costs/us-west-2/simple-test-model")
-        .header(AUTHORIZATION, format!("Bearer {}", admin_token))
+        .header(AUTHORIZATION, format!("Bearer {admin_token}"))
         .header("content-type", "application/json")
         .body(Body::from(new_cost.to_string()))
         .unwrap();
@@ -300,7 +300,7 @@ async fn test_delete_model_cost_impl(server: &bedrock_sso_proxy::server::Server)
     let request = Request::builder()
         .method(Method::PUT)
         .uri("/admin/costs/us-east-1/delete-test-model")
-        .header(AUTHORIZATION, format!("Bearer {}", admin_token))
+        .header(AUTHORIZATION, format!("Bearer {admin_token}"))
         .header("content-type", "application/json")
         .body(Body::from(new_cost.to_string()))
         .unwrap();
@@ -313,7 +313,7 @@ async fn test_delete_model_cost_impl(server: &bedrock_sso_proxy::server::Server)
     let request = Request::builder()
         .method(Method::DELETE)
         .uri("/admin/costs/us-east-1/delete-test-model")
-        .header(AUTHORIZATION, format!("Bearer {}", admin_token))
+        .header(AUTHORIZATION, format!("Bearer {admin_token}"))
         .body(Body::empty())
         .unwrap();
 
@@ -325,7 +325,7 @@ async fn test_delete_model_cost_impl(server: &bedrock_sso_proxy::server::Server)
     let request = Request::builder()
         .method(Method::GET)
         .uri("/admin/costs/us-east-1/delete-test-model")
-        .header(AUTHORIZATION, format!("Bearer {}", admin_token))
+        .header(AUTHORIZATION, format!("Bearer {admin_token}"))
         .body(Body::empty())
         .unwrap();
 
@@ -348,7 +348,7 @@ us-west-2,test-csv-model-2,Test CSV Model 2,TestProvider,0.002,0.006,,,,,2024-01
     let request = Request::builder()
         .method(Method::POST)
         .uri("/admin/costs")
-        .header(AUTHORIZATION, format!("Bearer {}", admin_token))
+        .header(AUTHORIZATION, format!("Bearer {admin_token}"))
         .header("content-type", "text/plain")
         .body(Body::from(csv_content))
         .unwrap();
@@ -374,7 +374,7 @@ async fn test_bulk_update_empty_csv_impl(server: &bedrock_sso_proxy::server::Ser
     let request = Request::builder()
         .method(Method::POST)
         .uri("/admin/costs")
-        .header(AUTHORIZATION, format!("Bearer {}", admin_token))
+        .header(AUTHORIZATION, format!("Bearer {admin_token}"))
         .header("content-type", "text/plain")
         .body(Body::from(""))
         .unwrap();
@@ -394,7 +394,7 @@ async fn test_get_non_existent_model_cost_impl(server: &bedrock_sso_proxy::serve
     let request = Request::builder()
         .method(Method::GET)
         .uri("/admin/costs/us-east-1/non-existent-model")
-        .header(AUTHORIZATION, format!("Bearer {}", admin_token))
+        .header(AUTHORIZATION, format!("Bearer {admin_token}"))
         .body(Body::empty())
         .unwrap();
 
@@ -447,7 +447,7 @@ async fn test_non_admin_access_forbidden_impl(server: &bedrock_sso_proxy::server
     let request = Request::builder()
         .method(Method::GET)
         .uri("/admin/costs")
-        .header(AUTHORIZATION, format!("Bearer {}", user_token))
+        .header(AUTHORIZATION, format!("Bearer {user_token}"))
         .body(Body::empty())
         .unwrap();
 

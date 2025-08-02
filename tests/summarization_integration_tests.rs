@@ -93,7 +93,7 @@ async fn test_efficient_summary_generation() {
         .get_next_period_to_process(PeriodType::Hourly)
         .await
         .unwrap();
-    println!("Next hourly period to process: {:?}", next_hourly);
+    println!("Next hourly period to process: {next_hourly:?}");
 
     if let Some(hourly_start) = next_hourly {
         let hourly_summaries = aggregator
@@ -103,7 +103,7 @@ async fn test_efficient_summary_generation() {
         println!("Generated {} hourly summaries", hourly_summaries.len());
         if !hourly_summaries.is_empty() {
             let stored_hourly = aggregator.store_summaries(&hourly_summaries).await.unwrap();
-            println!("Stored {} hourly summaries", stored_hourly);
+            println!("Stored {stored_hourly} hourly summaries");
         }
     }
 
@@ -112,12 +112,12 @@ async fn test_efficient_summary_generation() {
         .get_next_period_to_process(PeriodType::Daily)
         .await
         .unwrap();
-    println!("Next daily period to process: {:?}", next_period);
+    println!("Next daily period to process: {next_period:?}");
     assert!(next_period.is_some(), "Should have periods to process");
 
     if let Some(period_start) = next_period {
         // Test 3: Generate summaries for the period
-        println!("Generating summaries for period: {}", period_start);
+        println!("Generating summaries for period: {period_start}");
         let summaries = aggregator
             .generate_summaries(PeriodType::Daily, period_start)
             .await
@@ -127,7 +127,7 @@ async fn test_efficient_summary_generation() {
 
         // Test 4: Store the summaries
         let stored_count = aggregator.store_summaries(&summaries).await.unwrap();
-        println!("Stored {} summaries", stored_count);
+        println!("Stored {stored_count} summaries");
         assert_eq!(
             stored_count,
             summaries.len(),
@@ -165,7 +165,7 @@ async fn test_efficient_summary_generation() {
             .get_next_period_to_process(PeriodType::Daily)
             .await
             .unwrap();
-        println!("Next period after processing: {:?}", next_period2);
+        println!("Next period after processing: {next_period2:?}");
         if let Some(next_start) = next_period2 {
             assert!(
                 next_start > period_start,
@@ -208,7 +208,7 @@ async fn test_summary_service_with_backfill_flag() {
         .generate_summaries("hourly", 10, None, None, false)
         .await
         .unwrap();
-    println!("Generated {} hourly summaries", hourly_count);
+    println!("Generated {hourly_count} hourly summaries");
 
     // Test 2: Generate daily summaries in normal mode
     println!("Testing service generate_summaries with daily backfill=false");
@@ -216,7 +216,7 @@ async fn test_summary_service_with_backfill_flag() {
         .generate_summaries("daily", 10, None, None, false)
         .await
         .unwrap();
-    println!("Generated {} summaries in normal mode", count1);
+    println!("Generated {count1} summaries in normal mode");
     assert!(count1 > 0, "Should generate summaries in normal mode");
 
     // Test 3: Generate again in normal mode - should generate 0 (efficient)
@@ -225,10 +225,7 @@ async fn test_summary_service_with_backfill_flag() {
         .generate_summaries("daily", 10, None, None, false)
         .await
         .unwrap();
-    println!(
-        "Generated {} summaries in normal mode (second time)",
-        count2
-    );
+    println!("Generated {count2} summaries in normal mode (second time)");
     assert_eq!(
         count2, 0,
         "Should not regenerate existing summaries in normal mode"
@@ -240,7 +237,7 @@ async fn test_summary_service_with_backfill_flag() {
         .generate_summaries("daily", 10, None, None, true)
         .await
         .unwrap();
-    println!("Generated {} summaries in backfill mode", count3);
+    println!("Generated {count3} summaries in backfill mode");
     assert!(count3 > 0, "Should regenerate summaries in backfill mode");
 
     println!("✅ Service backfill tests passed!");
@@ -288,7 +285,7 @@ async fn test_job_system_efficiency() {
         .generate_period_summaries(PeriodType::Hourly)
         .await
         .unwrap();
-    println!("Job system processed {} hourly summaries", hourly_count);
+    println!("Job system processed {hourly_count} hourly summaries");
 
     // Test 2: Job system should process daily summaries
     println!("Testing job system generate_period_summaries for daily");
@@ -296,7 +293,7 @@ async fn test_job_system_efficiency() {
         .generate_period_summaries(PeriodType::Daily)
         .await
         .unwrap();
-    println!("Job system processed {} daily summaries", count1);
+    println!("Job system processed {count1} daily summaries");
     assert!(count1 > 0, "Job system should process some summaries");
 
     // Test 3: Running again should process fewer (or zero) summaries
@@ -305,7 +302,7 @@ async fn test_job_system_efficiency() {
         .generate_period_summaries(PeriodType::Daily)
         .await
         .unwrap();
-    println!("Job system processed {} summaries on second run", count2);
+    println!("Job system processed {count2} summaries on second run");
     // This might be 0 if no new periods are ready, or a small number if new periods became available
     assert!(
         count2 <= count1,
@@ -325,7 +322,7 @@ async fn test_cleanup_summaries() {
     let old_date = now - Duration::days(10); // Use 10 days to ensure it's in a completed period
     let recent_date = now - Duration::days(3); // Use 3 days 
 
-    // Create old usage records 
+    // Create old usage records
     create_test_usage_record(
         &*server.database,
         1,
@@ -333,75 +330,106 @@ async fn test_cleanup_summaries() {
         old_date,
         true,
         Some(Decimal::from_str("0.10").unwrap()),
-    ).await.unwrap();
+    )
+    .await
+    .unwrap();
 
-    // Create recent usage records 
+    // Create recent usage records
     create_test_usage_record(
         &*server.database,
         2,
-        "claude-haiku", 
+        "claude-haiku",
         recent_date,
         true,
         Some(Decimal::from_str("0.05").unwrap()),
-    ).await.unwrap();
+    )
+    .await
+    .unwrap();
 
     println!("Created test usage records");
 
     // Generate summaries using the service (this should create both hourly and daily summaries)
-    let _ = service.generate_summaries("hourly", 15, None, None, true).await.unwrap();
-    let _ = service.generate_summaries("daily", 15, None, None, true).await.unwrap();
+    let _ = service
+        .generate_summaries("hourly", 15, None, None, true)
+        .await
+        .unwrap();
+    let _ = service
+        .generate_summaries("daily", 15, None, None, true)
+        .await
+        .unwrap();
 
     // Verify summaries were created
-    let initial_summaries = server.database.usage()
+    let initial_summaries = server
+        .database
+        .usage()
         .get_summaries(&Default::default())
         .await
         .unwrap();
-    
+
     println!("Created {} summaries", initial_summaries.len());
-    
+
     if initial_summaries.is_empty() {
         println!("No summaries generated, testing cleanup method with empty database");
         // Test that cleanup works even with no summaries
         let deleted_count = service.cleanup_summaries(30).await.unwrap();
-        assert_eq!(deleted_count, 0, "Should delete 0 summaries from empty database");
+        assert_eq!(
+            deleted_count, 0,
+            "Should delete 0 summaries from empty database"
+        );
         println!("✅ Cleanup summaries tests passed (empty database)!");
         return;
     }
 
     for summary in &initial_summaries {
-        println!("  - Summary: {} period_start={}, days_old={}", 
-                summary.model_id, 
-                summary.period_start.format("%Y-%m-%d"),
-                (now - summary.period_start).num_days());
+        println!(
+            "  - Summary: {} period_start={}, days_old={}",
+            summary.model_id,
+            summary.period_start.format("%Y-%m-%d"),
+            (now - summary.period_start).num_days()
+        );
     }
-    
+
     // Test cleanup with 5 days retention (should delete some summaries)
     let deleted_count = service.cleanup_summaries(5).await.unwrap();
-    
-    println!("Deleted {} summaries with 5-day retention", deleted_count);
-    
+
+    println!("Deleted {deleted_count} summaries with 5-day retention");
+
     // Verify some summaries were deleted or all remain depending on their age
-    let remaining_summaries = server.database.usage()
+    let remaining_summaries = server
+        .database
+        .usage()
         .get_summaries(&Default::default())
         .await
         .unwrap();
-    
-    println!("Remaining summaries after 5-day cleanup: {}", remaining_summaries.len());
-    assert!(remaining_summaries.len() <= initial_summaries.len(), "Should not have more summaries after cleanup");
+
+    println!(
+        "Remaining summaries after 5-day cleanup: {}",
+        remaining_summaries.len()
+    );
+    assert!(
+        remaining_summaries.len() <= initial_summaries.len(),
+        "Should not have more summaries after cleanup"
+    );
 
     // Test cleanup with very short retention (should delete all remaining summaries)
     let deleted_count_final = service.cleanup_summaries(0).await.unwrap();
-    
-    println!("Deleted {} summaries with 0-day retention", deleted_count_final);
-    
+
+    println!("Deleted {deleted_count_final} summaries with 0-day retention");
+
     // Verify all summaries are gone
-    let summaries_final = server.database.usage()
+    let summaries_final = server
+        .database
+        .usage()
         .get_summaries(&Default::default())
         .await
         .unwrap();
-    
+
     println!("Final summaries count: {}", summaries_final.len());
-    assert_eq!(summaries_final.len(), 0, "Should have no remaining summaries after 0-day retention cleanup");
+    assert_eq!(
+        summaries_final.len(),
+        0,
+        "Should have no remaining summaries after 0-day retention cleanup"
+    );
 
     println!("✅ Cleanup summaries tests passed!");
 }
@@ -442,7 +470,7 @@ async fn test_incremental_processing_order() {
             .await
             .unwrap()
         {
-            println!("Processing period {}: {}", i, period_start);
+            println!("Processing period {i}: {period_start}");
             processed_periods.push(period_start);
 
             let summaries = aggregator
@@ -457,26 +485,20 @@ async fn test_incremental_processing_order() {
 
             if !summaries.is_empty() {
                 let stored_count = aggregator.store_summaries(&summaries).await.unwrap();
-                println!(
-                    "Stored {} summaries for period {}",
-                    stored_count, period_start
-                );
+                println!("Stored {stored_count} summaries for period {period_start}");
             } else {
-                println!(
-                    "No summaries generated for period {} - this is the issue!",
-                    period_start
-                );
+                println!("No summaries generated for period {period_start} - this is the issue!");
                 // The algorithm should advance to the next period even if no data exists
                 // But currently it keeps returning the same period
                 break; // Break early to avoid infinite loop in test
             }
         } else {
-            println!("No more periods to process at iteration {}", i);
+            println!("No more periods to process at iteration {i}");
             break;
         }
     }
 
-    println!("Processed periods in order: {:?}", processed_periods);
+    println!("Processed periods in order: {processed_periods:?}");
 
     // Verify periods are processed in chronological order (oldest first)
     for i in 1..processed_periods.len() {
@@ -494,7 +516,7 @@ async fn test_incremental_processing_order() {
             .get_next_period_to_process(PeriodType::Hourly)
             .await
             .unwrap();
-        println!("{:?}", next_period);
+        println!("{next_period:?}");
         if let Some(next) = next_period {
             assert!(
                 next > *last_processed,

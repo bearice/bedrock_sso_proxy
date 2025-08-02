@@ -100,7 +100,7 @@ pub async fn create_message(
                 String::from_utf8_lossy(&body[..1000])
             );
         }
-        AppError::BadRequest(format!("Invalid JSON request: {}", e))
+        AppError::BadRequest(format!("Invalid JSON request: {e}"))
     })?;
 
     // Log successful parsing
@@ -133,7 +133,7 @@ pub async fn create_message(
 
     // Convert bedrock_request to bytes for AWS call
     let bedrock_body = serde_json::to_vec(&bedrock_request)
-        .map_err(|e| AppError::Internal(format!("Failed to serialize Bedrock request: {}", e)))?;
+        .map_err(|e| AppError::Internal(format!("Failed to serialize Bedrock request: {e}")))?;
 
     // Check if streaming was requested
     let is_streaming = anthropic_request.stream.unwrap_or(false);
@@ -216,20 +216,16 @@ async fn handle_non_streaming_message(
                 // Return appropriate error based on status code
                 return match model_response.status.as_u16() {
                     403 => Err(AppError::BadRequest(format!(
-                        "Model access denied: {}. Please ensure the model is enabled in your AWS Bedrock console and your credentials have the necessary permissions.",
-                        error_message
+                        "Model access denied: {error_message}. Please ensure the model is enabled in your AWS Bedrock console and your credentials have the necessary permissions."
                     ))),
                     400 => Err(AppError::BadRequest(format!(
-                        "Invalid request: {}",
-                        error_message
+                        "Invalid request: {error_message}"
                     ))),
                     401 => Err(AppError::Unauthorized(format!(
-                        "Authentication failed: {}",
-                        error_message
+                        "Authentication failed: {error_message}"
                     ))),
                     429 => Err(AppError::BadRequest(format!(
-                        "Rate limit exceeded: {}",
-                        error_message
+                        "Rate limit exceeded: {error_message}"
                     ))),
                     _ => Err(AppError::Internal(format!(
                         "AWS Bedrock error ({}): {}",
@@ -246,7 +242,7 @@ async fn handle_non_streaming_message(
                         "Raw Bedrock response body: {}",
                         String::from_utf8_lossy(&model_response.body)
                     );
-                    AppError::Internal(format!("Failed to parse Bedrock response: {}", e))
+                    AppError::Internal(format!("Failed to parse Bedrock response: {e}"))
                 })?;
 
             // Transform Bedrock response to Anthropic format
@@ -423,10 +419,10 @@ mod tests {
     async fn create_test_user(server: &crate::server::Server, user_id: i32, email: &str) -> i32 {
         let user = crate::database::entities::UserRecord {
             id: 0, // Let database assign ID
-            provider_user_id: format!("test_user_{}", user_id),
+            provider_user_id: format!("test_user_{user_id}"),
             provider: "test".to_string(),
             email: email.to_string(),
-            display_name: Some(format!("Test User {}", user_id)),
+            display_name: Some(format!("Test User {user_id}")),
             created_at: chrono::Utc::now(),
             updated_at: chrono::Utc::now(),
             last_login: Some(chrono::Utc::now()),
@@ -540,7 +536,7 @@ mod tests {
             .uri("/v1/messages")
             .method("POST")
             .header("Content-Type", "application/json")
-            .header("Authorization", format!("Bearer {}", token))
+            .header("Authorization", format!("Bearer {token}"))
             .body(Body::from("invalid json"))
             .unwrap();
 

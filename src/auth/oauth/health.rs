@@ -56,10 +56,7 @@ impl HealthChecker for OAuthHealthChecker {
                 }))
             } else {
                 HealthCheckResult::degraded_with_details(
-                    format!(
-                        "Some OAuth providers are misconfigured: {:?}",
-                        misconfigured_providers
-                    ),
+                    format!("Some OAuth providers are misconfigured: {misconfigured_providers:?}"),
                     serde_json::json!({
                         "provider_count": provider_count,
                         "configured_providers": configured_providers,

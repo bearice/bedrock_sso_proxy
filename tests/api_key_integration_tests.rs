@@ -34,7 +34,7 @@ async fn test_api_key_authentication_with_authorization_header() {
     let request = Request::builder()
         .uri("/api/keys")
         .method("POST")
-        .header("Authorization", format!("Bearer {}", jwt_token))
+        .header("Authorization", format!("Bearer {jwt_token}"))
         .header("Content-Type", "application/json")
         .body(Body::from(serde_json::to_string(&create_request).unwrap()))
         .unwrap();
@@ -55,7 +55,7 @@ async fn test_api_key_authentication_with_authorization_header() {
     let bedrock_request = Request::builder()
         .uri("/bedrock/model/anthropic.claude-sonnet-4-20250514-v1:0/invoke")
         .method("POST")
-        .header("Authorization", format!("Bearer {}", api_key))
+        .header("Authorization", format!("Bearer {api_key}"))
         .header("Content-Type", "application/json")
         .body(Body::from(r#"{"anthropic_version": "bedrock-2023-05-31", "max_tokens": 100, "messages": [{"role": "user", "content": "Hello"}]}"#))
         .unwrap();
@@ -84,7 +84,7 @@ async fn test_api_key_authentication_with_x_api_key_header() {
     let request = Request::builder()
         .uri("/api/keys")
         .method("POST")
-        .header("Authorization", format!("Bearer {}", jwt_token))
+        .header("Authorization", format!("Bearer {jwt_token}"))
         .header("Content-Type", "application/json")
         .body(Body::from(serde_json::to_string(&create_request).unwrap()))
         .unwrap();
@@ -172,7 +172,7 @@ async fn test_revoked_api_key_authentication() {
     let request = Request::builder()
         .uri("/api/keys")
         .method("POST")
-        .header("Authorization", format!("Bearer {}", jwt_token))
+        .header("Authorization", format!("Bearer {jwt_token}"))
         .header("Content-Type", "application/json")
         .body(Body::from(serde_json::to_string(&create_request).unwrap()))
         .unwrap();
@@ -191,9 +191,9 @@ async fn test_revoked_api_key_authentication() {
 
     // Revoke the API key
     let revoke_request = Request::builder()
-        .uri(format!("/api/keys/{}", key_hash))
+        .uri(format!("/api/keys/{key_hash}"))
         .method("DELETE")
-        .header("Authorization", format!("Bearer {}", jwt_token))
+        .header("Authorization", format!("Bearer {jwt_token}"))
         .body(Body::empty())
         .unwrap();
 
@@ -204,7 +204,7 @@ async fn test_revoked_api_key_authentication() {
     let test_request = Request::builder()
         .uri("/bedrock/model/anthropic.claude-sonnet-4-20250514-v1:0/invoke")
         .method("POST")
-        .header("Authorization", format!("Bearer {}", api_key))
+        .header("Authorization", format!("Bearer {api_key}"))
         .header("Content-Type", "application/json")
         .body(Body::from(r#"{"anthropic_version": "bedrock-2023-05-31", "max_tokens": 100, "messages": [{"role": "user", "content": "Hello"}]}"#))
         .unwrap();
@@ -226,7 +226,7 @@ async fn test_dual_authentication_support() {
     let jwt_request = Request::builder()
         .uri("/bedrock/model/anthropic.claude-sonnet-4-20250514-v1:0/invoke")
         .method("POST")
-        .header("Authorization", format!("Bearer {}", jwt_token))
+        .header("Authorization", format!("Bearer {jwt_token}"))
         .header("Content-Type", "application/json")
         .body(Body::from(r#"{"anthropic_version": "bedrock-2023-05-31", "max_tokens": 100, "messages": [{"role": "user", "content": "Hello"}]}"#))
         .unwrap();
@@ -244,7 +244,7 @@ async fn test_dual_authentication_support() {
     let request = Request::builder()
         .uri("/api/keys")
         .method("POST")
-        .header("Authorization", format!("Bearer {}", jwt_token))
+        .header("Authorization", format!("Bearer {jwt_token}"))
         .header("Content-Type", "application/json")
         .body(Body::from(serde_json::to_string(&create_request).unwrap()))
         .unwrap();
@@ -262,7 +262,7 @@ async fn test_dual_authentication_support() {
     let api_key_request = Request::builder()
         .uri("/anthropic/v1/messages")
         .method("POST")
-        .header("Authorization", format!("Bearer {}", api_key))
+        .header("Authorization", format!("Bearer {api_key}"))
         .header("Content-Type", "application/json")
         .body(Body::from(r#"{"model": "claude-sonnet-4-20250514", "max_tokens": 100, "messages": [{"role": "user", "content": "Hello"}]}"#))
         .unwrap();

@@ -129,7 +129,10 @@ export function UsageStats({ stats, isLoading, error }: UsageStatsProps) {
     {
       icon: <AlertCircle size={24} style={{ color: '#dc2626' }} />,
       label: 'Failed Requests',
-      value: (stats.failed_requests ?? Math.round((stats.total_requests ?? 0) * (1 - (stats.success_rate ?? 0)))).toLocaleString(),
+      value: (
+        stats.failed_requests ??
+        Math.round((stats.total_requests ?? 0) * (1 - (stats.success_rate ?? 0)))
+      ).toLocaleString(),
       color: '#dc2626',
       background: '#fef2f2',
     },
@@ -140,7 +143,7 @@ export function UsageStats({ stats, isLoading, error }: UsageStatsProps) {
       color: '#ea580c',
       background: '#fff7ed',
       subtitle: `↑ ${(stats.total_input_tokens ?? 0).toLocaleString()} ↓ ${(stats.total_output_tokens ?? 0).toLocaleString()}${
-        (stats.total_cache_read_tokens ?? 0) > 0 || (stats.total_cache_write_tokens ?? 0) > 0 
+        (stats.total_cache_read_tokens ?? 0) > 0 || (stats.total_cache_write_tokens ?? 0) > 0
           ? ` • 📖 ${(stats.total_cache_read_tokens ?? 0).toLocaleString()} ✏️ ${(stats.total_cache_write_tokens ?? 0).toLocaleString()}`
           : ''
       }`,
@@ -267,7 +270,6 @@ export function UsageStats({ stats, isLoading, error }: UsageStatsProps) {
           </div>
         ))}
       </div>
-
     </div>
   );
 }

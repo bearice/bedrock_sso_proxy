@@ -131,13 +131,13 @@ pub async fn get_audit_logs(
     let total = audit_dao
         .count_all(&params)
         .await
-        .map_err(|e| AppError::Internal(format!("Failed to count audit logs: {}", e)))?;
+        .map_err(|e| AppError::Internal(format!("Failed to count audit logs: {e}")))?;
 
     // Get audit logs with filtering
     let logs = audit_dao
         .find_all(&params)
         .await
-        .map_err(|e| AppError::Internal(format!("Failed to fetch audit logs: {}", e)))?;
+        .map_err(|e| AppError::Internal(format!("Failed to fetch audit logs: {e}")))?;
 
     let response = AuditLogsResponse {
         logs: logs.into_iter().map(AuditLogEntry::from).collect(),
@@ -239,7 +239,7 @@ mod tests {
 
         let request = Request::builder()
             .uri("/admin/audit-logs")
-            .header("Authorization", format!("Bearer {}", token))
+            .header("Authorization", format!("Bearer {token}"))
             .body(Body::empty())
             .unwrap();
 
@@ -299,7 +299,7 @@ mod tests {
         // Test filtering by success=false
         let request = Request::builder()
             .uri("/admin/audit-logs?success=false&limit=10")
-            .header("Authorization", format!("Bearer {}", token))
+            .header("Authorization", format!("Bearer {token}"))
             .body(Body::empty())
             .unwrap();
 
@@ -353,7 +353,7 @@ mod tests {
 
         let request = Request::builder()
             .uri("/admin/audit-logs")
-            .header("Authorization", format!("Bearer {}", token))
+            .header("Authorization", format!("Bearer {token}"))
             .body(Body::empty())
             .unwrap();
 
@@ -423,7 +423,7 @@ mod tests {
         // Invalid date range (start > end)
         let request = Request::builder()
             .uri("/admin/audit-logs?start_date=2024-01-02T00:00:00Z&end_date=2024-01-01T00:00:00Z")
-            .header("Authorization", format!("Bearer {}", token))
+            .header("Authorization", format!("Bearer {token}"))
             .body(Body::empty())
             .unwrap();
 

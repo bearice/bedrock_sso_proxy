@@ -70,7 +70,7 @@ impl JobResult {
     pub fn success_with_count(count: u64) -> Self {
         Self {
             success: true,
-            message: format!("Successfully processed {} items", count),
+            message: format!("Successfully processed {count} items"),
             items_processed: count,
         }
     }

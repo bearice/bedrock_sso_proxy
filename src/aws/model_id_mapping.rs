@@ -83,7 +83,7 @@ impl RegionalModelMapping {
 
         // Get the prefix for the region
         if let Some(prefix) = self.get_prefix(region) {
-            format!("{}.{}", prefix, model_id)
+            format!("{prefix}.{model_id}")
         } else {
             // If we don't have a mapping for this region, return the model ID as-is
             // This maintains backwards compatibility

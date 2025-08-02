@@ -167,7 +167,7 @@ mod tests {
     async fn test_request_id_display() {
         let request_id = RequestId::new();
         let as_string = request_id.as_str();
-        let display_string = format!("{}", request_id);
+        let display_string = format!("{request_id}");
 
         assert_eq!(as_string, display_string);
         assert!(Uuid::from_str(&as_string).is_ok());

@@ -227,7 +227,7 @@ impl RequestBuilder {
     pub fn health_with_auth(token: &str) -> Request<Body> {
         Request::builder()
             .uri("/health")
-            .header("Authorization", format!("Bearer {}", token))
+            .header("Authorization", format!("Bearer {token}"))
             .body(Body::empty())
             .unwrap()
     }
@@ -236,8 +236,8 @@ impl RequestBuilder {
     #[allow(dead_code)]
     pub fn health_with_check_and_auth(check_type: &str, token: &str) -> Request<Body> {
         Request::builder()
-            .uri(format!("/health?check={}", check_type))
-            .header("Authorization", format!("Bearer {}", token))
+            .uri(format!("/health?check={check_type}"))
+            .header("Authorization", format!("Bearer {token}"))
             .body(Body::empty())
             .unwrap()
     }
@@ -245,9 +245,9 @@ impl RequestBuilder {
     /// Model invoke with auth
     pub fn invoke_model_with_auth(model_id: &str, token: &str, body: &str) -> Request<Body> {
         Request::builder()
-            .uri(format!("/bedrock/model/{}/invoke", model_id))
+            .uri(format!("/bedrock/model/{model_id}/invoke"))
             .method("POST")
-            .header("Authorization", format!("Bearer {}", token))
+            .header("Authorization", format!("Bearer {token}"))
             .header("Content-Type", "application/json")
             .body(Body::from(body.to_string()))
             .unwrap()
@@ -257,11 +257,10 @@ impl RequestBuilder {
     pub fn invoke_streaming_with_auth(model_id: &str, token: &str, body: &str) -> Request<Body> {
         Request::builder()
             .uri(format!(
-                "/bedrock/model/{}/invoke-with-response-stream",
-                model_id
+                "/bedrock/model/{model_id}/invoke-with-response-stream"
             ))
             .method("POST")
-            .header("Authorization", format!("Bearer {}", token))
+            .header("Authorization", format!("Bearer {token}"))
             .header("Content-Type", "application/json")
             .body(Body::from(body.to_string()))
             .unwrap()
@@ -279,7 +278,7 @@ impl RequestBuilder {
         let mut builder = Request::builder()
             .uri(uri)
             .method(method)
-            .header("Authorization", format!("Bearer {}", token))
+            .header("Authorization", format!("Bearer {token}"))
             .header("Content-Type", "application/json");
 
         for (name, value) in headers {
@@ -301,7 +300,7 @@ impl RequestBuilder {
         Ok(Request::builder()
             .uri(uri)
             .method(method)
-            .header("Authorization", format!("Bearer {}", token))
+            .header("Authorization", format!("Bearer {token}"))
             .header("Content-Type", content_type)
             .body(Body::from(body.to_string()))?)
     }
@@ -314,7 +313,7 @@ impl RequestBuilder {
         body: &str,
     ) -> Request<Body> {
         Request::builder()
-            .uri(format!("/bedrock/model/{}/invoke", model_id))
+            .uri(format!("/bedrock/model/{model_id}/invoke"))
             .method("POST")
             .header("X-API-Key", api_key)
             .header("Content-Type", "application/json")
@@ -330,9 +329,9 @@ impl RequestBuilder {
         body: &str,
     ) -> Request<Body> {
         Request::builder()
-            .uri(format!("/bedrock/model/{}/invoke", model_id))
+            .uri(format!("/bedrock/model/{model_id}/invoke"))
             .method("POST")
-            .header("Authorization", format!("Bearer {}", api_key))
+            .header("Authorization", format!("Bearer {api_key}"))
             .header("Content-Type", "application/json")
             .body(Body::from(body.to_string()))
             .unwrap()
@@ -353,13 +352,13 @@ impl PostgresTestDb {
         let base_url = std::env::var("TEST_POSTGRES_URL")
             .unwrap_or_else(|_| "postgresql://localhost/postgres".to_string());
         let base_without_db = base_url.trim_end_matches("/postgres");
-        let database_url = format!("{}/{}", base_without_db, database_name);
+        let database_url = format!("{base_without_db}/{database_name}");
 
         // Connect to postgres database to create the test database
         let pool = sqlx::postgres::PgPool::connect(&base_url).await?;
 
         // Create the temporary database
-        sqlx::query(&format!("CREATE DATABASE \"{}\"", database_name))
+        sqlx::query(&format!("CREATE DATABASE \"{database_name}\""))
             .execute(&pool)
             .await?;
 
@@ -409,13 +408,12 @@ impl Drop for PostgresTestDb {
                 let _ = sqlx::query(&format!(
                     "SELECT pg_terminate_backend(pid)
                      FROM pg_stat_activity
-                     WHERE datname = '{}' AND pid <> pg_backend_pid()",
-                    database_name
+                     WHERE datname = '{database_name}' AND pid <> pg_backend_pid()"
                 ))
                 .execute(&pool)
                 .await;
 
-                let _ = sqlx::query(&format!("DROP DATABASE \"{}\"", database_name))
+                let _ = sqlx::query(&format!("DROP DATABASE \"{database_name}\""))
                     .execute(&pool)
                     .await;
 

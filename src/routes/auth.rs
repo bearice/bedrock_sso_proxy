@@ -177,10 +177,7 @@ fn build_redirect_uri_from_request(headers: &HeaderMap, provider: &str) -> Strin
     let base_path = determine_base_path_from_headers(headers);
 
     // 4. Build the complete redirect URI
-    format!(
-        "{}://{}{}/auth/callback/{}",
-        scheme, host, base_path, provider
-    )
+    format!("{scheme}://{host}{base_path}/auth/callback/{provider}")
 }
 
 /// Determine the scheme from various proxy headers
@@ -285,7 +282,7 @@ fn ensure_leading_slash(path: &str) -> String {
     } else if path.starts_with('/') {
         path.to_string()
     } else {
-        format!("/{}", path)
+        format!("/{path}")
     }
 }
 
@@ -300,7 +297,7 @@ fn ensure_leading_slash(path: &str) -> String {
 fn build_callback_url(params: &[(&str, &str)]) -> Result<String, AppError> {
     // Use a temporary base URL just for query parameter building
     let mut url = Url::parse("http://temp/callback")
-        .map_err(|e| AppError::Internal(format!("Failed to parse base URL: {}", e)))?;
+        .map_err(|e| AppError::Internal(format!("Failed to parse base URL: {e}")))?;
 
     {
         let mut query_pairs = url.query_pairs_mut();

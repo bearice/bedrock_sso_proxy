@@ -249,10 +249,10 @@ mod tests {
     async fn create_test_user(server: &crate::server::Server, user_id: i32, email: &str) -> i32 {
         let user = crate::database::entities::UserRecord {
             id: 0, // Let database assign ID
-            provider_user_id: format!("test_user_{}", user_id),
+            provider_user_id: format!("test_user_{user_id}"),
             provider: "test".to_string(),
             email: email.to_string(),
-            display_name: Some(format!("Test User {}", user_id)),
+            display_name: Some(format!("Test User {user_id}")),
             created_at: chrono::Utc::now(),
             updated_at: chrono::Utc::now(),
             last_login: Some(chrono::Utc::now()),
@@ -335,7 +335,7 @@ mod tests {
             .uri("/model//invoke-with-response-stream") // Empty model ID
             .method("POST")
             .header("Content-Type", "application/json")
-            .header("Authorization", format!("Bearer {}", token))
+            .header("Authorization", format!("Bearer {token}"))
             .body(Body::from(r#"{"messages": []}"#))
             .unwrap();
 
@@ -382,10 +382,8 @@ mod tests {
 
         // Create a large JSON body (simulating large input)
         let large_content = "A".repeat(1000);
-        let large_body = format!(
-            r#"{{"messages": [{{"role": "user", "content": "{}"}}]}}"#,
-            large_content
-        );
+        let large_body =
+            format!(r#"{{"messages": [{{"role": "user", "content": "{large_content}"}}]}}"#);
 
         let request = Request::builder()
             .uri("/model/anthropic.claude-v2/invoke")

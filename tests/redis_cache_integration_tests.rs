@@ -252,7 +252,7 @@ async fn test_redis_cache_complex_decimal_operations() {
         let model_cost = ModelCost {
             id: 1,
             region: "test-region".to_string(),
-            model_id: format!("test-model-{}", test_name),
+            model_id: format!("test-model-{test_name}"),
             input_cost_per_1k_tokens: decimal_value,
             output_cost_per_1k_tokens: decimal_value,
             cache_write_cost_per_1k_tokens: Some(decimal_value),
@@ -262,17 +262,14 @@ async fn test_redis_cache_complex_decimal_operations() {
 
         // This would fail with bincode for certain decimal values
         typed_cache
-            .set(&format!("decimal_test_{}", test_name), &model_cost)
+            .set(&format!("decimal_test_{test_name}"), &model_cost)
             .await
             .unwrap_or_else(|_| {
-                panic!(
-                    "Failed to serialize ModelCost with decimal: {}",
-                    decimal_value
-                )
+                panic!("Failed to serialize ModelCost with decimal: {decimal_value}")
             });
 
         let cached = typed_cache
-            .get(&format!("decimal_test_{}", test_name))
+            .get(&format!("decimal_test_{test_name}"))
             .await
             .unwrap()
             .unwrap();
@@ -284,7 +281,7 @@ async fn test_redis_cache_complex_decimal_operations() {
 
         // Cleanup
         typed_cache
-            .delete(&format!("decimal_test_{}", test_name))
+            .delete(&format!("decimal_test_{test_name}"))
             .await
             .unwrap();
     }

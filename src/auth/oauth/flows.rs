@@ -100,7 +100,7 @@ impl OAuthFlows {
             .config
             .get_oauth_provider(provider_name)
             .ok_or_else(|| {
-                AppError::BadRequest(format!("Unknown OAuth provider: {}", provider_name))
+                AppError::BadRequest(format!("Unknown OAuth provider: {provider_name}"))
             })?;
 
         // Use the configured redirect URI if available, otherwise use the provided one
@@ -217,14 +217,14 @@ impl OAuthFlows {
             // Following redirects opens the client up to SSRF vulnerabilities.
             .redirect(reqwest::redirect::Policy::none())
             .build()
-            .map_err(|e| AppError::Internal(format!("reqwest build error: {}", e)))?;
+            .map_err(|e| AppError::Internal(format!("reqwest build error: {e}")))?;
 
         // Exchange authorization code for access token
         let token_result = client
             .exchange_code(AuthorizationCode::new(request.authorization_code))
             .request_async(&http_client)
             .await
-            .map_err(|e| AppError::BadRequest(format!("Token exchange failed: {}", e)))?;
+            .map_err(|e| AppError::BadRequest(format!("Token exchange failed: {e}")))?;
 
         // Get user info from OAuth provider
         let user_info = self
@@ -273,7 +273,7 @@ impl OAuthFlows {
                 .users()
                 .upsert(&user_record)
                 .await
-                .map_err(|e| AppError::Internal(format!("Failed to store user: {}", e)))?;
+                .map_err(|e| AppError::Internal(format!("Failed to store user: {e}")))?;
 
             let is_admin = self.config.is_admin(email);
 
@@ -346,7 +346,7 @@ impl OAuthFlows {
             .refresh_tokens()
             .store(&refresh_token_data)
             .await
-            .map_err(|e| AppError::Internal(format!("Failed to store refresh token: {}", e)))?;
+            .map_err(|e| AppError::Internal(format!("Failed to store refresh token: {e}")))?;
 
         Ok(TokenResponse {
             access_token,
@@ -413,7 +413,7 @@ impl OAuthFlows {
                 .refresh_tokens()
                 .find_by_hash(&token_hash)
                 .await
-                .map_err(|e| AppError::Internal(format!("Database error: {}", e)))?
+                .map_err(|e| AppError::Internal(format!("Database error: {e}")))?
                 .ok_or_else(|| {
                     AppError::Unauthorized("Invalid or expired refresh token".to_string())
                 })?;
@@ -430,7 +430,7 @@ impl OAuthFlows {
                 .refresh_tokens()
                 .revoke(token_data.clone())
                 .await
-                .map_err(|e| AppError::Internal(format!("Failed to revoke token: {}", e)))?;
+                .map_err(|e| AppError::Internal(format!("Failed to revoke token: {e}")))?;
 
             // Create new refresh token
             let new_token = Uuid::new_v4().to_string();
@@ -453,7 +453,7 @@ impl OAuthFlows {
                 .refresh_tokens()
                 .store(&new_token_data)
                 .await
-                .map_err(|e| AppError::Internal(format!("Failed to store new token: {}", e)))?;
+                .map_err(|e| AppError::Internal(format!("Failed to store new token: {e}")))?;
 
             // Log successful token refresh
             let audit_entry = AuditLogEntry {
@@ -526,7 +526,7 @@ impl OAuthFlows {
             .users()
             .find_by_provider(&token_data.provider, provider_user_id)
             .await
-            .map_err(|e| AppError::Internal(format!("Failed to lookup user: {}", e)))?
+            .map_err(|e| AppError::Internal(format!("Failed to lookup user: {e}")))?
             .map(|user| user.id)
             .ok_or_else(|| AppError::NotFound("User not found in database".to_string()))?;
 
@@ -581,9 +581,7 @@ impl OAuthFlows {
         self.oauth_clients
             .get(provider_name)
             .cloned()
-            .ok_or_else(|| {
-                AppError::BadRequest(format!("Unknown OAuth provider: {}", provider_name))
-            })
+            .ok_or_else(|| AppError::BadRequest(format!("Unknown OAuth provider: {provider_name}")))
     }
 
     async fn get_user_info(
@@ -602,7 +600,7 @@ impl OAuthFlows {
             .bearer_auth(access_token)
             .send()
             .await
-            .map_err(|e| AppError::BadRequest(format!("Failed to fetch user info: {}", e)))?;
+            .map_err(|e| AppError::BadRequest(format!("Failed to fetch user info: {e}")))?;
 
         if !response.status().is_success() {
             return Err(AppError::BadRequest(format!(
@@ -614,7 +612,7 @@ impl OAuthFlows {
         let user_info: HashMap<String, Value> = response
             .json()
             .await
-            .map_err(|e| AppError::BadRequest(format!("Failed to parse user info: {}", e)))?;
+            .map_err(|e| AppError::BadRequest(format!("Failed to parse user info: {e}")))?;
 
         Ok(user_info)
     }
@@ -647,7 +645,7 @@ impl OAuthFlows {
         state_cache
             .set(&state, &state_data)
             .await
-            .map_err(|e| AppError::Internal(format!("Failed to store state: {}", e)))?;
+            .map_err(|e| AppError::Internal(format!("Failed to store state: {e}")))?;
 
         Ok(state)
     }
@@ -657,7 +655,7 @@ impl OAuthFlows {
         state_cache
             .get(state)
             .await
-            .map_err(|e| AppError::Internal(format!("Failed to get state: {}", e)))
+            .map_err(|e| AppError::Internal(format!("Failed to get state: {e}")))
     }
 
     async fn get_and_remove_state_internal(
@@ -668,13 +666,13 @@ impl OAuthFlows {
         let state_data = state_cache
             .get(state)
             .await
-            .map_err(|e| AppError::Internal(format!("Failed to get state: {}", e)))?;
+            .map_err(|e| AppError::Internal(format!("Failed to get state: {e}")))?;
 
         if state_data.is_some() {
             state_cache
                 .delete(state)
                 .await
-                .map_err(|e| AppError::Internal(format!("Failed to delete state: {}", e)))?;
+                .map_err(|e| AppError::Internal(format!("Failed to delete state: {e}")))?;
         }
         Ok(state_data)
     }

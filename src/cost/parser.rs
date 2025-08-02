@@ -123,7 +123,7 @@ pub fn parse_csv_pricing_data(csv_content: &str) -> Result<PricingData, CsvParsi
             headers.clone()
         }
         Err(e) => {
-            let error_msg = format!("Failed to read CSV headers: {}", e);
+            let error_msg = format!("Failed to read CSV headers: {e}");
             error!("{}", error_msg);
             header_errors.push(error_msg);
             return Err(CsvParsingError {
@@ -181,7 +181,7 @@ pub fn parse_csv_pricing_data(csv_content: &str) -> Result<PricingData, CsvParsi
                         err,
                     } => {
                         parse_error.error_type = "DeserializationError".to_string();
-                        parse_error.message = format!("Deserialization error: {}", err);
+                        parse_error.message = format!("Deserialization error: {err}");
                         parse_error.column_position = Some(pos.byte().try_into().unwrap());
                     }
                     csv::ErrorKind::Utf8 {
@@ -189,11 +189,11 @@ pub fn parse_csv_pricing_data(csv_content: &str) -> Result<PricingData, CsvParsi
                         err,
                     } => {
                         parse_error.error_type = "Utf8Error".to_string();
-                        parse_error.message = format!("UTF-8 encoding error: {}", err);
+                        parse_error.message = format!("UTF-8 encoding error: {err}");
                         parse_error.column_position = Some(pos.byte().try_into().unwrap());
                     }
                     _ => {
-                        parse_error.message = format!("Parse error: {}", e);
+                        parse_error.message = format!("Parse error: {e}");
                     }
                 }
 
@@ -219,10 +219,7 @@ pub fn parse_csv_pricing_data(csv_content: &str) -> Result<PricingData, CsvParsi
                 total_lines
             )
         } else {
-            format!(
-                "CSV parsing failed with {} errors out of {} total lines",
-                error_count, total_lines
-            )
+            format!("CSV parsing failed with {error_count} errors out of {total_lines} total lines")
         };
 
         warn!("{}", summary);
@@ -332,25 +329,25 @@ fn validate_record(record: &PricingRecord) -> Result<(), String> {
     // Validate optional prices if present
     if let Some(price) = record.batch_input_price {
         if price < 0.0 {
-            return Err(format!("batch_input_price cannot be negative: {}", price));
+            return Err(format!("batch_input_price cannot be negative: {price}"));
         }
     }
 
     if let Some(price) = record.batch_output_price {
         if price < 0.0 {
-            return Err(format!("batch_output_price cannot be negative: {}", price));
+            return Err(format!("batch_output_price cannot be negative: {price}"));
         }
     }
 
     if let Some(price) = record.cache_write_price {
         if price < 0.0 {
-            return Err(format!("cache_write_price cannot be negative: {}", price));
+            return Err(format!("cache_write_price cannot be negative: {price}"));
         }
     }
 
     if let Some(price) = record.cache_read_price {
         if price < 0.0 {
-            return Err(format!("cache_read_price cannot be negative: {}", price));
+            return Err(format!("cache_read_price cannot be negative: {price}"));
         }
     }
 
@@ -382,7 +379,7 @@ where
     let timestamp_with_z = if timestamp_str.ends_with('Z') {
         timestamp_str.clone()
     } else {
-        format!("{}Z", timestamp_str)
+        format!("{timestamp_str}Z")
     };
 
     if let Ok(dt) = DateTime::parse_from_rfc3339(&timestamp_with_z) {
@@ -420,8 +417,7 @@ where
 
     // If all parsing fails, return error
     Err(serde::de::Error::custom(format!(
-        "invalid timestamp format '{}': expected RFC3339, Unix timestamp, or ISO8601",
-        timestamp_str
+        "invalid timestamp format '{timestamp_str}': expected RFC3339, Unix timestamp, or ISO8601"
     )))
 }
 

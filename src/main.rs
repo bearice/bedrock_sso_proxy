@@ -21,7 +21,7 @@ async fn main() {
     let config = match Config::load_from_path(cli.config.as_ref()) {
         Ok(config) => config,
         Err(e) => {
-            eprintln!("Failed to load configuration: {}", e);
+            eprintln!("Failed to load configuration: {e}");
             std::process::exit(1);
         }
     };

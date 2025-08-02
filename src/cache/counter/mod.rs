@@ -99,7 +99,7 @@ impl<T: CounterField> TypedHashCounter<T> {
     /// Create new typed hash counter with type prefix
     pub fn new(backend: HashCounterBackend<T>, key: &str) -> Self {
         let prefix = T::counter_prefix();
-        let prefixed_key = format!("{}:{}", prefix, key);
+        let prefixed_key = format!("{prefix}:{key}");
 
         Self {
             backend,

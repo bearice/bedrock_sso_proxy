@@ -18,7 +18,7 @@ impl<T> RedisCache<T> {
     /// Create new Redis cache
     pub fn new(redis_url: &str, key_prefix: String) -> CacheResult<Self> {
         let client = Client::open(redis_url)
-            .map_err(|e| CacheError::Cache(format!("Redis client error: {}", e)))?;
+            .map_err(|e| CacheError::Cache(format!("Redis client error: {e}")))?;
 
         Ok(Self {
             client,
@@ -55,7 +55,7 @@ impl<T> RedisCache<T> {
             .client
             .get_multiplexed_tokio_connection()
             .await
-            .map_err(|e| CacheError::Connection(format!("Connection failed: {}", e)))?;
+            .map_err(|e| CacheError::Connection(format!("Connection failed: {e}")))?;
 
         Ok(new_conn)
     }
@@ -86,7 +86,7 @@ impl<T> RedisCache<T> {
         let _: String = redis::cmd("PING")
             .query_async(&mut conn)
             .await
-            .map_err(|e| CacheError::Cache(format!("Ping failed: {}", e)))?;
+            .map_err(|e| CacheError::Cache(format!("Ping failed: {e}")))?;
 
         self.return_connection(conn).await;
         Ok(())

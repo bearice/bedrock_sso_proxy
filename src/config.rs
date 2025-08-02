@@ -85,7 +85,8 @@ impl Default for Config {
 impl Config {
     pub fn load() -> Result<Self, ConfigError> {
         // Check for config file path in environment variable or use default
-        let config_path = std::env::var("CONFIG_FILE").unwrap_or_else(|_| "config.yaml".to_string());
+        let config_path =
+            std::env::var("BEDROCK_CONFIG_FILE").unwrap_or_else(|_| "config.yaml".to_string());
         Self::load_from_file(config_path)
     }
 
@@ -389,6 +390,7 @@ jwt:
     }
 
     #[test]
+    #[serial]
     fn test_config_validation_missing_jwt_secret() {
         let config = Config::default();
         let result = config.validate();
@@ -398,6 +400,7 @@ jwt:
     }
 
     #[test]
+    #[serial]
     fn test_config_validation_with_jwt_secret() {
         let mut config = Config::default();
         config.jwt.secret = "test-secret".to_string();
@@ -406,9 +409,10 @@ jwt:
     }
 
     #[test]
+    #[serial]
     fn test_config_load_fails_without_jwt_secret() {
         let _guard = EnvGuard::new();
-        
+
         let yaml_content = r#"
 server:
   host: "127.0.0.1"
@@ -574,7 +578,7 @@ logging:
     #[serial]
     fn test_config_load_from_path_with_some() {
         let _guard = EnvGuard::new();
-        
+
         let yaml_content = r#"
 server:
   host: "127.0.0.1"
@@ -596,7 +600,7 @@ aws:
     #[serial]
     fn test_config_load_from_path_with_none() {
         let _guard = EnvGuard::new();
-        
+
         // Set JWT secret via environment variable for default load
         unsafe {
             std::env::set_var("BEDROCK_JWT__SECRET", "test-secret-default");
@@ -610,7 +614,7 @@ aws:
     #[serial]
     fn test_config_file_environment_variable() {
         let _guard = EnvGuard::new();
-        
+
         let yaml_content = r#"
 server:
   port: 5555
@@ -620,9 +624,12 @@ jwt:
         let mut temp_file = NamedTempFile::with_suffix(".yaml").unwrap();
         temp_file.write_all(yaml_content.as_bytes()).unwrap();
 
-        // Set CONFIG_FILE environment variable
+        // Set BEDROCK_CONFIG_FILE environment variable
         unsafe {
-            std::env::set_var("CONFIG_FILE", temp_file.path().to_string_lossy().to_string());
+            std::env::set_var(
+                "BEDROCK_CONFIG_FILE",
+                temp_file.path().to_string_lossy().to_string(),
+            );
         }
 
         let config = Config::load().unwrap();

@@ -220,7 +220,7 @@ pub fn transform_streaming_event(
 ) -> Result<Option<String>, AnthropicError> {
     // Parse the chunk as a string first
     let chunk_str = std::str::from_utf8(bedrock_chunk)
-        .map_err(|e| AnthropicError::TransformationError(format!("Invalid UTF-8: {}", e)))?;
+        .map_err(|e| AnthropicError::TransformationError(format!("Invalid UTF-8: {e}")))?;
 
     // Handle Server-Sent Events format
     if let Some(data_part) = chunk_str.strip_prefix("data: ") {
@@ -236,13 +236,10 @@ pub fn transform_streaming_event(
                 transform_bedrock_event_to_anthropic(bedrock_data, original_model)?;
             let event_type = anthropic_event["type"].as_str().unwrap_or("unknown");
             let event_json = serde_json::to_string(&anthropic_event).map_err(|e| {
-                AnthropicError::TransformationError(format!("JSON serialization failed: {}", e))
+                AnthropicError::TransformationError(format!("JSON serialization failed: {e}"))
             })?;
 
-            return Ok(Some(format!(
-                "event: {}\ndata: {}\n\n",
-                event_type, event_json
-            )));
+            return Ok(Some(format!("event: {event_type}\ndata: {event_json}\n\n")));
         }
     }
 
@@ -484,15 +481,13 @@ pub fn validate_anthropic_request(request: &AnthropicRequest) -> Result<(), Anth
     for (i, message) in request.messages.iter().enumerate() {
         if message.role.is_empty() {
             return Err(AnthropicError::InvalidRequest(format!(
-                "message[{}] role cannot be empty",
-                i
+                "message[{i}] role cannot be empty"
             )));
         }
 
         if !["user", "assistant", "system"].contains(&message.role.as_str()) {
             return Err(AnthropicError::InvalidRequest(format!(
-                "message[{}] role must be 'user', 'assistant', or 'system'",
-                i
+                "message[{i}] role must be 'user', 'assistant', or 'system'"
             )));
         }
     }

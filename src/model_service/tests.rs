@@ -141,10 +141,7 @@ async fn test_calculate_cost() {
     let diff = (actual_cost - expected_cost).abs();
     assert!(
         diff < rust_decimal::Decimal::new(1, 7), // 0.0000001 tolerance
-        "Expected cost {}, got {}, diff {}",
-        expected_cost,
-        actual_cost,
-        diff
+        "Expected cost {expected_cost}, got {actual_cost}, diff {diff}"
     );
 }
 
@@ -368,7 +365,7 @@ async fn test_stream_integration_with_fixture() {
                     anthropic_events.push(transformed);
                 }
                 Err(e) => {
-                    println!("Transform error (expected for some events): {}", e);
+                    println!("Transform error (expected for some events): {e}");
                 }
             }
         }
@@ -435,7 +432,7 @@ async fn test_bedrock_route_receives_exact_binary_stream() {
                 }
             }
             Err(e) => {
-                println!("Error in stream: {}", e);
+                println!("Error in stream: {e}");
             }
         }
     }
@@ -490,7 +487,7 @@ async fn test_bedrock_route_returns_exact_binary_format() {
                 binary_chunks.push(sse_event.raw);
             }
             Err(e) => {
-                panic!("Error in stream: {}", e);
+                panic!("Error in stream: {e}");
             }
         }
     }
@@ -581,8 +578,8 @@ async fn test_stream_parser_with_real_data() {
         "Should have cache_read_tokens"
     );
 
-    println!("Event types found: {:?}", event_types);
-    println!("Usage metrics: {:?}", usage_metrics);
+    println!("Event types found: {event_types:?}");
+    println!("Usage metrics: {usage_metrics:?}");
 }
 
 #[tokio::test]
@@ -633,7 +630,6 @@ async fn test_anthropic_transformation_with_real_events() {
     );
 
     println!(
-        "Transformed {} events, preserved model in {} cases",
-        transformed_count, original_model_preserved
+        "Transformed {transformed_count} events, preserved model in {original_model_preserved} cases"
     );
 }

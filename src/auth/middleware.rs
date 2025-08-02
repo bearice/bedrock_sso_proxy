@@ -112,7 +112,7 @@ async fn authenticate_with_api_key(
         .api_keys()
         .find_by_hash(&key_hash)
         .await
-        .map_err(|e| AppError::Internal(format!("Database error: {}", e)))?
+        .map_err(|e| AppError::Internal(format!("Database error: {e}")))?
         .ok_or_else(|| AppError::Unauthorized("Invalid API key".to_string()))?;
 
     // Check if API key is valid (not expired, not revoked)
@@ -136,7 +136,7 @@ async fn get_user_record(
         .users()
         .find_by_id(user_id)
         .await
-        .map_err(|e| AppError::Internal(format!("Database error: {}", e)))?
+        .map_err(|e| AppError::Internal(format!("Database error: {e}")))?
         .ok_or_else(|| {
             warn!(user_id = %user_id, request_id = %request_id, "User not found");
             AppError::Unauthorized("User not found".to_string())
@@ -300,10 +300,10 @@ mod tests {
     ) -> i32 {
         let user = crate::database::entities::UserRecord {
             id: 0, // Let database assign ID
-            provider_user_id: format!("test_user_{}", requested_id),
+            provider_user_id: format!("test_user_{requested_id}"),
             provider: "test".to_string(),
             email: email.to_string(),
-            display_name: Some(format!("Test User {}", requested_id)),
+            display_name: Some(format!("Test User {requested_id}")),
             created_at: chrono::Utc::now(),
             updated_at: chrono::Utc::now(),
             last_login: Some(chrono::Utc::now()),
@@ -329,7 +329,7 @@ mod tests {
         let token = create_test_token(server.jwt_service.as_ref(), user_id);
         let request = Request::builder()
             .uri("/test")
-            .header("Authorization", format!("Bearer {}", token))
+            .header("Authorization", format!("Bearer {token}"))
             .body(Body::empty())
             .unwrap();
 
@@ -355,7 +355,7 @@ mod tests {
 
         let request = Request::builder()
             .uri("/test")
-            .header("Authorization", format!("Bearer {}", oauth_token))
+            .header("Authorization", format!("Bearer {oauth_token}"))
             .body(Body::empty())
             .unwrap();
 
@@ -380,7 +380,7 @@ mod tests {
 
         let request = Request::builder()
             .uri("/test")
-            .header("Authorization", format!("Bearer {}", oauth_token))
+            .header("Authorization", format!("Bearer {oauth_token}"))
             .body(Body::empty())
             .unwrap();
 
@@ -477,7 +477,7 @@ mod tests {
         let token = server.jwt_service.create_oauth_token(&claims).unwrap();
         let request = Request::builder()
             .uri("/test")
-            .header("Authorization", format!("Bearer {}", token))
+            .header("Authorization", format!("Bearer {token}"))
             .body(Body::empty())
             .unwrap();
 
@@ -509,7 +509,7 @@ mod tests {
         let token = create_test_token(server.jwt_service.as_ref(), user_id);
         let request = Request::builder()
             .uri("/test")
-            .header("Authorization", format!("Bearer {}", token))
+            .header("Authorization", format!("Bearer {token}"))
             .body(Body::empty())
             .unwrap();
 
@@ -550,7 +550,7 @@ mod tests {
         ) -> i32 {
             let user = UserRecord {
                 id: 0, // Let database assign ID
-                provider_user_id: format!("provider_user_{}", user_id),
+                provider_user_id: format!("provider_user_{user_id}"),
                 provider: "test".to_string(),
                 email: email.to_string(),
                 display_name: Some("Test User".to_string()),
@@ -587,7 +587,7 @@ mod tests {
             let token = create_test_token(server.jwt_service.as_ref(), user_id);
             let request = Request::builder()
                 .uri("/admin")
-                .header("Authorization", format!("Bearer {}", token))
+                .header("Authorization", format!("Bearer {token}"))
                 .body(Body::empty())
                 .unwrap();
 
@@ -608,7 +608,7 @@ mod tests {
             let token = create_test_token(server.jwt_service.as_ref(), user_id);
             let request = Request::builder()
                 .uri("/admin")
-                .header("Authorization", format!("Bearer {}", token))
+                .header("Authorization", format!("Bearer {token}"))
                 .body(Body::empty())
                 .unwrap();
 
@@ -629,7 +629,7 @@ mod tests {
             let token = create_test_token(server.jwt_service.as_ref(), user_id);
             let request = Request::builder()
                 .uri("/admin")
-                .header("Authorization", format!("Bearer {}", token))
+                .header("Authorization", format!("Bearer {token}"))
                 .body(Body::empty())
                 .unwrap();
 
@@ -667,7 +667,7 @@ mod tests {
             let token = create_test_token(server.jwt_service.as_ref(), 999);
             let request = Request::builder()
                 .uri("/admin")
-                .header("Authorization", format!("Bearer {}", token))
+                .header("Authorization", format!("Bearer {token}"))
                 .body(Body::empty())
                 .unwrap();
 
@@ -687,7 +687,7 @@ mod tests {
             let token = create_test_token(server.jwt_service.as_ref(), user_id);
             let request = Request::builder()
                 .uri("/admin")
-                .header("Authorization", format!("Bearer {}", token))
+                .header("Authorization", format!("Bearer {token}"))
                 .body(Body::empty())
                 .unwrap();
 
@@ -712,7 +712,7 @@ mod tests {
             let token = create_test_token(server.jwt_service.as_ref(), user_id1);
             let request = Request::builder()
                 .uri("/admin")
-                .header("Authorization", format!("Bearer {}", token))
+                .header("Authorization", format!("Bearer {token}"))
                 .body(Body::empty())
                 .unwrap();
 
@@ -727,7 +727,7 @@ mod tests {
             let token2 = create_test_token(server.jwt_service.as_ref(), user_id2);
             let request2 = Request::builder()
                 .uri("/admin")
-                .header("Authorization", format!("Bearer {}", token2))
+                .header("Authorization", format!("Bearer {token2}"))
                 .body(Body::empty())
                 .unwrap();
 

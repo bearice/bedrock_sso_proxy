@@ -1,6 +1,6 @@
 use proc_macro::TokenStream;
 use quote::quote;
-use syn::{ItemStruct, ItemEnum, parse_macro_input};
+use syn::{parse_macro_input, ItemEnum, ItemStruct};
 
 /// Generate a typed_cache implementation for a struct with TTL support
 ///

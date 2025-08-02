@@ -205,7 +205,7 @@ impl UsageTrackingService {
 
         // Get usage DAO once and reuse it
         let usage_dao = self.database.usage();
-        
+
         // Store usage record
         usage_dao
             .store_record(&usage_record)

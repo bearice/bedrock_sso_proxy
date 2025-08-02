@@ -117,7 +117,7 @@ async fn openapi_json() -> axum::Json<utoipa::openapi::OpenApi> {
 async fn openapi_yaml() -> Result<([(header::HeaderName, &'static str); 1], String), AppError> {
     let spec = ApiDoc::openapi();
     let yaml = serde_yaml_ng::to_string(&spec).map_err(|e| {
-        AppError::Internal(format!("Failed to serialize OpenAPI spec to YAML: {}", e))
+        AppError::Internal(format!("Failed to serialize OpenAPI spec to YAML: {e}"))
     })?;
 
     Ok(([(header::CONTENT_TYPE, "application/yaml")], yaml))

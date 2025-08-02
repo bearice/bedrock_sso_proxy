@@ -33,12 +33,12 @@ export function UsageFilters({
   const handleInputChange = useCallback(
     (field: keyof UsageQuery, value: string | number | boolean | undefined) => {
       let processedValue = value;
-      
+
       // Convert date strings to ISO format for API
       if ((field === 'start_date' || field === 'end_date') && typeof value === 'string') {
         processedValue = formatDateForApi(value);
       }
-      
+
       onFiltersChange({
         ...filters,
         [field]: processedValue || undefined,

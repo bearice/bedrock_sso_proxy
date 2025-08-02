@@ -222,7 +222,7 @@ async fn test_model_cost_cache_edge_case_decimals() {
         let model_cost = ModelCost {
             id: 1,
             region: "test-region".to_string(),
-            model_id: format!("test-model-{}", test_name),
+            model_id: format!("test-model-{test_name}"),
             input_cost_per_1k_tokens: decimal_value,
             output_cost_per_1k_tokens: decimal_value,
             cache_write_cost_per_1k_tokens: Some(decimal_value),
@@ -230,15 +230,13 @@ async fn test_model_cost_cache_edge_case_decimals() {
             updated_at: Utc::now(),
         };
 
-        let cache_key = format!("edge_case_{}", test_name);
+        let cache_key = format!("edge_case_{test_name}");
 
         // This would fail with bincode for certain decimal values
         typed_cache
             .set(&cache_key, &model_cost)
             .await
-            .unwrap_or_else(|_| {
-                panic!("Failed to cache ModelCost with decimal: {}", decimal_value)
-            });
+            .unwrap_or_else(|_| panic!("Failed to cache ModelCost with decimal: {decimal_value}"));
 
         let cached = typed_cache
             .get(&cache_key)

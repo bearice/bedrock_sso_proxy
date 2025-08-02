@@ -108,7 +108,7 @@ impl DatabaseManager for DatabaseManagerImpl {
 
         Migrator::up(&self.connection, None)
             .await
-            .map_err(|e| DatabaseError::Migration(format!("Failed to run migrations: {}", e)))?;
+            .map_err(|e| DatabaseError::Migration(format!("Failed to run migrations: {e}")))?;
 
         tracing::info!("Successfully completed all migrations");
         Ok(())
@@ -119,7 +119,7 @@ impl DatabaseManager for DatabaseManagerImpl {
         self.connection
             .ping()
             .await
-            .map_err(|e| DatabaseError::Database(format!("db error: {}", e)))
+            .map_err(|e| DatabaseError::Database(format!("db error: {e}")))
     }
 
     /// Get cache manager reference

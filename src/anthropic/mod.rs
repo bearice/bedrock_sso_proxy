@@ -211,16 +211,16 @@ impl From<AnthropicError> for crate::error::AppError {
     fn from(err: AnthropicError) -> Self {
         match err {
             AnthropicError::UnsupportedModel(msg) => {
-                crate::error::AppError::BadRequest(format!("Unsupported model: {}", msg))
+                crate::error::AppError::BadRequest(format!("Unsupported model: {msg}"))
             }
             AnthropicError::InvalidRequest(msg) => {
-                crate::error::AppError::BadRequest(format!("Invalid request: {}", msg))
+                crate::error::AppError::BadRequest(format!("Invalid request: {msg}"))
             }
             AnthropicError::TransformationError(msg) => {
-                crate::error::AppError::Internal(format!("Transformation error: {}", msg))
+                crate::error::AppError::Internal(format!("Transformation error: {msg}"))
             }
             AnthropicError::MissingField(field) => {
-                crate::error::AppError::BadRequest(format!("Missing required field: {}", field))
+                crate::error::AppError::BadRequest(format!("Missing required field: {field}"))
             }
         }
     }

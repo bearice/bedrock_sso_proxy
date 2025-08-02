@@ -31,7 +31,7 @@ class ApiError extends Error {
 
 async function fetchApi<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
   const headers: Record<string, string> = {};
-  
+
   // Handle different header types from RequestInit
   if (options.headers) {
     if (options.headers instanceof Headers) {
@@ -49,12 +49,12 @@ async function fetchApi<T>(endpoint: string, options: RequestInit = {}): Promise
       Object.assign(headers, options.headers);
     }
   }
-  
+
   // Only set Content-Type for requests with a body
   if (options.body) {
     headers['Content-Type'] = 'application/json';
   }
-  
+
   const response = await fetch(`${API_BASE}${endpoint}`, {
     ...options,
     headers,
@@ -180,7 +180,10 @@ export const apiKeyApi = {
   },
 
   // Revoke an API key
-  async revokeApiKey(token: string, keyHash: string): Promise<{ message: string; key_hash: string }> {
+  async revokeApiKey(
+    token: string,
+    keyHash: string
+  ): Promise<{ message: string; key_hash: string }> {
     return fetchApi<{ message: string; key_hash: string }>(
       `/api/keys/${keyHash}`,
       createAuthenticatedRequest(token, {

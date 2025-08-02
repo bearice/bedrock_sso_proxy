@@ -27,9 +27,9 @@ async fn test_security_sql_injection_attempts() {
     for model_id in malicious_model_ids {
         let encoded_model_id = urlencoding::encode(model_id);
         let request = Request::builder()
-            .uri(format!("/bedrock/model/{}/invoke", encoded_model_id))
+            .uri(format!("/bedrock/model/{encoded_model_id}/invoke"))
             .method("POST")
-            .header("Authorization", format!("Bearer {}", token))
+            .header("Authorization", format!("Bearer {token}"))
             .header("Content-Type", "application/json")
             .body(Body::from(r#"{"messages": []}"#))
             .unwrap();
@@ -40,8 +40,7 @@ async fn test_security_sql_injection_attempts() {
         assert_ne!(
             response.status(),
             StatusCode::UNAUTHORIZED,
-            "SQL injection should not bypass authentication for model ID: {}",
-            model_id
+            "SQL injection should not bypass authentication for model ID: {model_id}"
         );
 
         // Mock AWS should detect and reject malicious model IDs
@@ -50,8 +49,7 @@ async fn test_security_sql_injection_attempts() {
         assert_eq!(
             response.status(),
             StatusCode::BAD_REQUEST,
-            "Mock AWS should reject SQL injection in model ID: {}",
-            model_id
+            "Mock AWS should reject SQL injection in model ID: {model_id}"
         );
     }
 }
@@ -78,16 +76,14 @@ async fn test_security_xss_attempts() {
         assert_ne!(
             response.status(),
             StatusCode::UNAUTHORIZED,
-            "XSS payload should not bypass authentication: {}",
-            payload
+            "XSS payload should not bypass authentication: {payload}"
         );
 
         // Mock AWS should detect and reject XSS patterns in request body
         assert_eq!(
             response.status(),
             StatusCode::BAD_REQUEST,
-            "Mock AWS should reject XSS payload: {}",
-            payload
+            "Mock AWS should reject XSS payload: {payload}"
         );
     }
 }
@@ -100,10 +96,8 @@ async fn test_security_oversized_requests() {
 
     // Create extremely large payload (1MB)
     let large_content = "A".repeat(1024 * 1024);
-    let large_payload = format!(
-        r#"{{"messages": [{{"role": "user", "content": "{}"}}]}}"#,
-        large_content
-    );
+    let large_payload =
+        format!(r#"{{"messages": [{{"role": "user", "content": "{large_content}"}}]}}"#);
 
     let request = RequestBuilder::invoke_model_with_auth("test-model", &token, &large_payload);
 
@@ -146,7 +140,7 @@ async fn test_security_header_injection() {
         let request_result = Request::builder()
             .uri("/bedrock/model/test-model/invoke")
             .method("POST")
-            .header("Authorization", format!("Bearer {}", token))
+            .header("Authorization", format!("Bearer {token}"))
             .header("Content-Type", "application/json")
             .header(header_name, header_value)
             .body(Body::from(r#"{"messages": []}"#));
@@ -158,9 +152,7 @@ async fn test_security_header_injection() {
             assert_ne!(
                 response.status(),
                 StatusCode::UNAUTHORIZED,
-                "Header injection should not bypass authentication: {} = {}",
-                header_name,
-                header_value
+                "Header injection should not bypass authentication: {header_name} = {header_value}"
             );
 
             // AWS may process header injection normally or reject it
@@ -174,7 +166,7 @@ async fn test_security_header_injection() {
             helpers::assert_status_in(
                 &response,
                 &acceptable_statuses,
-                &format!("header injection: {} = {}", header_name, header_value),
+                &format!("header injection: {header_name} = {header_value}"),
             );
         }
     }
@@ -212,8 +204,7 @@ async fn test_security_invalid_content_types() {
                 assert_ne!(
                     response.status(),
                     StatusCode::UNAUTHORIZED,
-                    "Invalid content type should not bypass authentication: {}",
-                    content_type
+                    "Invalid content type should not bypass authentication: {content_type}"
                 );
 
                 // AWS may process invalid content types normally or reject them
@@ -228,7 +219,7 @@ async fn test_security_invalid_content_types() {
                 helpers::assert_status_in(
                     &response,
                     &acceptable_statuses,
-                    &format!("content type: {}", content_type),
+                    &format!("content type: {content_type}"),
                 );
             }
             Err(_) => {
@@ -272,7 +263,7 @@ async fn test_security_path_traversal() {
         helpers::assert_status_in(
             &response,
             &acceptable_statuses,
-            &format!("path traversal: {}", path),
+            &format!("path traversal: {path}"),
         );
     }
 }
@@ -312,7 +303,7 @@ async fn test_security_malformed_json_bodies() {
                 StatusCode::INTERNAL_SERVER_ERROR,
                 StatusCode::OK, // Some might be forwarded to AWS
             ],
-            &format!("malformed JSON: {}", json_body),
+            &format!("malformed JSON: {json_body}"),
         );
     }
 }
@@ -354,7 +345,7 @@ async fn test_security_http_method_tampering() {
             helpers::assert_status_with_context(
                 &response,
                 StatusCode::METHOD_NOT_ALLOWED,
-                &format!("{} method", method),
+                &format!("{method} method"),
             );
         }
     }
@@ -392,7 +383,7 @@ async fn test_security_jwt_algorithm_confusion() {
 
     for alg in malicious_algorithms {
         // Create manually crafted header with different algorithm
-        let malicious_header = format!(r#"{{"alg":"{}","typ":"JWT"}}"#, alg);
+        let malicious_header = format!(r#"{{"alg":"{alg}","typ":"JWT"}}"#);
         let malicious_token = format!(
             "{}.{}.invalid_signature",
             base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(&malicious_header),
@@ -411,7 +402,7 @@ async fn test_security_jwt_algorithm_confusion() {
         helpers::assert_status_with_context(
             &response,
             StatusCode::UNAUTHORIZED,
-            &format!("{} algorithm token", alg),
+            &format!("{alg} algorithm token"),
         );
     }
 
@@ -473,9 +464,7 @@ async fn test_security_rate_limiting_simulation() {
         assert_eq!(
             status,
             StatusCode::OK,
-            "Request {} failed with status {}: rate limiting simulation should not cause failures",
-            i,
-            status
+            "Request {i} failed with status {status}: rate limiting simulation should not cause failures"
         );
     }
 }
@@ -511,16 +500,14 @@ async fn test_security_api_key_sql_injection() {
         assert_ne!(
             response.status(),
             StatusCode::UNAUTHORIZED,
-            "SQL injection should not bypass API key authentication for model ID: {}",
-            model_id
+            "SQL injection should not bypass API key authentication for model ID: {model_id}"
         );
 
         // Mock AWS should reject malicious model IDs
         assert_eq!(
             response.status(),
             StatusCode::BAD_REQUEST,
-            "Mock AWS should reject SQL injection in model ID with API key: {}",
-            model_id
+            "Mock AWS should reject SQL injection in model ID with API key: {model_id}"
         );
     }
 }
@@ -550,16 +537,14 @@ async fn test_security_api_key_bearer_auth() {
         assert_ne!(
             response.status(),
             StatusCode::UNAUTHORIZED,
-            "XSS payload should not bypass API key bearer authentication: {}",
-            payload
+            "XSS payload should not bypass API key bearer authentication: {payload}"
         );
 
         // Mock AWS should reject XSS payloads
         assert_eq!(
             response.status(),
             StatusCode::BAD_REQUEST,
-            "Mock AWS should reject XSS payload with API key bearer: {}",
-            payload
+            "Mock AWS should reject XSS payload with API key bearer: {payload}"
         );
     }
 }
@@ -589,8 +574,7 @@ async fn test_security_invalid_api_key() {
         assert_eq!(
             response.status(),
             StatusCode::UNAUTHORIZED,
-            "Invalid API key should be rejected: {}",
-            fake_key
+            "Invalid API key should be rejected: {fake_key}"
         );
     }
 }

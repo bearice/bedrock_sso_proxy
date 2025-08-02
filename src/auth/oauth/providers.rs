@@ -49,16 +49,15 @@ pub fn create_oauth_client(
             .as_ref()
             .ok_or_else(|| {
                 AppError::BadRequest(format!(
-                    "Authorization URL not configured for OAuth provider '{}'. Please check your configuration. \
+                    "Authorization URL not configured for OAuth provider '{provider_name}'. Please check your configuration. \
                      For known providers (google, github, microsoft, gitlab), URLs should be auto-configured. \
                      For custom providers or providers requiring domain/tenant configuration (auth0, okta), \
-                     you must specify the authorization_url explicitly.",
-                    provider_name
+                     you must specify the authorization_url explicitly."
                 ))
             })?
             .clone(),
     )
-    .map_err(|e| AppError::BadRequest(format!("Invalid authorization URL for provider '{}': {}", provider_name, e)))?;
+    .map_err(|e| AppError::BadRequest(format!("Invalid authorization URL for provider '{provider_name}': {e}")))?;
 
     let token_url = TokenUrl::new(
         provider
@@ -66,16 +65,15 @@ pub fn create_oauth_client(
             .as_ref()
             .ok_or_else(|| {
                 AppError::BadRequest(format!(
-                    "Token URL not configured for OAuth provider '{}'. Please check your configuration. \
+                    "Token URL not configured for OAuth provider '{provider_name}'. Please check your configuration. \
                      For known providers (google, github, microsoft, gitlab), URLs should be auto-configured. \
                      For custom providers or providers requiring domain/tenant configuration (auth0, okta), \
-                     you must specify the token_url explicitly.",
-                    provider_name
+                     you must specify the token_url explicitly."
                 ))
             })?
             .clone(),
     )
-    .map_err(|e| AppError::BadRequest(format!("Invalid token URL for provider '{}': {}", provider_name, e)))?;
+    .map_err(|e| AppError::BadRequest(format!("Invalid token URL for provider '{provider_name}': {e}")))?;
 
     let redirect_url = provider
         .redirect_uri
@@ -84,8 +82,7 @@ pub fn create_oauth_client(
         .transpose()
         .map_err(|e| {
             AppError::BadRequest(format!(
-                "Invalid redirect URI for provider '{}': {}",
-                provider_name, e
+                "Invalid redirect URI for provider '{provider_name}': {e}"
             ))
         })?;
 

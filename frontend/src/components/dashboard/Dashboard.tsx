@@ -94,87 +94,90 @@ export function Dashboard() {
       </div>
 
       {/* API Key Recommendation */}
-      {(!isLoadingApiKeys && activeApiKeysCount === 0) &&
-        (
-          <div
-            className="card"
-            style={{ background: '#fef3c7', border: '2px solid #f59e0b', borderRadius: '12px' }}
-          >
-            <h2 style={{ color: '#92400e', fontSize: '1.5rem', marginBottom: '1rem' }}>
-              <AlertTriangle size={24} style={{ marginRight: '0.5rem', verticalAlign: 'text-bottom' }} />
-              ⚠️ Create an API Key First
-            </h2>
-            <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap', marginBottom: '1rem' }}>
-              <button
-                onClick={switchToApiKeys}
-                className="btn"
-                style={{
-                  background: '#f59e0b',
-                  color: 'white',
-                  border: '1px solid #f59e0b',
-                }}
-              >
-                <Plus size={16} />
-                Create Your First API Key
-              </button>
-            </div>
-          </div>
-        ) || (
-          <div
-            className="card"
-            style={{ background: '#f8fafc', border: '2px solid #4f46e5', borderRadius: '12px' }}
-          >
-            <h2 style={{ color: '#4f46e5', fontSize: '1.5rem', marginBottom: '1rem' }}>
-              <Terminal size={24} style={{ marginRight: '0.5rem', verticalAlign: 'text-bottom' }} />
-              🚀 Use with Claude Code
-            </h2>
-            <p
+      {(!isLoadingApiKeys && activeApiKeysCount === 0 && (
+        <div
+          className="card"
+          style={{ background: '#fef3c7', border: '2px solid #f59e0b', borderRadius: '12px' }}
+        >
+          <h2 style={{ color: '#92400e', fontSize: '1.5rem', marginBottom: '1rem' }}>
+            <AlertTriangle
+              size={24}
+              style={{ marginRight: '0.5rem', verticalAlign: 'text-bottom' }}
+            />
+            ⚠️ Create an API Key First
+          </h2>
+          <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap', marginBottom: '1rem' }}>
+            <button
+              onClick={switchToApiKeys}
+              className="btn"
               style={{
-                fontSize: '1.1rem',
-                marginBottom: '1.5rem',
-                color: '#374151',
-                fontWeight: '500',
+                background: '#f59e0b',
+                color: 'white',
+                border: '1px solid #f59e0b',
               }}
             >
-              Great! You have {activeApiKeysCount} active API key{activeApiKeysCount !== 1 ? 's' : ''}. Use an API key with Claude Code for the best experience:
-            </p>
+              <Plus size={16} />
+              Create Your First API Key
+            </button>
+          </div>
+        </div>
+      )) || (
+        <div
+          className="card"
+          style={{ background: '#f8fafc', border: '2px solid #4f46e5', borderRadius: '12px' }}
+        >
+          <h2 style={{ color: '#4f46e5', fontSize: '1.5rem', marginBottom: '1rem' }}>
+            <Terminal size={24} style={{ marginRight: '0.5rem', verticalAlign: 'text-bottom' }} />
+            🚀 Use with Claude Code
+          </h2>
+          <p
+            style={{
+              fontSize: '1.1rem',
+              marginBottom: '1.5rem',
+              color: '#374151',
+              fontWeight: '500',
+            }}
+          >
+            Great! You have {activeApiKeysCount} active API key{activeApiKeysCount !== 1 ? 's' : ''}
+            . Use an API key with Claude Code for the best experience:
+          </p>
 
-            <div
+          <div
+            style={{
+              background: '#1f2937',
+              color: '#f9fafb',
+              padding: '1rem',
+              borderRadius: '8px',
+              marginBottom: '1rem',
+              fontFamily: 'monospace',
+              fontSize: '0.9rem',
+              wordBreak: 'break-all',
+              border: '1px solid #374151',
+            }}
+          >
+            export ANTHROPIC_AUTH_TOKEN=SSOK_your_api_key_here
+            <br />
+            export ANTHROPIC_BASE_URL={currentDomain}/anthropic
+            <br />
+            claude
+          </div>
+
+          <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
+            <button
+              onClick={switchToApiKeys}
+              className="btn"
               style={{
-                background: '#1f2937',
-                color: '#f9fafb',
-                padding: '1rem',
-                borderRadius: '8px',
-                marginBottom: '1rem',
-                fontFamily: 'monospace',
-                fontSize: '0.9rem',
-                wordBreak: 'break-all',
-                border: '1px solid #374151',
+                background: '#4f46e5',
+                color: 'white',
+                border: '1px solid #4f46e5',
               }}
             >
-              export ANTHROPIC_AUTH_TOKEN=SSOK_your_api_key_here
-              <br />
-              export ANTHROPIC_BASE_URL={currentDomain}/anthropic
-              <br />
-              claude
-            </div>
-
-            <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
-              <button
-                onClick={switchToApiKeys}
-                className="btn"
-                style={{
-                  background: '#4f46e5',
-                  color: 'white',
-                  border: '1px solid #4f46e5',
-                }}
-              >
-                <Key size={16} />
-                View Your API Keys
-              </button>
-            </div>
+              <Key size={16} />
+              View Your API Keys
+            </button>
           </div>
-        )}
+        </div>
+      )}
       {/* Claude Code Setup Instructions */}
       <div className="setup-section">
         <h3>
@@ -197,8 +200,8 @@ export CLAUDE_CODE_USE_BEDROCK=1`}</pre>
 
         <h4>API Usage</h4>
         <p>
-          This proxy supports both Bedrock and Anthropic API formats for maximum compatibility.
-          Use the API key as a Bearer token in the Authorization header:
+          This proxy supports both Bedrock and Anthropic API formats for maximum compatibility. Use
+          the API key as a Bearer token in the Authorization header:
         </p>
         <pre>{`Authorization: Bearer SSOK_your_api_key_here`}</pre>
 
@@ -221,8 +224,8 @@ export CLAUDE_CODE_USE_BEDROCK=1`}</pre>
             </li>
           </ul>
           <p style={{ fontSize: '0.9rem', color: '#666', margin: '0.5rem 0 0 1rem' }}>
-            Uses AWS model IDs like <code>anthropic.claude-sonnet-4-20250514-v1:0</code> in the
-            URL path
+            Uses AWS model IDs like <code>anthropic.claude-sonnet-4-20250514-v1:0</code> in the URL
+            path
           </p>
         </div>
 
@@ -230,18 +233,13 @@ export CLAUDE_CODE_USE_BEDROCK=1`}</pre>
           <strong>Anthropic Format (Standard API):</strong>
           <ul>
             <li>
-              <code>POST /anthropic/v1/messages</code> - Standard Anthropic API (supports
-              streaming)
+              <code>POST /anthropic/v1/messages</code> - Standard Anthropic API (supports streaming)
             </li>
           </ul>
           <p style={{ fontSize: '0.9rem', color: '#666', margin: '0.5rem 0 0 1rem' }}>
-            Uses standard model names like <code>claude-sonnet-4-20250514</code> in the request
-            body
+            Uses standard model names like <code>claude-sonnet-4-20250514</code> in the request body
           </p>
         </div>
-
-
-
       </div>
 
       {/* Testing Section */}
@@ -323,7 +321,6 @@ export CLAUDE_CODE_USE_BEDROCK=1`}</pre>
             <Copy size={16} />
             {copied === 'curl-anthropic' ? 'Copied!' : 'Copy Anthropic Command'}
           </button>
-
         </div>
       </div>
 

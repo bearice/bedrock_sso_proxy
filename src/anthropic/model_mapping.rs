@@ -144,7 +144,7 @@ impl ModelMapper {
     fn get_region_prefix(&self) -> String {
         // Extract region prefix from AWS region (e.g., "us-east-1" -> "us")
         if let Some(region_prefix) = self.aws_region.split('-').next() {
-            format!("{}.", region_prefix)
+            format!("{region_prefix}.")
         } else {
             // Fallback to "us." if region parsing fails
             "us.".to_string()
@@ -161,7 +161,7 @@ impl ModelMapper {
         // Then check default mappings and add region prefix
         if let Some(bedrock_model) = DEFAULT_MODEL_MAPPING.get(anthropic_model) {
             let region_prefix = self.get_region_prefix();
-            return Ok(format!("{}{}", region_prefix, bedrock_model));
+            return Ok(format!("{region_prefix}{bedrock_model}"));
         }
 
         Err(AnthropicError::UnsupportedModel(

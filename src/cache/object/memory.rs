@@ -225,21 +225,24 @@ mod tests {
     async fn test_shared_memory_store() {
         // Create a shared store
         let shared_store = Arc::new(RwLock::new(HashMap::new()));
-        
+
         // Create two cache instances that share the same store
         let cache1 = MemoryCache::<String>::from_shared_store(shared_store.clone());
         let cache2 = MemoryCache::<String>::from_shared_store(shared_store.clone());
-        
+
         // Set a value in cache1
-        cache1.set("shared_key", &"shared_value".to_string(), None).await.unwrap();
-        
+        cache1
+            .set("shared_key", &"shared_value".to_string(), None)
+            .await
+            .unwrap();
+
         // Should be able to get the same value from cache2
         let value = cache2.get("shared_key").await.unwrap();
         assert_eq!(value, Some("shared_value".to_string()));
-        
+
         // Delete from cache2
         cache2.delete("shared_key").await.unwrap();
-        
+
         // Should be gone from cache1 too
         let value = cache1.get("shared_key").await.unwrap();
         assert_eq!(value, None);
@@ -250,22 +253,28 @@ mod tests {
         // Create isolated caches (the old behavior)
         let isolated_cache1 = MemoryCache::<String>::new();
         let isolated_cache2 = MemoryCache::<String>::new();
-        
+
         // Set value in isolated_cache1
-        isolated_cache1.set("isolated_key", &"isolated_value".to_string(), None).await.unwrap();
-        
+        isolated_cache1
+            .set("isolated_key", &"isolated_value".to_string(), None)
+            .await
+            .unwrap();
+
         // Should NOT be visible in isolated_cache2
         let value = isolated_cache2.get("isolated_key").await.unwrap();
         assert_eq!(value, None);
-        
+
         // Now test shared caches
         let shared_store = Arc::new(RwLock::new(HashMap::new()));
         let shared_cache1 = MemoryCache::<String>::from_shared_store(shared_store.clone());
         let shared_cache2 = MemoryCache::<String>::from_shared_store(shared_store.clone());
-        
+
         // Set value in shared_cache1
-        shared_cache1.set("shared_key", &"shared_value".to_string(), None).await.unwrap();
-        
+        shared_cache1
+            .set("shared_key", &"shared_value".to_string(), None)
+            .await
+            .unwrap();
+
         // Should be visible in shared_cache2
         let value = shared_cache2.get("shared_key").await.unwrap();
         assert_eq!(value, Some("shared_value".to_string()));

@@ -2,7 +2,7 @@ use crate::database::{DatabaseManager, DatabaseResult, entities::*};
 use chrono::{DateTime, Utc};
 use rust_decimal::Decimal;
 use std::collections::HashMap;
-use tracing::{info};
+use tracing::info;
 
 /// Key for grouping usage records
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
@@ -39,7 +39,8 @@ impl SummaryAggregator {
         period_type: PeriodType,
         period_start: DateTime<Utc>,
     ) -> DatabaseResult<Vec<UsageSummary>> {
-        self.generate_summaries_with_mode(period_type, period_start, false).await
+        self.generate_summaries_with_mode(period_type, period_start, false)
+            .await
     }
 
     /// Generate summaries for a specific period, with optional backfill mode
@@ -63,7 +64,9 @@ impl SummaryAggregator {
         // In backfill mode, we force regeneration regardless of existing summaries
         if !backfill {
             // Quick check: if summaries already exist, skip unless backfill
-            let existing_summaries = self.get_summaries_for_period(period_type, period_start, period_end).await?;
+            let existing_summaries = self
+                .get_summaries_for_period(period_type, period_start, period_end)
+                .await?;
             if !existing_summaries.is_empty() {
                 info!(
                     "Summaries already exist for {} period {} to {}, skipping",
@@ -84,10 +87,22 @@ impl SummaryAggregator {
         );
 
         match period_type {
-            PeriodType::Hourly => self.generate_hourly_summaries(period_start, period_end).await,
-            PeriodType::Daily => self.generate_daily_summaries(period_start, period_end).await,
-            PeriodType::Weekly => self.generate_weekly_summaries(period_start, period_end).await,
-            PeriodType::Monthly => self.generate_monthly_summaries(period_start, period_end).await,
+            PeriodType::Hourly => {
+                self.generate_hourly_summaries(period_start, period_end)
+                    .await
+            }
+            PeriodType::Daily => {
+                self.generate_daily_summaries(period_start, period_end)
+                    .await
+            }
+            PeriodType::Weekly => {
+                self.generate_weekly_summaries(period_start, period_end)
+                    .await
+            }
+            PeriodType::Monthly => {
+                self.generate_monthly_summaries(period_start, period_end)
+                    .await
+            }
         }
     }
 
@@ -110,8 +125,13 @@ impl SummaryAggregator {
             return Ok(vec![]);
         }
 
-        self.aggregate_from_records(paginated_records.records, PeriodType::Hourly, period_start, period_end)
-            .await
+        self.aggregate_from_records(
+            paginated_records.records,
+            PeriodType::Hourly,
+            period_start,
+            period_end,
+        )
+        .await
     }
 
     /// Generate daily summaries from hourly summaries
@@ -120,19 +140,22 @@ impl SummaryAggregator {
         period_start: DateTime<Utc>,
         period_end: DateTime<Utc>,
     ) -> DatabaseResult<Vec<UsageSummary>> {
-        let hourly_summaries = self.get_summaries_for_period(
-            PeriodType::Hourly,
-            period_start,
-            period_end,
-        ).await?;
+        let hourly_summaries = self
+            .get_summaries_for_period(PeriodType::Hourly, period_start, period_end)
+            .await?;
 
         if hourly_summaries.is_empty() {
             info!("No hourly summaries found for daily period, skipping");
             return Ok(vec![]);
         }
 
-        self.aggregate_from_summaries(hourly_summaries, PeriodType::Daily, period_start, period_end)
-            .await
+        self.aggregate_from_summaries(
+            hourly_summaries,
+            PeriodType::Daily,
+            period_start,
+            period_end,
+        )
+        .await
     }
 
     /// Generate weekly summaries from daily summaries
@@ -141,19 +164,22 @@ impl SummaryAggregator {
         period_start: DateTime<Utc>,
         period_end: DateTime<Utc>,
     ) -> DatabaseResult<Vec<UsageSummary>> {
-        let daily_summaries = self.get_summaries_for_period(
-            PeriodType::Daily,
-            period_start,
-            period_end,
-        ).await?;
+        let daily_summaries = self
+            .get_summaries_for_period(PeriodType::Daily, period_start, period_end)
+            .await?;
 
         if daily_summaries.is_empty() {
             info!("No daily summaries found for weekly period, skipping");
             return Ok(vec![]);
         }
 
-        self.aggregate_from_summaries(daily_summaries, PeriodType::Weekly, period_start, period_end)
-            .await
+        self.aggregate_from_summaries(
+            daily_summaries,
+            PeriodType::Weekly,
+            period_start,
+            period_end,
+        )
+        .await
     }
 
     /// Generate monthly summaries from daily summaries
@@ -162,19 +188,22 @@ impl SummaryAggregator {
         period_start: DateTime<Utc>,
         period_end: DateTime<Utc>,
     ) -> DatabaseResult<Vec<UsageSummary>> {
-        let daily_summaries = self.get_summaries_for_period(
-            PeriodType::Daily,
-            period_start,
-            period_end,
-        ).await?;
+        let daily_summaries = self
+            .get_summaries_for_period(PeriodType::Daily, period_start, period_end)
+            .await?;
 
         if daily_summaries.is_empty() {
             info!("No daily summaries found for monthly period, skipping");
             return Ok(vec![]);
         }
 
-        self.aggregate_from_summaries(daily_summaries, PeriodType::Monthly, period_start, period_end)
-            .await
+        self.aggregate_from_summaries(
+            daily_summaries,
+            PeriodType::Monthly,
+            period_start,
+            period_end,
+        )
+        .await
     }
 
     /// Get existing summaries for a specific period type and time range
@@ -252,7 +281,8 @@ impl SummaryAggregator {
             data.total_tokens += summary.total_tokens;
 
             // Weighted average for response time
-            let weighted_response_time = summary.avg_response_time_ms * summary.total_requests as f32;
+            let weighted_response_time =
+                summary.avg_response_time_ms * summary.total_requests as f32;
             data.total_response_time += weighted_response_time as f64;
 
             data.successful_requests += summary.successful_requests;
@@ -349,7 +379,11 @@ impl SummaryAggregator {
             ..Default::default()
         };
 
-        let existing_summaries = self.database.usage().get_summaries(&watermark_query).await?;
+        let existing_summaries = self
+            .database
+            .usage()
+            .get_summaries(&watermark_query)
+            .await?;
         let watermark = existing_summaries.first().map(|s| s.period_end);
 
         // Step 2: Find next data after watermark using the hierarchical approach
@@ -358,16 +392,20 @@ impl SummaryAggregator {
                 // Find the first raw record after watermark (ASC order to get earliest)
                 let next_record_query = crate::database::dao::usage::UsageQuery {
                     start_date: watermark, // Only records after watermark
-                    limit: Some(1), // First record
+                    limit: Some(1),        // First record
                     sort_order: crate::database::dao::usage::SortOrder::Asc,
                     ..Default::default()
                 };
 
-                let paginated_records = self.database.usage().get_records(&next_record_query).await?;
+                let paginated_records = self
+                    .database
+                    .usage()
+                    .get_records(&next_record_query)
+                    .await?;
                 if let Some(first_record) = paginated_records.records.first() {
                     let period_start = period_type.round_start(first_record.request_time);
                     let period_end = period_type.period_end(period_start);
-                    
+
                     if period_end <= chrono::Utc::now() {
                         Ok(Some(period_start))
                     } else {
@@ -382,16 +420,20 @@ impl SummaryAggregator {
                 let next_hourly_query = crate::database::dao::usage::UsageQuery {
                     period_type: Some(PeriodType::Hourly),
                     start_date: watermark, // Only summaries after watermark
-                    limit: Some(1), // First summary
+                    limit: Some(1),        // First summary
                     sort_order: crate::database::dao::usage::SortOrder::Asc,
                     ..Default::default()
                 };
 
-                let hourly_summaries = self.database.usage().get_summaries(&next_hourly_query).await?;
+                let hourly_summaries = self
+                    .database
+                    .usage()
+                    .get_summaries(&next_hourly_query)
+                    .await?;
                 if let Some(first_hourly) = hourly_summaries.first() {
                     let period_start = period_type.round_start(first_hourly.period_start);
                     let period_end = period_type.period_end(period_start);
-                    
+
                     if period_end <= chrono::Utc::now() {
                         Ok(Some(period_start))
                     } else {

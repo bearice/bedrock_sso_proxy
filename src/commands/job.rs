@@ -102,8 +102,7 @@ pub async fn handle_job_command(
 
                 _ => {
                     return Err(format!(
-                        "Unknown job type: {}. Available: summaries, cleanup",
-                        job_type
+                        "Unknown job type: {job_type}. Available: summaries, cleanup"
                     )
                     .into());
                 }

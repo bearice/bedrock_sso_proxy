@@ -167,14 +167,12 @@ fn apply_microsoft_defaults(provider: &mut OAuthProvider) {
     let tenant = provider.tenant_id.as_deref().unwrap_or("common");
     if provider.authorization_url.is_none() {
         provider.authorization_url = Some(format!(
-            "https://login.microsoftonline.com/{}/oauth2/v2.0/authorize",
-            tenant
+            "https://login.microsoftonline.com/{tenant}/oauth2/v2.0/authorize"
         ));
     }
     if provider.token_url.is_none() {
         provider.token_url = Some(format!(
-            "https://login.microsoftonline.com/{}/oauth2/v2.0/token",
-            tenant
+            "https://login.microsoftonline.com/{tenant}/oauth2/v2.0/token"
         ));
     }
     if provider.user_info_url.is_none() {
@@ -199,13 +197,13 @@ fn apply_gitlab_defaults(provider: &mut OAuthProvider) {
         .as_deref()
         .unwrap_or("https://gitlab.com");
     if provider.authorization_url.is_none() {
-        provider.authorization_url = Some(format!("{}/oauth/authorize", instance));
+        provider.authorization_url = Some(format!("{instance}/oauth/authorize"));
     }
     if provider.token_url.is_none() {
-        provider.token_url = Some(format!("{}/oauth/token", instance));
+        provider.token_url = Some(format!("{instance}/oauth/token"));
     }
     if provider.user_info_url.is_none() {
-        provider.user_info_url = Some(format!("{}/api/v4/user", instance));
+        provider.user_info_url = Some(format!("{instance}/api/v4/user"));
     }
     if provider.scopes.is_empty() {
         provider.scopes = vec!["read_user".to_string()];
@@ -215,13 +213,13 @@ fn apply_gitlab_defaults(provider: &mut OAuthProvider) {
 fn apply_auth0_defaults(provider: &mut OAuthProvider) {
     if let Some(domain) = &provider.domain {
         if provider.authorization_url.is_none() {
-            provider.authorization_url = Some(format!("https://{}/authorize", domain));
+            provider.authorization_url = Some(format!("https://{domain}/authorize"));
         }
         if provider.token_url.is_none() {
-            provider.token_url = Some(format!("https://{}/oauth/token", domain));
+            provider.token_url = Some(format!("https://{domain}/oauth/token"));
         }
         if provider.user_info_url.is_none() {
-            provider.user_info_url = Some(format!("https://{}/userinfo", domain));
+            provider.user_info_url = Some(format!("https://{domain}/userinfo"));
         }
     }
     if provider.scopes.is_empty() {
@@ -241,13 +239,13 @@ fn apply_okta_defaults(provider: &mut OAuthProvider) {
     if let Some(domain) = &provider.domain {
         if provider.authorization_url.is_none() {
             provider.authorization_url =
-                Some(format!("https://{}/oauth2/default/v1/authorize", domain));
+                Some(format!("https://{domain}/oauth2/default/v1/authorize"));
         }
         if provider.token_url.is_none() {
-            provider.token_url = Some(format!("https://{}/oauth2/default/v1/token", domain));
+            provider.token_url = Some(format!("https://{domain}/oauth2/default/v1/token"));
         }
         if provider.user_info_url.is_none() {
-            provider.user_info_url = Some(format!("https://{}/oauth2/default/v1/userinfo", domain));
+            provider.user_info_url = Some(format!("https://{domain}/oauth2/default/v1/userinfo"));
         }
     }
     if provider.scopes.is_empty() {

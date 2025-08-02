@@ -32,7 +32,7 @@ impl CachedModelCostsDao {
         region: &str,
         model_id: &str,
     ) -> DatabaseResult<Option<ModelCost>> {
-        let cache_key = format!("{}:{}", region, model_id);
+        let cache_key = format!("{region}:{model_id}");
 
         self.cached_dao
             .get_or_compute(&cache_key, || async {

@@ -34,7 +34,7 @@ fn build_frontend() {
         || std::env::var("PROFILE").unwrap_or_else(|_| "release".to_string()) == "debug";
 
     let build_mode = if is_debug { "debug" } else { "release" };
-    println!("cargo:info=Building frontend in {} mode...", build_mode);
+    println!("cargo:info=Building frontend in {build_mode} mode...");
 
     // Check if npm is available
     let npm_check = Command::new(NPM_CMD).arg("--version").output();
@@ -53,19 +53,13 @@ fn build_frontend() {
             .status();
 
         if let Err(e) = install_result {
-            println!(
-                "cargo:warning=Failed to install frontend dependencies: {}",
-                e
-            );
+            println!("cargo:warning=Failed to install frontend dependencies: {e}");
             return;
         }
     }
 
     // Build the frontend with appropriate mode
-    println!(
-        "cargo:info=Building frontend assets in {} mode...",
-        build_mode
-    );
+    println!("cargo:info=Building frontend assets in {build_mode} mode...");
     let build_command = if is_debug { "build:debug" } else { "build" };
 
     let build_result = Command::new(NPM_CMD)
@@ -84,10 +78,7 @@ fn build_frontend() {
 
     match build_result {
         Ok(output) if output.status.success() => {
-            println!(
-                "cargo:info=Frontend build completed successfully in {} mode",
-                build_mode
-            );
+            println!("cargo:info=Frontend build completed successfully in {build_mode} mode");
         }
         Ok(output) => {
             let stdout = String::from_utf8_lossy(&output.stdout);
@@ -100,7 +91,7 @@ fn build_frontend() {
             );
         }
         Err(e) => {
-            panic!("Failed to run frontend build: {}", e);
+            panic!("Failed to run frontend build: {e}");
         }
     }
 }
@@ -116,8 +107,8 @@ fn embed_csv_modified_time() {
                 .unwrap()
                 .as_secs();
 
-            println!("cargo:rustc-env=BEDROCK_CSV_MODIFIED_TIME={}", timestamp);
-            println!("cargo:info=Embedded CSV modification time: {}", timestamp);
+            println!("cargo:rustc-env=BEDROCK_CSV_MODIFIED_TIME={timestamp}");
+            println!("cargo:info=Embedded CSV modification time: {timestamp}");
         } else {
             println!("cargo:warning=Could not get CSV modification time, using current time");
         }

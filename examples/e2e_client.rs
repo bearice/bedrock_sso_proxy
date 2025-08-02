@@ -213,14 +213,11 @@ impl E2EClient {
                 if let Some(content) = bedrock_response.content {
                     for block in content {
                         if let Some(text) = block.text {
-                            println!("\n🤖 Model Response ({}):\n{}\n", connection_type, text);
+                            println!("\n🤖 Model Response ({connection_type}):\n{text}\n");
                         }
                     }
                 } else if let Some(completion) = bedrock_response.completion {
-                    println!(
-                        "\n🤖 Model Response ({}):\n{}\n",
-                        connection_type, completion
-                    );
+                    println!("\n🤖 Model Response ({connection_type}):\n{completion}\n");
                 } else {
                     println!(
                         "\n📋 Raw Response ({}):\n{}\n",
@@ -236,10 +233,7 @@ impl E2EClient {
                 );
             }
         } else {
-            println!(
-                "\n📋 Raw Response ({}):\n{}\n",
-                connection_type, response_text
-            );
+            println!("\n📋 Raw Response ({connection_type}):\n{response_text}\n");
         }
         Ok(())
     }
@@ -258,7 +252,7 @@ impl E2EClient {
                 if let Some(content) = anthropic_response.content {
                     for block in content {
                         if let Some(text) = block.text {
-                            println!("\n🤖 Model Response ({}):\n{}\n", connection_type, text);
+                            println!("\n🤖 Model Response ({connection_type}):\n{text}\n");
                         }
                     }
                 } else {
@@ -276,10 +270,7 @@ impl E2EClient {
                 );
             }
         } else {
-            println!(
-                "\n📋 Raw Response ({}):\n{}\n",
-                connection_type, response_text
-            );
+            println!("\n📋 Raw Response ({connection_type}):\n{response_text}\n");
         }
         Ok(())
     }
@@ -360,7 +351,7 @@ impl E2EClient {
             if let Some(aws_client) = &self.aws_client {
                 match aws_client.health_check().await {
                     Ok(_) => println!("✅ Direct AWS connection: healthy"),
-                    Err(e) => println!("❌ Direct AWS connection: {}", e),
+                    Err(e) => println!("❌ Direct AWS connection: {e}"),
                 }
             }
             // Note: Anthropic API doesn't have a health endpoint, so we skip direct Anthropic health check
@@ -369,7 +360,7 @@ impl E2EClient {
             let response = self.client.get(&url).send().await?;
             println!("Health check status: {}", response.status());
             let body = response.text().await?;
-            println!("Response: {}", body);
+            println!("Response: {body}");
         }
         Ok(())
     }
@@ -423,7 +414,7 @@ impl E2EClient {
             self.parse_standard_response(&response_text, "Via Proxy")?;
         } else {
             let error_text = response.text().await?;
-            println!("❌ Proxy Error: {}", error_text);
+            println!("❌ Proxy Error: {error_text}");
         }
 
         Ok(())
@@ -459,7 +450,7 @@ impl E2EClient {
             self.parse_standard_response(&response_text, "Direct AWS")?;
         } else {
             let error_text = String::from_utf8_lossy(&response.body);
-            println!("❌ Direct AWS Error: {}", error_text);
+            println!("❌ Direct AWS Error: {error_text}");
         }
 
         Ok(())
@@ -505,7 +496,7 @@ impl E2EClient {
                 .await?;
         } else {
             let error_text = response.text().await?;
-            println!("❌ Proxy Streaming Error: {}", error_text);
+            println!("❌ Proxy Streaming Error: {error_text}");
         }
 
         Ok(())
@@ -563,7 +554,7 @@ impl E2EClient {
                     println!("\n✅ Stream completed");
                     break;
                 } else {
-                    print!("{}", result);
+                    print!("{result}");
                     io::stdout().flush().unwrap();
                 }
             }
@@ -588,7 +579,7 @@ impl E2EClient {
                     println!("\n✅ Stream completed");
                     break;
                 } else {
-                    print!("{}", result);
+                    print!("{result}");
                     io::stdout().flush().unwrap();
                 }
             }
@@ -656,7 +647,7 @@ impl E2EClient {
             }
         } else {
             let error_text = response.text().await?;
-            println!("❌ Direct Anthropic API Error: {}", error_text);
+            println!("❌ Direct Anthropic API Error: {error_text}");
         }
 
         Ok(())
@@ -692,7 +683,7 @@ impl E2EClient {
             self.parse_anthropic_response(&response_text, "Anthropic API")?;
         } else {
             let error_text = response.text().await?;
-            println!("❌ Anthropic API Error: {}", error_text);
+            println!("❌ Anthropic API Error: {error_text}");
         }
 
         Ok(())
@@ -729,7 +720,7 @@ impl E2EClient {
                 .await?;
         } else {
             let error_text = response.text().await?;
-            println!("❌ Anthropic API Streaming Error: {}", error_text);
+            println!("❌ Anthropic API Streaming Error: {error_text}");
         }
 
         Ok(())
@@ -749,7 +740,7 @@ impl E2EClient {
                     println!("\n✅ Stream completed");
                     break;
                 } else {
-                    print!("{}", result);
+                    print!("{result}");
                     io::stdout().flush().unwrap();
                 }
             }
@@ -770,10 +761,7 @@ impl E2EClient {
             "Anthropic API via Proxy"
         };
 
-        println!(
-            "🚀 Starting interactive chat with model: {} ({})",
-            model, connection_type
-        );
+        println!("🚀 Starting interactive chat with model: {model} ({connection_type})");
 
         if self.direct_mode {
             let has_api_key = api_key.is_some() || self.anthropic_api_key.is_some();
@@ -786,14 +774,14 @@ impl E2EClient {
             } else {
                 "ANTHROPIC_API_KEY environment variable"
             };
-            println!("🔐 Authentication: {}", auth_source);
+            println!("🔐 Authentication: {auth_source}");
         } else {
             let auth_method = if api_key.is_some() {
                 "API Key"
             } else {
                 "JWT Token"
             };
-            println!("🔐 Authentication: {}", auth_method);
+            println!("🔐 Authentication: {auth_method}");
         }
 
         println!("💡 Type 'quit', 'exit', or press Ctrl-D to end the chat");
@@ -831,7 +819,7 @@ impl E2EClient {
                 .send_anthropic_message(model, input, streaming, api_key)
                 .await
             {
-                println!("❌ Error sending message: {}", e);
+                println!("❌ Error sending message: {e}");
             }
         }
 
@@ -843,7 +831,7 @@ impl E2EClient {
         model: &str,
         streaming: bool,
     ) -> Result<(), Box<dyn std::error::Error>> {
-        println!("🚀 Starting interactive chat with model: {}", model);
+        println!("🚀 Starting interactive chat with model: {model}");
         println!(
             "💡 Connection mode: {}",
             if self.direct_mode {
@@ -884,7 +872,7 @@ impl E2EClient {
             }
 
             if let Err(e) = self.send_message(model, input, streaming).await {
-                println!("❌ Error sending message: {}", e);
+                println!("❌ Error sending message: {e}");
             }
         }
 

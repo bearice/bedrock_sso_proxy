@@ -33,7 +33,7 @@ impl CostTrackingService {
 
         // Check if we already have cost data
         let existing_costs = self.database.model_costs().get_all().await.map_err(|e| {
-            AppError::Internal(format!("Failed to check existing model costs: {}", e))
+            AppError::Internal(format!("Failed to check existing model costs: {e}"))
         })?;
 
         if existing_costs.is_empty() {
@@ -100,7 +100,7 @@ impl CostTrackingService {
                     error_details.push("Parse errors:".to_string());
                     for err in &parse_error.parse_errors {
                         let line_info = if let Some(ref raw_line) = err.raw_line {
-                            format!(" (line content: {})", raw_line)
+                            format!(" (line content: {raw_line})")
                         } else {
                             String::new()
                         };
@@ -166,7 +166,7 @@ impl CostTrackingService {
             .model_costs()
             .get_all()
             .await
-            .map_err(|e| AppError::Internal(format!("Failed to get model costs: {}", e)))?;
+            .map_err(|e| AppError::Internal(format!("Failed to get model costs: {e}")))?;
 
         let mut summary = CostSummary {
             total_models: all_costs.len(),

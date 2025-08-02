@@ -105,8 +105,7 @@ async fn get_model_cost(
         .await?
         .ok_or_else(|| {
             AppError::NotFound(format!(
-                "Model cost not found: {} in region {}",
-                model_id, region
+                "Model cost not found: {model_id} in region {region}"
             ))
         })?;
 

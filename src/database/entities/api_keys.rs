@@ -81,7 +81,7 @@ fn generate_api_key(prefix: &str, length: usize) -> String {
         .map(char::from)
         .collect();
 
-    format!("{}{}", prefix, random_part)
+    format!("{prefix}{random_part}")
 }
 
 /// Hash an API key using SHA-256
@@ -104,7 +104,7 @@ pub fn create_key_hint(api_key: &str) -> String {
         )
     } else {
         // Fallback for invalid format
-        format!("{}****", API_KEY_PREFIX)
+        format!("{API_KEY_PREFIX}****")
     }
 }
 

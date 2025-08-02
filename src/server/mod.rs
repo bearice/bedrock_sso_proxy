@@ -68,8 +68,7 @@ impl Server {
                         config.metrics.port, e
                     );
                     return Err(AppError::Internal(format!(
-                        "Failed to start metrics server: {}",
-                        e
+                        "Failed to start metrics server: {e}"
                     )));
                 }
             }
@@ -222,7 +221,7 @@ impl Server {
         let addr = SocketAddr::from(([0, 0, 0, 0], self.config.server.port));
         let listener = TcpListener::bind(addr)
             .await
-            .map_err(|e| AppError::Internal(format!("Failed to bind to address: {}", e)))?;
+            .map_err(|e| AppError::Internal(format!("Failed to bind to address: {e}")))?;
 
         info!("Server listening on http://{}", addr);
 

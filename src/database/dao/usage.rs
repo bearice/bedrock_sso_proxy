@@ -236,7 +236,10 @@ impl UsageDao {
     }
 
     /// Get usage records with filtering and total count for pagination
-    pub async fn get_records(&self, query: &UsageQuery) -> DatabaseResult<PaginatedRecords<UsageRecord>> {
+    pub async fn get_records(
+        &self,
+        query: &UsageQuery,
+    ) -> DatabaseResult<PaginatedRecords<UsageRecord>> {
         // Build base filter query (without pagination)
         let mut base_select = usage_records::Entity::find();
 
@@ -267,13 +270,17 @@ impl UsageDao {
         // Apply ordering and pagination for data query
         let mut data_select = base_select;
         match query.sort_order {
-            SortOrder::Desc => data_select = data_select.order_by_desc(usage_records::Column::RequestTime),
-            SortOrder::Asc => data_select = data_select.order_by_asc(usage_records::Column::RequestTime),
+            SortOrder::Desc => {
+                data_select = data_select.order_by_desc(usage_records::Column::RequestTime)
+            }
+            SortOrder::Asc => {
+                data_select = data_select.order_by_asc(usage_records::Column::RequestTime)
+            }
         }
 
         let limit = query.limit.unwrap_or(50);
         let offset = query.offset.unwrap_or(0);
-        
+
         data_select = data_select.limit(Some(limit as u64));
         data_select = data_select.offset(Some(offset as u64));
 
