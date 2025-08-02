@@ -20,7 +20,7 @@ use common::PostgresTestDb;
 // Macro to run the same test with both SQLite and PostgreSQL
 macro_rules! database_test {
     ($test_name:ident, $test_impl:ident) => {
-        paste::paste! {
+        pastey::paste! {
             #[tokio::test]
             async fn [<sqlite_ $test_name>]() {
                 $test_impl(&create_test_server().await).await;

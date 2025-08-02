@@ -25,6 +25,7 @@ frontend/.eslintcache
 .vscode/
 .idea/
 .claude/
+.mcp.json
 __pycache__
 *.swp
 *.swo

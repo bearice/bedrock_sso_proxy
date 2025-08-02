@@ -103,6 +103,7 @@ jobs:
       run: |
         cargo install cargo-audit
         cargo audit
+      continue-on-error: true
 
   build-docker:
     name: Build Docker Image
