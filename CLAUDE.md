@@ -248,6 +248,11 @@ cargo test --test usage_integration_tests # Usage tracking tests
 ### CLI Commands
 
 ```bash
+# Database initialization commands (for deployment and cluster setup)
+cargo run --bin bedrock_proxy -- init                                          # Initialize database with migrations and default data
+cargo run --bin bedrock_proxy -- init --skip-costs                             # Initialize database without seeding model costs
+cargo run --bin bedrock_proxy -- init --force-seed                             # Force re-seed default data even if exists
+
 # Database migration commands
 cargo run --bin bedrock_proxy -- migrate up       # Run all pending migrations
 cargo run --bin bedrock_proxy -- migrate down     # Rollback last migration
@@ -385,7 +390,7 @@ database:
   enabled: true
   url: "sqlite://./data/bedrock_sso.db"
   max_connections: 5
-  migration_on_startup: true
+  migration_on_startup: true  # Set to false for cluster deployments (disables migrations + cost init)
 metrics:
   enabled: true
   port: 9090
@@ -416,6 +421,7 @@ Use `BEDROCK_` prefix with double underscores for nesting:
 - `BEDROCK_CACHE__REDIS_URL=redis://localhost:6379`
 - `BEDROCK_CACHE__REDIS_KEY_PREFIX=bedrock_sso:`
 - `BEDROCK_DATABASE__URL=sqlite://./data/bedrock_sso.db`
+- `BEDROCK_DATABASE__MIGRATION_ON_STARTUP=false`  # For cluster deployments
 - `BEDROCK_METRICS__ENABLED=true`
 - `BEDROCK_METRICS__PORT=9090`
 - `BEDROCK_JOBS__ENABLED=true`
@@ -795,7 +801,62 @@ docker pull ghcr.io/bearice/bedrock_sso_proxy:latest
 docker pull ghcr.io/bearice/bedrock_sso_proxy:v1.0.0
 ```
 
+### Database Initialization
+
+For safe cluster deployments, use the `init` command instead of relying on in-process migration:
+
+```bash
+# Basic initialization (recommended for production)
+cargo run --bin bedrock_proxy -- init
+
+# Skip default model cost data if you'll import your own
+cargo run --bin bedrock_proxy -- init --skip-costs
+
+# Force re-seed default data (useful for updates)
+cargo run --bin bedrock_proxy -- init --force-seed
+```
+
+**Why use `init` instead of automatic migration?**
+
+- **Cluster Safety**: Multiple pods can safely run `init` concurrently without conflicts
+- **Idempotent**: Safe to run multiple times, won't duplicate data
+- **Default Data**: Automatically seeds common Claude model costs for immediate use
+- **Deployment Control**: Explicit control over when database setup occurs
+- **No Distributed Locks**: Avoids complexity of coordination between instances
+
+**Default Model Cost Data:**
+
+The `init` command seeds comprehensive cost data from embedded CSV with 300+ model/region combinations including:
+- **Claude Models**: Latest Claude 4 (Sonnet & Opus), Claude 3.7, Claude 3.5, and Claude 3 across all AWS regions
+- **Other Providers**: Amazon Nova/Titan, Meta Llama, Mistral, Cohere, DeepSeek, AI21 models
+- **All AWS Regions**: us-east-1, us-west-2, eu-central-1, ap-southeast-1, and 15+ more regions
+- **Cache Pricing**: Includes cache read/write costs where available for supported models
+
+**Configuration for Cluster Deployments:**
+
+For safe cluster deployments, disable automatic initialization:
+
+```yaml
+database:
+  migration_on_startup: false  # Disables both migrations and cost initialization
+```
+
+Or via environment variable:
+```bash
+export BEDROCK_DATABASE__MIGRATION_ON_STARTUP=false
+```
+
+**Deployment Sequence:**
+1. Run `init` once during deployment (init job, sidecar, or manually)
+2. Start application instances with `migration_on_startup: false`
+3. Application instances connect to ready database without attempting initialization
+
 ### Production Checklist
+
+**Database Initialization:**
+- [ ] Run `cargo run --bin bedrock_proxy -- init` during deployment
+- [ ] Verify default model cost data is seeded (or import your own)
+- [ ] Test database connectivity from all instances
 
 **Security:**
 - [ ] Change default JWT secret (`BEDROCK_JWT__SECRET`)

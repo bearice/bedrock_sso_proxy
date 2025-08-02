@@ -201,20 +201,28 @@ impl Server {
             ShutdownManager::new(Duration::from_secs(self.config.shutdown.timeout_seconds));
 
         // Initialize model costs in the background (now that migrations are complete)
-        let cost_service = self.cost_service.clone();
-        let cost_init = tokio::spawn(async move {
-            if let Err(e) = cost_service.initialize_model_costs().await {
-                tracing::warn!("Failed to initialize model costs: {}", e);
-            }
-        });
+        // Only if migration_on_startup is enabled in configuration
+        if self.config.database.migration_on_startup {
+            info!("Initializing model costs on startup");
+            let cost_service = self.cost_service.clone();
+            let cost_init = tokio::spawn(async move {
+                if let Err(e) = cost_service.initialize_model_costs().await {
+                    tracing::warn!("Failed to initialize model costs: {}", e);
+                }
+            });
+
+            // Register the background task for shutdown
+            shutdown_manager.register_background_task(
+                cost_init,
+                "cost init",
+                self.config.shutdown.background_task_timeout_seconds,
+            );
+        } else {
+            info!("Database initialization on startup disabled - use 'init database' command instead");
+        }
 
         // Register all server components for shutdown
         shutdown_manager.register_server_components(self);
-        shutdown_manager.register_background_task(
-            cost_init,
-            "cost init",
-            self.config.shutdown.background_task_timeout_seconds,
-        );
 
         let app = self.create_app();
 
