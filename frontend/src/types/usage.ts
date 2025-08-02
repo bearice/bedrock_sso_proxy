@@ -52,6 +52,40 @@ export interface UsageStatsQuery {
   success?: boolean;
 }
 
+export interface UsageSummariesQuery {
+  start_date?: string;
+  end_date?: string;
+  period_type?: 'hourly' | 'daily' | 'weekly' | 'monthly';
+  model_id?: string;
+  limit?: number;
+  offset?: number;
+}
+
+export interface UsageSummary {
+  id: number;
+  user_id: number;
+  model_id: string;
+  period_type: 'hourly' | 'daily' | 'weekly' | 'monthly';
+  period_start: string;
+  period_end: string;
+  total_requests: number;
+  successful_requests: number;
+  total_input_tokens: number;
+  total_output_tokens: number;
+  total_tokens: number;
+  avg_response_time_ms: number;
+  estimated_cost?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface UsageSummariesResponse {
+  summaries: UsageSummary[];
+  total: number;
+  limit: number;
+  offset: number;
+}
+
 export interface UsageRecordsResponse {
   records: UsageRecord[];
   total: number;

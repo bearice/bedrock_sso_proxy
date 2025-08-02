@@ -25,10 +25,9 @@ use utoipa_swagger_ui::SwaggerUi;
         crate::routes::cost::delete_model_cost,
         crate::routes::cost::update_all_model_costs,
         crate::routes::usage::get_user_usage_records,
-        crate::routes::usage::get_user_usage_stats,
+        crate::routes::usage::get_user_usage_summaries,
         crate::routes::usage::get_system_usage_records,
-        crate::routes::usage::get_system_usage_stats,
-        crate::routes::usage::get_top_models,
+        crate::routes::usage::get_admin_usage_summaries,
         crate::routes::audit_logs::get_audit_logs,
     ),
     components(
@@ -48,12 +47,12 @@ use utoipa_swagger_ui::SwaggerUi;
             crate::database::entities::ModelCost,
             crate::cost::UpdateCostsResult,
             crate::routes::usage::UsageRecordsQuery,
-            crate::routes::usage::UsageStatsQuery,
+            crate::routes::usage::UsageSummariesQuery,
             crate::routes::usage::UsageRecordsResponse,
-            crate::routes::usage::TopModelsResponse,
-            crate::routes::usage::ModelUsage,
+            crate::routes::usage::UsageSummariesResponse,
             crate::database::entities::UsageRecord,
-            crate::database::dao::usage::UsageStats,
+            crate::database::entities::usage_summaries::Model,
+            crate::database::entities::PeriodType,
             crate::database::AuditLogQueryParams,
             crate::routes::audit_logs::AuditLogsResponse,
             crate::routes::audit_logs::AuditLogEntry,
@@ -104,13 +103,7 @@ impl Modify for SecurityAddon {
 pub fn create_docs_routes() -> Router<Server> {
     Router::new()
         .merge(SwaggerUi::new("/docs").url("/docs/openapi.json", ApiDoc::openapi()))
-        .route("/openapi.json", get(openapi_json))
-        .route("/openapi.yaml", get(openapi_yaml))
-}
-
-/// Serve OpenAPI specification as JSON
-async fn openapi_json() -> axum::Json<utoipa::openapi::OpenApi> {
-    axum::Json(ApiDoc::openapi())
+        .route("/docs/openapi.yaml", get(openapi_yaml))
 }
 
 /// Serve OpenAPI specification as YAML
@@ -138,7 +131,7 @@ mod tests {
         let app = create_docs_routes().with_state(server);
 
         let request = Request::builder()
-            .uri("/openapi.json")
+            .uri("/docs/openapi.json")
             .body(Body::empty())
             .unwrap();
 
@@ -155,7 +148,7 @@ mod tests {
         let app = create_docs_routes().with_state(server);
 
         let request = Request::builder()
-            .uri("/openapi.yaml")
+            .uri("/docs/openapi.yaml")
             .body(Body::empty())
             .unwrap();
 

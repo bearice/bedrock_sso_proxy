@@ -1,25 +1,23 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../../hooks/useAuth';
 import { usageApi, ApiError } from '../../services/api';
-import { UsageStats as UsageStatsType, UsageQuery, UsageRecord } from '../../types/usage';
-import { UsageStats } from './UsageStats';
+import { UsageQuery, UsageRecord, UsageSummary, UsageSummariesQuery } from '../../types/usage';
 import { UsageFilters } from './UsageFilters';
 import { UsageRecords } from './UsageRecords';
+import { UsageSummaryCharts } from './UsageSummaryCharts';
 import { Activity, RefreshCw, Download, AlertCircle } from 'lucide-react';
 
 export function UsageTracking() {
   const { token } = useAuth();
-  const [stats, setStats] = useState<UsageStatsType | null>(null);
+  const [summaries, setSummaries] = useState<UsageSummary[]>([]);
   const [records, setRecords] = useState<UsageRecord[]>([]);
   const [totalCount, setTotalCount] = useState(0);
-  const [availableModels, setAvailableModels] = useState<string[]>([]);
 
-  const [isLoadingStats, setIsLoadingStats] = useState(true);
+  const [isLoadingSummaries, setIsLoadingSummaries] = useState(true);
   const [isLoadingRecords, setIsLoadingRecords] = useState(true);
-  const [isLoadingModels, setIsLoadingModels] = useState(true);
   const [isExporting, setIsExporting] = useState(false);
 
-  const [statsError, setStatsError] = useState<string | null>(null);
+  const [summariesError, setSummariesError] = useState<string | null>(null);
   const [recordsError, setRecordsError] = useState<string | null>(null);
 
   // Initialize filters with last 30 days
@@ -38,30 +36,31 @@ export function UsageTracking() {
   const [filters, setFilters] = useState<UsageQuery>(getDefaultFilters);
   const [currentPage, setCurrentPage] = useState(1);
 
-  // Load usage statistics
-  const loadStats = useCallback(async () => {
+  // Load usage summaries
+  const loadSummaries = useCallback(async () => {
     if (!token) return;
 
     try {
-      setIsLoadingStats(true);
-      setStatsError(null);
+      setIsLoadingSummaries(true);
+      setSummariesError(null);
 
-      const statsQuery = {
+      const summariesQuery: UsageSummariesQuery = {
         start_date: filters.start_date,
         end_date: filters.end_date,
-        model: filters.model,
-        success: filters.success_only,
+        model_id: filters.model,
+        period_type: 'daily', // Default to daily summaries
+        limit: 1000, // Get more summaries for better chart data
       };
 
-      const statsData = await usageApi.getUsageStats(token, statsQuery);
-      setStats(statsData);
+      const summariesData = await usageApi.getUsageSummaries(token, summariesQuery);
+      setSummaries(summariesData.summaries);
     } catch (err) {
-      console.error('Failed to load usage stats:', err);
-      setStatsError(err instanceof ApiError ? err.message : 'Failed to load usage statistics');
+      console.error('Failed to load usage summaries:', err);
+      setSummariesError(err instanceof ApiError ? err.message : 'Failed to load usage summaries');
     } finally {
-      setIsLoadingStats(false);
+      setIsLoadingSummaries(false);
     }
-  }, [token, filters.start_date, filters.end_date, filters.model, filters.success_only]);
+  }, [token, filters.start_date, filters.end_date, filters.model]);
 
   // Load usage records
   const loadRecords = useCallback(async () => {
@@ -81,23 +80,6 @@ export function UsageTracking() {
       setIsLoadingRecords(false);
     }
   }, [token, filters]);
-
-  // Load available models
-  const loadModels = useCallback(async () => {
-    if (!token) return;
-
-    try {
-      setIsLoadingModels(true);
-
-      const models = await usageApi.getAvailableModels(token);
-      setAvailableModels(models);
-    } catch (err) {
-      console.error('Failed to load available models:', err);
-      // Models error is non-critical, so we don't display it to user
-    } finally {
-      setIsLoadingModels(false);
-    }
-  }, [token]);
 
   // Export usage data
   const handleExport = useCallback(async () => {
@@ -151,27 +133,25 @@ export function UsageTracking() {
 
   // Refresh all data
   const refreshData = useCallback(() => {
-    loadStats();
+    loadSummaries();
     loadRecords();
-    loadModels();
-  }, [loadStats, loadRecords, loadModels]);
+  }, [loadSummaries, loadRecords]);
 
   // Initial data load
   useEffect(() => {
     if (token) {
-      loadStats();
+      loadSummaries();
       loadRecords();
-      loadModels();
     }
-  }, [token, loadStats, loadRecords, loadModels]);
+  }, [token, loadSummaries, loadRecords]);
 
   // Reload when filters change (but not on initial load)
   useEffect(() => {
     if (token) {
-      loadStats();
+      loadSummaries();
       loadRecords();
     }
-  }, [filters, loadStats, loadRecords, token]);
+  }, [filters, loadSummaries, loadRecords, token]);
 
   if (!token) {
     return (
@@ -206,13 +186,13 @@ export function UsageTracking() {
         <div style={{ display: 'flex', gap: '0.75rem' }}>
           <button
             onClick={refreshData}
-            disabled={isLoadingStats || isLoadingRecords}
+            disabled={isLoadingSummaries || isLoadingRecords}
             className="btn btn-secondary"
             style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}
           >
             <RefreshCw
               size={16}
-              className={isLoadingStats || isLoadingRecords ? 'loading-spinner' : ''}
+              className={isLoadingSummaries || isLoadingRecords ? 'loading-spinner' : ''}
             />
             Refresh
           </button>
@@ -239,12 +219,15 @@ export function UsageTracking() {
       <UsageFilters
         filters={filters}
         onFiltersChange={handleFiltersChange}
-        availableModels={availableModels}
         isLoading={isLoadingRecords}
       />
 
-      {/* Usage Statistics */}
-      <UsageStats stats={stats} isLoading={isLoadingStats} error={statsError} />
+      {/* Usage Summary Charts */}
+      <UsageSummaryCharts 
+        summaries={summaries}
+        isLoading={isLoadingSummaries} 
+        error={summariesError} 
+      />
 
       {/* Usage Records */}
       <UsageRecords
@@ -258,7 +241,7 @@ export function UsageTracking() {
       />
 
       {/* Debug Info (development only) */}
-      {false && (
+      { (
         <details
           style={{
             marginTop: '2rem',
@@ -274,11 +257,7 @@ export function UsageTracking() {
               <strong>Current Filters:</strong> {JSON.stringify(filters, null, 2)}
             </div>
             <div>
-              <strong>Available Models:</strong> {availableModels.length} models loaded
-            </div>
-            <div>
-              <strong>Loading States:</strong> Stats: {isLoadingStats.toString()}, Records:{' '}
-              {isLoadingRecords.toString()}, Models: {isLoadingModels.toString()}
+              <strong>Loading States:</strong> Summaries: {isLoadingSummaries.toString()}, Records: {isLoadingRecords.toString()}
             </div>
             <div>
               <strong>Records Count:</strong> {records.length} loaded, {totalCount} total

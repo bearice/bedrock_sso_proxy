@@ -1,8 +1,8 @@
 use crate::{
     auth::middleware::UserExtractor,
     database::{
-        dao::usage::{UsageQuery, UsageStats},
-        entities::UsageRecord,
+        dao::usage::UsageQuery,
+        entities::{PeriodType, UsageRecord},
     },
     error::AppError,
     routes::ApiErrorResponse,
@@ -10,9 +10,10 @@ use crate::{
 use axum::{
     Router,
     extract::{Query, State},
-    response::Json,
+    response::{IntoResponse, Json},
     routing::get,
 };
+use axum::http::header;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use utoipa::{IntoParams, ToSchema};
@@ -21,7 +22,7 @@ use utoipa::{IntoParams, ToSchema};
 pub fn create_user_usage_routes() -> Router<crate::server::Server> {
     Router::new()
         .route("/usage/records", get(get_user_usage_records))
-        .route("/usage/stats", get(get_user_usage_stats))
+        .route("/usage/summaries", get(get_user_usage_summaries))
 }
 
 /// Create admin usage tracking API routes
@@ -29,8 +30,7 @@ pub fn create_admin_usage_routes() -> Router<crate::server::Server> {
     Router::new()
         // Admin endpoints (system-wide usage)
         .route("/admin/usage/records", get(get_system_usage_records))
-        .route("/admin/usage/stats", get(get_system_usage_stats))
-        .route("/admin/usage/top-models", get(get_top_models))
+        .route("/admin/usage/summaries", get(get_admin_usage_summaries))
 }
 
 /// Query parameters for usage records
@@ -48,15 +48,25 @@ pub struct UsageRecordsQuery {
     pub end_date: Option<DateTime<Utc>>,
     /// If true, only return successful requests
     pub success_only: Option<bool>,
+    /// Response format (json or csv)
+    pub format: Option<String>,
 }
 
-/// Query parameters for usage stats
+/// Query parameters for usage summaries
 #[derive(Debug, Deserialize, ToSchema, IntoParams)]
-pub struct UsageStatsQuery {
-    /// Filter statistics from this date onwards
+pub struct UsageSummariesQuery {
+    /// Filter summaries from this date onwards
     pub start_date: Option<DateTime<Utc>>,
-    /// Filter statistics up to this date
+    /// Filter summaries up to this date
     pub end_date: Option<DateTime<Utc>>,
+    /// Period type for aggregation (hourly, daily, weekly, monthly)
+    pub period_type: Option<String>,
+    /// Filter by specific model ID
+    pub model_id: Option<String>,
+    /// Maximum number of summaries to return (default: 1000)
+    pub limit: Option<u32>,
+    /// Number of summaries to skip for pagination
+    pub offset: Option<u32>,
 }
 
 /// Response for usage records endpoint
@@ -72,19 +82,17 @@ pub struct UsageRecordsResponse {
     pub offset: u32,
 }
 
-/// Response for top models endpoint
+/// Response for usage summaries endpoint
 #[derive(Debug, Serialize, ToSchema)]
-pub struct TopModelsResponse {
-    /// List of top models by usage
-    pub models: Vec<ModelUsage>,
-}
-
-#[derive(Debug, Serialize, ToSchema)]
-pub struct ModelUsage {
-    /// Model identifier
-    pub model_id: String,
-    /// Total tokens used for this model
-    pub total_tokens: u64,
+pub struct UsageSummariesResponse {
+    /// List of usage summaries
+    pub summaries: Vec<crate::database::entities::usage_summaries::Model>,
+    /// Total number of matching summaries (for pagination)
+    pub total: u64,
+    /// Number of summaries returned in this page
+    pub limit: u32,
+    /// Number of summaries skipped
+    pub offset: u32,
 }
 
 /// Get user's usage records
@@ -109,7 +117,7 @@ async fn get_user_usage_records(
     State(server): State<crate::server::Server>,
     UserExtractor(user): UserExtractor,
     Query(params): Query<UsageRecordsQuery>,
-) -> Result<Json<UsageRecordsResponse>, AppError> {
+) -> Result<impl IntoResponse, AppError> {
     // Get user ID from JWT claims (sub field contains database user ID)
     let user_id: i32 = user.id;
 
@@ -128,24 +136,51 @@ async fn get_user_usage_records(
 
     let paginated_records = server.database.usage().get_records(&query).await?;
 
+    if params.format.as_deref() == Some("csv") {
+        let mut wtr = csv::WriterBuilder::new().from_writer(vec![]);
+
+        // Write records (header is written automatically)
+        for record in paginated_records.records {
+            wtr.serialize(record)
+                .map_err(|e| AppError::Internal(e.to_string()))?;
+        }
+
+        wtr.flush().map_err(|e| AppError::Internal(e.to_string()))?;
+        let csv_data = wtr
+            .into_inner()
+            .map_err(|e| AppError::Internal(e.to_string()))?;
+
+        // Create response
+        let headers = [
+            (header::CONTENT_TYPE, "text/csv; charset=utf-8"),
+            (
+                header::CONTENT_DISPOSITION,
+                "attachment; filename=\"usage_export.csv\"",
+            ),
+        ];
+
+        return Ok((headers, csv_data).into_response());
+    }
+
     Ok(Json(UsageRecordsResponse {
         records: paginated_records.records,
         total: paginated_records.total_count,
         limit,
         offset,
-    }))
+    })
+    .into_response())
 }
 
-/// Get user's usage statistics
+/// Get user's usage summaries
 #[utoipa::path(
     get,
-    path = "/usage/stats",
-    summary = "Get User Usage Statistics",
-    description = "Retrieve usage statistics for the authenticated user",
+    path = "/usage/summaries",
+    summary = "Get User Usage Summaries",
+    description = "Retrieve pre-computed usage summaries for the authenticated user",
     tags = ["Usage Tracking"],
-    params(UsageStatsQuery),
+    params(UsageSummariesQuery),
     responses(
-        (status = 200, description = "Usage statistics", body = UsageStats),
+        (status = 200, description = "Usage summaries", body = UsageSummariesResponse),
         (status = 401, description = "Unauthorized", body = ApiErrorResponse),
         (status = 500, description = "Internal server error", body = ApiErrorResponse)
     ),
@@ -154,24 +189,48 @@ async fn get_user_usage_records(
         ("api_key_auth" = [])
     )
 )]
-async fn get_user_usage_stats(
+async fn get_user_usage_summaries(
     State(server): State<crate::server::Server>,
     UserExtractor(user): UserExtractor,
-    Query(params): Query<UsageStatsQuery>,
-) -> Result<Json<UsageStats>, AppError> {
-    // Get user ID from JWT claims (sub field contains database user ID)
+    Query(params): Query<UsageSummariesQuery>,
+) -> Result<Json<UsageSummariesResponse>, AppError> {
     let user_id: i32 = user.id;
+    let limit = params.limit.unwrap_or(1000).min(5000); // Max 5000 summaries
+    let offset = params.offset.unwrap_or(0);
+
+    // Parse period type
+    let period_type = if let Some(ref period_str) = params.period_type {
+        match period_str.as_str() {
+            "hourly" => Some(PeriodType::Hourly),
+            "daily" => Some(PeriodType::Daily),
+            "weekly" => Some(PeriodType::Weekly),
+            "monthly" => Some(PeriodType::Monthly),
+            _ => Some(PeriodType::Daily), // Invalid period type, default to daily
+        }
+    } else {
+        Some(PeriodType::Daily) // Default to daily
+    };
 
     let query = UsageQuery {
         user_id: Some(user_id),
+        model_id: params.model_id.clone(),
         start_date: params.start_date,
         end_date: params.end_date,
+        period_type,
+        limit: Some(limit),
+        offset: Some(offset),
         ..Default::default()
     };
 
-    let stats = server.database.usage().get_stats(&query).await?;
+    let summaries = server.database.usage().get_summaries(&query).await?;
+    let total = summaries.len() as u64; // For simplicity, return the count we got
 
-    Ok(Json(stats))
+    Ok(Json(UsageSummariesResponse {
+        summaries,
+        total,
+        limit,
+        offset,
+    }))
 }
 
 /// Get system-wide usage records (admin only)
@@ -195,7 +254,7 @@ async fn get_user_usage_stats(
 async fn get_system_usage_records(
     State(server): State<crate::server::Server>,
     Query(params): Query<UsageRecordsQuery>,
-) -> Result<Json<UsageRecordsResponse>, AppError> {
+) -> Result<impl IntoResponse, AppError> {
     // Admin permissions already checked by middleware
 
     let limit = params.limit.unwrap_or(50).min(500);
@@ -213,24 +272,51 @@ async fn get_system_usage_records(
 
     let paginated_records = server.database.usage().get_records(&query).await?;
 
+    if params.format.as_deref() == Some("csv") {
+        let mut wtr = csv::WriterBuilder::new().from_writer(vec![]);
+
+        // Write records (header is written automatically)
+        for record in paginated_records.records {
+            wtr.serialize(record)
+                .map_err(|e| AppError::Internal(e.to_string()))?;
+        }
+
+        wtr.flush().map_err(|e| AppError::Internal(e.to_string()))?;
+        let csv_data = wtr
+            .into_inner()
+            .map_err(|e| AppError::Internal(e.to_string()))?;
+
+        // Create response
+        let headers = [
+            (header::CONTENT_TYPE, "text/csv; charset=utf-8"),
+            (
+                header::CONTENT_DISPOSITION,
+                "attachment; filename=\"usage_export.csv\"",
+            ),
+        ];
+
+        return Ok((headers, csv_data).into_response());
+    }
+
     Ok(Json(UsageRecordsResponse {
         records: paginated_records.records,
         total: paginated_records.total_count,
         limit,
         offset,
-    }))
+    })
+    .into_response())
 }
 
-/// Get system-wide usage statistics (admin only)
+/// Get system-wide usage summaries (admin only)
 #[utoipa::path(
     get,
-    path = "/admin/usage/stats",
-    summary = "Get System Usage Statistics",
-    description = "Retrieve usage statistics for all users (admin only)",
+    path = "/admin/usage/summaries",
+    summary = "Get System Usage Summaries",
+    description = "Retrieve pre-computed usage summaries for all users (admin only)",
     tags = ["Admin Usage Management"],
-    params(UsageStatsQuery),
+    params(UsageSummariesQuery),
     responses(
-        (status = 200, description = "System usage statistics", body = UsageStats),
+        (status = 200, description = "System usage summaries", body = UsageSummariesResponse),
         (status = 401, description = "Unauthorized", body = ApiErrorResponse),
         (status = 403, description = "Forbidden - admin access required", body = ApiErrorResponse),
         (status = 500, description = "Internal server error", body = ApiErrorResponse)
@@ -239,79 +325,45 @@ async fn get_system_usage_records(
         ("jwt_auth" = [])
     )
 )]
-async fn get_system_usage_stats(
+async fn get_admin_usage_summaries(
     State(server): State<crate::server::Server>,
-    Query(params): Query<UsageStatsQuery>,
-) -> Result<Json<UsageStats>, AppError> {
+    Query(params): Query<UsageSummariesQuery>,
+) -> Result<Json<UsageSummariesResponse>, AppError> {
     // Admin permissions already checked by middleware
+    let limit = params.limit.unwrap_or(1000).min(5000); // Max 5000 summaries
+    let offset = params.offset.unwrap_or(0);
+
+    // Parse period type
+    let period_type = if let Some(ref period_str) = params.period_type {
+        match period_str.as_str() {
+            "hourly" => Some(PeriodType::Hourly),
+            "daily" => Some(PeriodType::Daily),
+            "weekly" => Some(PeriodType::Weekly),
+            "monthly" => Some(PeriodType::Monthly),
+            _ => Some(PeriodType::Daily), // Invalid period type, default to daily
+        }
+    } else {
+        Some(PeriodType::Daily) // Default to daily
+    };
 
     let query = UsageQuery {
+        model_id: params.model_id.clone(),
         start_date: params.start_date,
         end_date: params.end_date,
+        period_type,
+        limit: Some(limit),
+        offset: Some(offset),
         ..Default::default()
     };
 
-    let stats = server.database.usage().get_stats(&query).await?;
+    let summaries = server.database.usage().get_summaries(&query).await?;
+    let total = summaries.len() as u64; // For simplicity, return the count we got
 
-    Ok(Json(stats))
-}
-
-/// Get top models by usage (admin only)
-#[utoipa::path(
-    get,
-    path = "/admin/usage/top-models",
-    summary = "Get Top Models by Usage",
-    description = "Retrieve top models ranked by total token usage (admin only)",
-    tags = ["Admin Usage Management"],
-    params(UsageStatsQuery),
-    responses(
-        (status = 200, description = "Top models by usage", body = TopModelsResponse),
-        (status = 401, description = "Unauthorized", body = ApiErrorResponse),
-        (status = 403, description = "Forbidden - admin access required", body = ApiErrorResponse),
-        (status = 500, description = "Internal server error", body = ApiErrorResponse)
-    ),
-    security(
-        ("jwt_auth" = [])
-    )
-)]
-async fn get_top_models(
-    State(server): State<crate::server::Server>,
-    Query(params): Query<UsageStatsQuery>,
-) -> Result<Json<TopModelsResponse>, AppError> {
-    // Admin permissions already checked by middleware
-
-    let query = UsageQuery {
-        start_date: params.start_date,
-        end_date: params.end_date,
-        limit: Some(10), // Top 10 models
-        ..Default::default()
-    };
-
-    // Get usage records and aggregate by model
-    let paginated_records = server.database.usage().get_records(&query).await?;
-
-    // Group by model_id and sum total_tokens
-    let mut model_usage_map = std::collections::HashMap::new();
-    for record in paginated_records.records {
-        let entry = model_usage_map
-            .entry(record.model_id.clone())
-            .or_insert(0u64);
-        *entry += record.total_tokens as u64;
-    }
-
-    // Sort by total_tokens (descending) and take top results
-    let mut model_usage: Vec<ModelUsage> = model_usage_map
-        .into_iter()
-        .map(|(model_id, total_tokens)| ModelUsage {
-            model_id,
-            total_tokens,
-        })
-        .collect();
-
-    model_usage.sort_by(|a, b| b.total_tokens.cmp(&a.total_tokens));
-
-    Ok(Json(TopModelsResponse {
-        models: model_usage,
+    Ok(Json(UsageSummariesResponse {
+        summaries,
+        total,
+        limit,
+        offset,
     }))
 }
 

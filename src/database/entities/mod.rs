@@ -10,18 +10,23 @@ use chrono::{DateTime, Datelike, Duration, DurationRound, Utc};
 use sea_orm::entity::prelude::*;
 use sea_orm::sea_query::StringLen;
 use serde::{Deserialize, Serialize};
+use utoipa::ToSchema;
 
 /// Period types for usage aggregation
-#[derive(Debug, Clone, Copy, PartialEq, Eq, EnumIter, DeriveActiveEnum, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, EnumIter, DeriveActiveEnum, Serialize, Deserialize, ToSchema)]
 #[sea_orm(rs_type = "String", db_type = "String(StringLen::N(16))")]
 pub enum PeriodType {
     #[sea_orm(string_value = "hourly")]
+    #[serde(rename = "hourly")]
     Hourly,
     #[sea_orm(string_value = "daily")]
+    #[serde(rename = "daily")]
     Daily,
     #[sea_orm(string_value = "weekly")]
+    #[serde(rename = "weekly")]
     Weekly,
     #[sea_orm(string_value = "monthly")]
+    #[serde(rename = "monthly")]
     Monthly,
 }
 

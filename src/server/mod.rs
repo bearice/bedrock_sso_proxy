@@ -3,7 +3,7 @@ pub mod route_builder;
 
 use crate::{
     auth::{
-        jwt::{JwtService, JwtServiceImpl, parse_algorithm},
+        jwt::{parse_algorithm, JwtService, JwtServiceImpl},
         middleware::{admin_middleware, auth_middleware, jwt_auth_middleware},
         oauth::OAuthService,
     },
@@ -17,9 +17,7 @@ use crate::{
     metrics,
     model_service::{ModelService, ModelServiceImpl},
     routes::{
-        create_admin_api_routes, create_anthropic_routes, create_auth_routes,
-        create_bedrock_routes, create_frontend_router, create_health_routes,
-        create_protected_auth_routes, create_user_api_routes,
+        self, create_admin_api_routes, create_anthropic_routes, create_auth_routes, create_bedrock_routes, create_frontend_router, create_health_routes, create_protected_auth_routes, create_user_api_routes
     },
     server::route_builder::middleware_factories::request_response_logger,
     shutdown::{ShutdownCoordinator, ShutdownManager, StreamingConnectionManager},
@@ -283,6 +281,8 @@ impl Server {
             // Model API routes
             .nest("/bedrock", self.bedrock_routes())
             .nest("/anthropic", self.anthropic_routes())
+            // API docs
+            .merge(routes::create_docs_routes())
             // Frontend routes
             .fallback_service(create_frontend_router(self.config.frontend.clone()))
             // All routes use Server as state

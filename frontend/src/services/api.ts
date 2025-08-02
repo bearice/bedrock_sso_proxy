@@ -11,10 +11,9 @@ import {
 } from '../types/auth';
 import {
   UsageQuery,
-  UsageStatsQuery,
+  UsageSummariesQuery,
   UsageRecordsResponse,
-  UsageStats,
-  TopModelsResponse,
+  UsageSummariesResponse,
 } from '../types/usage';
 
 const API_BASE = ''; // Proxied by Vite dev server or served from same origin in production
@@ -212,15 +211,19 @@ export const usageApi = {
     );
   },
 
-  // Get user's usage statistics
-  async getUserUsageStats(token: string, query?: UsageStatsQuery): Promise<UsageStats> {
+  // Get user's usage summaries
+  async getUserUsageSummaries(token: string, query?: UsageSummariesQuery): Promise<UsageSummariesResponse> {
     const params = new URLSearchParams();
+    if (query?.limit) params.append('limit', query.limit.toString());
+    if (query?.offset) params.append('offset', query.offset.toString());
+    if (query?.model_id) params.append('model_id', query.model_id);
     if (query?.start_date) params.append('start_date', query.start_date);
     if (query?.end_date) params.append('end_date', query.end_date);
+    if (query?.period_type) params.append('period_type', query.period_type);
 
     const queryString = params.toString() ? `?${params.toString()}` : '';
-    return fetchApi<UsageStats>(
-      `/api/usage/stats${queryString}`,
+    return fetchApi<UsageSummariesResponse>(
+      `/api/usage/summaries${queryString}`,
       createAuthenticatedRequest(token)
     );
   },
@@ -243,26 +246,18 @@ export const usageApi = {
     );
   },
 
-  async getSystemUsageStats(token: string, query?: UsageStatsQuery): Promise<UsageStats> {
+  async getAdminUsageSummaries(token: string, query?: UsageSummariesQuery): Promise<UsageSummariesResponse> {
     const params = new URLSearchParams();
+    if (query?.limit) params.append('limit', query.limit.toString());
+    if (query?.offset) params.append('offset', query.offset.toString());
+    if (query?.model_id) params.append('model_id', query.model_id);
     if (query?.start_date) params.append('start_date', query.start_date);
     if (query?.end_date) params.append('end_date', query.end_date);
+    if (query?.period_type) params.append('period_type', query.period_type);
 
     const queryString = params.toString() ? `?${params.toString()}` : '';
-    return fetchApi<UsageStats>(
-      `/api/admin/usage/stats${queryString}`,
-      createAuthenticatedRequest(token)
-    );
-  },
-
-  async getTopModels(token: string, query?: UsageStatsQuery): Promise<TopModelsResponse> {
-    const params = new URLSearchParams();
-    if (query?.start_date) params.append('start_date', query.start_date);
-    if (query?.end_date) params.append('end_date', query.end_date);
-
-    const queryString = params.toString() ? `?${params.toString()}` : '';
-    return fetchApi<TopModelsResponse>(
-      `/api/admin/usage/top-models${queryString}`,
+    return fetchApi<UsageSummariesResponse>(
+      `/api/admin/usage/summaries${queryString}`,
       createAuthenticatedRequest(token)
     );
   },
@@ -272,18 +267,8 @@ export const usageApi = {
     return this.getUserUsageRecords(token, query);
   },
 
-  async getUsageStats(token: string, query?: UsageStatsQuery): Promise<UsageStats> {
-    return this.getUserUsageStats(token, query);
-  },
-
-  async getAvailableModels(_token: string): Promise<string[]> {
-    // For now, return common model IDs - in a real implementation this would be an API call
-    return [
-      'anthropic.claude-3-haiku-20240307-v1:0',
-      'anthropic.claude-3-sonnet-20240229-v1:0',
-      'anthropic.claude-3-opus-20240229-v1:0',
-      'anthropic.claude-sonnet-4-20250514-v1:0',
-    ];
+  async getUsageSummaries(token: string, query?: UsageSummariesQuery): Promise<UsageSummariesResponse> {
+    return this.getUserUsageSummaries(token, query);
   },
 
   async exportUsageData(
@@ -300,12 +285,12 @@ export const usageApi = {
     if (query.start_date) params.append('start_date', query.start_date);
     if (query.end_date) params.append('end_date', query.end_date);
     if (query.model) params.append('model', query.model);
-    if (query.success !== undefined) params.append('success', query.success.toString());
+    if (query.success !== undefined) params.append('success_only', query.success.toString());
     params.append('format', query.format);
 
     const queryString = params.toString() ? `?${params.toString()}` : '';
     const response = await fetch(
-      `${API_BASE}/api/usage/export${queryString}`,
+      `${API_BASE}/api/usage/records${queryString}`,
       createAuthenticatedRequest(token)
     );
 

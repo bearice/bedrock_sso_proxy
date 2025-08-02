@@ -252,51 +252,6 @@ database_test!(
     test_get_user_usage_records_success_impl
 );
 
-async fn test_get_user_usage_stats_success_impl(server: &bedrock_sso_proxy::server::Server) {
-    let (user_id, _) = setup_test_data(server.database.as_ref()).await;
-
-    let token = create_test_token(
-        server.jwt_service.as_ref(),
-        "user1@example.com",
-        false,
-        user_id,
-    );
-    let app = create_test_router(server);
-
-    let request = Request::builder()
-        .method(Method::GET)
-        .uri("/usage/stats")
-        .header(AUTHORIZATION, format!("Bearer {token}"))
-        .body(Body::empty())
-        .unwrap();
-
-    let response = app.oneshot(request).await.unwrap();
-    assert_eq!(response.status(), StatusCode::OK);
-
-    let body = axum::body::to_bytes(response.into_body(), usize::MAX)
-        .await
-        .unwrap();
-    let json: Value = serde_json::from_slice(&body).unwrap();
-
-    assert_eq!(json["total_requests"], 3);
-    assert_eq!(json["total_input_tokens"], 450); // 100 + 200 + 150
-    assert_eq!(json["total_output_tokens"], 225); // 50 + 75 + 100
-    // Use string comparison for decimal values due to floating point precision
-    let total_cost: String = json["total_cost"].as_str().unwrap_or("0").to_string();
-    let expected_cost = "0.0325";
-    let parsed_cost: f64 = total_cost.parse().unwrap_or(0.0);
-    let expected_cost_f64: f64 = expected_cost.parse().unwrap();
-    assert!(
-        (parsed_cost - expected_cost_f64).abs() < 0.0001,
-        "Expected cost {expected_cost}, got {total_cost}"
-    );
-}
-
-database_test!(
-    test_get_user_usage_stats_success,
-    test_get_user_usage_stats_success_impl
-);
-
 async fn test_get_user_usage_with_filters_impl(server: &bedrock_sso_proxy::server::Server) {
     let (user_id, _) = setup_test_data(server.database.as_ref()).await;
 
@@ -371,45 +326,6 @@ database_test!(
     test_admin_get_system_usage_records,
     test_admin_get_system_usage_records_impl
 );
-
-async fn test_admin_get_top_models_impl(server: &bedrock_sso_proxy::server::Server) {
-    let (_user_id, admin_id) = setup_test_data(server.database.as_ref()).await;
-
-    let admin_token = create_test_token(
-        server.jwt_service.as_ref(),
-        "admin@admin.example.com",
-        true,
-        admin_id,
-    );
-    let app = create_test_router(server);
-
-    let request = Request::builder()
-        .method(Method::GET)
-        .uri("/admin/usage/top-models")
-        .header(AUTHORIZATION, format!("Bearer {admin_token}"))
-        .body(Body::empty())
-        .unwrap();
-
-    let response = app.oneshot(request).await.unwrap();
-    assert_eq!(response.status(), StatusCode::OK);
-
-    let body = axum::body::to_bytes(response.into_body(), usize::MAX)
-        .await
-        .unwrap();
-    let json: Value = serde_json::from_slice(&body).unwrap();
-
-    let models = json["models"].as_array().unwrap();
-    assert_eq!(models.len(), 3);
-
-    // Should be sorted by total tokens (descending)
-    assert_eq!(
-        models[0]["model_id"],
-        "anthropic.claude-3-haiku-20240307-v1:0"
-    );
-    assert_eq!(models[0]["total_tokens"], 275); // 200 + 75
-}
-
-database_test!(test_admin_get_top_models, test_admin_get_top_models_impl);
 
 async fn test_non_admin_access_denied_impl(server: &bedrock_sso_proxy::server::Server) {
     let (user1_id, _) = setup_test_data(server.database.as_ref()).await;
@@ -1142,4 +1058,541 @@ async fn test_empty_results_pagination_impl(server: &bedrock_sso_proxy::server::
 database_test!(
     test_empty_results_pagination,
     test_empty_results_pagination_impl
+);
+
+// Test user summaries endpoint
+async fn test_get_user_usage_summaries_success_impl(server: &bedrock_sso_proxy::server::Server) {
+    let (user_id, _) = setup_test_data(server.database.as_ref()).await;
+
+    // Create usage summaries for the user
+    let summaries = vec![
+        UsageSummary {
+            id: 0,
+            user_id,
+            model_id: "anthropic.claude-sonnet-4-20250514-v1:0".to_string(),
+            period_type: PeriodType::Daily,
+            period_start: Utc::now() - chrono::Duration::days(1),
+            period_end: Utc::now(),
+            total_requests: 10,
+            successful_requests: 9,
+            total_input_tokens: 1000,
+            total_output_tokens: 500,
+            total_tokens: 1500,
+            avg_response_time_ms: 250.0,
+            estimated_cost: Some(Decimal::new(150, 3)), // 0.150
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
+        },
+        UsageSummary {
+            id: 0,
+            user_id,
+            model_id: "anthropic.claude-3-haiku-20240307-v1:0".to_string(),
+            period_type: PeriodType::Daily,
+            period_start: Utc::now() - chrono::Duration::days(1),
+            period_end: Utc::now(),
+            total_requests: 5,
+            successful_requests: 5,
+            total_input_tokens: 500,
+            total_output_tokens: 250,
+            total_tokens: 750,
+            avg_response_time_ms: 200.0,
+            estimated_cost: Some(Decimal::new(75, 3)), // 0.075
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
+        },
+    ];
+
+    server
+        .database
+        .usage()
+        .upsert_many_summaries(&summaries)
+        .await
+        .unwrap();
+
+    let token = create_test_token(
+        server.jwt_service.as_ref(),
+        "user1@example.com",
+        false,
+        user_id,
+    );
+    let app = create_test_router(server);
+
+    let request = Request::builder()
+        .method(Method::GET)
+        .uri("/usage/summaries?period_type=daily&limit=10")
+        .header(AUTHORIZATION, format!("Bearer {token}"))
+        .body(Body::empty())
+        .unwrap();
+
+    let response = app.oneshot(request).await.unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    let json: Value = serde_json::from_slice(&body).unwrap();
+
+    assert!(json["summaries"].is_array());
+    let summaries_array = json["summaries"].as_array().unwrap();
+    assert_eq!(summaries_array.len(), 2);
+    assert_eq!(json["total"], 2);
+    assert_eq!(json["limit"], 10);
+    assert_eq!(json["offset"], 0);
+
+    // Verify summary data
+    let summary = &summaries_array[0];
+    assert_eq!(summary["user_id"], user_id);
+    assert_eq!(summary["period_type"], "daily");
+    assert!(summary["total_requests"].as_i64().unwrap() > 0);
+    assert!(summary["estimated_cost"].is_string());
+}
+
+database_test!(
+    test_get_user_usage_summaries_success,
+    test_get_user_usage_summaries_success_impl
+);
+
+// Test user summaries with model filter
+async fn test_get_user_usage_summaries_with_model_filter_impl(
+    server: &bedrock_sso_proxy::server::Server,
+) {
+    let (user_id, _) = setup_test_data(server.database.as_ref()).await;
+
+    // Create usage summaries for different models
+    let summaries = vec![
+        UsageSummary {
+            id: 0,
+            user_id,
+            model_id: "anthropic.claude-sonnet-4-20250514-v1:0".to_string(),
+            period_type: PeriodType::Daily,
+            period_start: Utc::now() - chrono::Duration::days(1),
+            period_end: Utc::now(),
+            total_requests: 10,
+            successful_requests: 9,
+            total_input_tokens: 1000,
+            total_output_tokens: 500,
+            total_tokens: 1500,
+            avg_response_time_ms: 250.0,
+            estimated_cost: Some(Decimal::new(150, 3)),
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
+        },
+        UsageSummary {
+            id: 0,
+            user_id,
+            model_id: "anthropic.claude-3-haiku-20240307-v1:0".to_string(),
+            period_type: PeriodType::Daily,
+            period_start: Utc::now() - chrono::Duration::days(1),
+            period_end: Utc::now(),
+            total_requests: 5,
+            successful_requests: 5,
+            total_input_tokens: 500,
+            total_output_tokens: 250,
+            total_tokens: 750,
+            avg_response_time_ms: 200.0,
+            estimated_cost: Some(Decimal::new(75, 3)),
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
+        },
+    ];
+
+    server
+        .database
+        .usage()
+        .upsert_many_summaries(&summaries)
+        .await
+        .unwrap();
+
+    let token = create_test_token(
+        server.jwt_service.as_ref(),
+        "user1@example.com",
+        false,
+        user_id,
+    );
+    let app = create_test_router(server);
+
+    // Test filtering by specific model
+    let request = Request::builder()
+        .method(Method::GET)
+        .uri("/usage/summaries?model_id=anthropic.claude-sonnet-4-20250514-v1:0")
+        .header(AUTHORIZATION, format!("Bearer {token}"))
+        .body(Body::empty())
+        .unwrap();
+
+    let response = app.oneshot(request).await.unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    let json: Value = serde_json::from_slice(&body).unwrap();
+
+    let summaries_array = json["summaries"].as_array().unwrap();
+    assert_eq!(summaries_array.len(), 1);
+    assert_eq!(json["total"], 1);
+
+    // Verify it's the correct model
+    assert_eq!(
+        summaries_array[0]["model_id"],
+        "anthropic.claude-sonnet-4-20250514-v1:0"
+    );
+}
+
+database_test!(
+    test_get_user_usage_summaries_with_model_filter,
+    test_get_user_usage_summaries_with_model_filter_impl
+);
+
+// Test admin summaries endpoint
+async fn test_admin_get_usage_summaries_success_impl(server: &bedrock_sso_proxy::server::Server) {
+    let (user1_id, admin_id) = setup_test_data(server.database.as_ref()).await;
+
+    // Create another user for system-wide data
+    let user2 = UserRecord {
+        id: 0,
+        provider: "google".to_string(),
+        provider_user_id: "test-user-2".to_string(),
+        email: "user2@example.com".to_string(),
+        display_name: Some("Test User 2".to_string()),
+        created_at: Utc::now(),
+        updated_at: Utc::now(),
+        last_login: Some(Utc::now()),
+    };
+    let user2_id = server.database.users().upsert(&user2).await.unwrap();
+
+    // Create usage summaries for multiple users
+    let summaries = vec![
+        UsageSummary {
+            id: 0,
+            user_id: user1_id,
+            model_id: "anthropic.claude-sonnet-4-20250514-v1:0".to_string(),
+            period_type: PeriodType::Daily,
+            period_start: Utc::now() - chrono::Duration::days(1),
+            period_end: Utc::now(),
+            total_requests: 10,
+            successful_requests: 9,
+            total_input_tokens: 1000,
+            total_output_tokens: 500,
+            total_tokens: 1500,
+            avg_response_time_ms: 250.0,
+            estimated_cost: Some(Decimal::new(150, 3)),
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
+        },
+        UsageSummary {
+            id: 0,
+            user_id: user2_id,
+            model_id: "anthropic.claude-3-haiku-20240307-v1:0".to_string(),
+            period_type: PeriodType::Daily,
+            period_start: Utc::now() - chrono::Duration::days(1),
+            period_end: Utc::now(),
+            total_requests: 5,
+            successful_requests: 5,
+            total_input_tokens: 500,
+            total_output_tokens: 250,
+            total_tokens: 750,
+            avg_response_time_ms: 200.0,
+            estimated_cost: Some(Decimal::new(75, 3)),
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
+        },
+    ];
+
+    server
+        .database
+        .usage()
+        .upsert_many_summaries(&summaries)
+        .await
+        .unwrap();
+
+    let admin_token = create_test_token(
+        server.jwt_service.as_ref(),
+        "admin@admin.example.com",
+        true,
+        admin_id,
+    );
+    let app = create_test_router(server);
+
+    let request = Request::builder()
+        .method(Method::GET)
+        .uri("/admin/usage/summaries?period_type=daily")
+        .header(AUTHORIZATION, format!("Bearer {admin_token}"))
+        .body(Body::empty())
+        .unwrap();
+
+    let response = app.oneshot(request).await.unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    let json: Value = serde_json::from_slice(&body).unwrap();
+
+    assert!(json["summaries"].is_array());
+    let summaries_array = json["summaries"].as_array().unwrap();
+    assert_eq!(summaries_array.len(), 2); // Both users' summaries
+    assert_eq!(json["total"], 2);
+
+    // Verify we get system-wide data (multiple users)
+    let user_ids: Vec<i64> = summaries_array
+        .iter()
+        .map(|s| s["user_id"].as_i64().unwrap())
+        .collect();
+    assert!(user_ids.contains(&(user1_id as i64)));
+    assert!(user_ids.contains(&(user2_id as i64)));
+}
+
+database_test!(
+    test_admin_get_usage_summaries_success,
+    test_admin_get_usage_summaries_success_impl
+);
+
+// Test non-admin cannot access admin summaries endpoint
+async fn test_non_admin_summaries_access_denied_impl(server: &bedrock_sso_proxy::server::Server) {
+    let (user1_id, _) = setup_test_data(server.database.as_ref()).await;
+
+    let user_token = create_test_token(
+        server.jwt_service.as_ref(),
+        "user1@example.com",
+        false,
+        user1_id,
+    );
+    let app = create_test_router(server);
+
+    // Test admin summaries endpoint access with non-admin token
+    let request = Request::builder()
+        .method(Method::GET)
+        .uri("/admin/usage/summaries")
+        .header(AUTHORIZATION, format!("Bearer {user_token}"))
+        .body(Body::empty())
+        .unwrap();
+
+    let response = app.oneshot(request).await.unwrap();
+    assert_eq!(response.status(), StatusCode::FORBIDDEN);
+}
+
+database_test!(
+    test_non_admin_summaries_access_denied,
+    test_non_admin_summaries_access_denied_impl
+);
+
+// Test summaries unauthorized access
+async fn test_summaries_unauthorized_access_impl(server: &bedrock_sso_proxy::server::Server) {
+    setup_test_data(server.database.as_ref()).await;
+
+    // Test without authorization header
+    let app1 = create_test_router(server);
+    let request = Request::builder()
+        .method(Method::GET)
+        .uri("/usage/summaries")
+        .body(Body::empty())
+        .unwrap();
+
+    let response = app1.oneshot(request).await.unwrap();
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+
+    // Test with invalid token
+    let app2 = create_test_router(server);
+    let request = Request::builder()
+        .method(Method::GET)
+        .uri("/usage/summaries")
+        .header(AUTHORIZATION, "Bearer invalid-token")
+        .body(Body::empty())
+        .unwrap();
+
+    let response = app2.oneshot(request).await.unwrap();
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+}
+
+database_test!(
+    test_summaries_unauthorized_access,
+    test_summaries_unauthorized_access_impl
+);
+
+// Test summaries pagination
+
+
+// Test summaries with different period types
+async fn test_summaries_period_type_filtering_impl(server: &bedrock_sso_proxy::server::Server) {
+    let (user_id, _) = setup_test_data(server.database.as_ref()).await;
+
+    // Create summaries with different period types
+    let summaries = vec![
+        UsageSummary {
+            id: 0,
+            user_id,
+            model_id: "test-model".to_string(),
+            period_type: PeriodType::Hourly,
+            period_start: Utc::now() - chrono::Duration::hours(1),
+            period_end: Utc::now(),
+            total_requests: 5,
+            successful_requests: 5,
+            total_input_tokens: 500,
+            total_output_tokens: 250,
+            total_tokens: 750,
+            avg_response_time_ms: 200.0,
+            estimated_cost: Some(Decimal::new(75, 3)),
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
+        },
+        UsageSummary {
+            id: 0,
+            user_id,
+            model_id: "test-model".to_string(),
+            period_type: PeriodType::Daily,
+            period_start: Utc::now() - chrono::Duration::days(1),
+            period_end: Utc::now(),
+            total_requests: 10,
+            successful_requests: 9,
+            total_input_tokens: 1000,
+            total_output_tokens: 500,
+            total_tokens: 1500,
+            avg_response_time_ms: 250.0,
+            estimated_cost: Some(Decimal::new(150, 3)),
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
+        },
+        UsageSummary {
+            id: 0,
+            user_id,
+            model_id: "test-model".to_string(),
+            period_type: PeriodType::Weekly,
+            period_start: Utc::now() - chrono::Duration::weeks(1),
+            period_end: Utc::now(),
+            total_requests: 50,
+            successful_requests: 45,
+            total_input_tokens: 5000,
+            total_output_tokens: 2500,
+            total_tokens: 7500,
+            avg_response_time_ms: 275.0,
+            estimated_cost: Some(Decimal::new(750, 3)),
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
+        },
+    ];
+
+    server
+        .database
+        .usage()
+        .upsert_many_summaries(&summaries)
+        .await
+        .unwrap();
+
+    let token = create_test_token(
+        server.jwt_service.as_ref(),
+        "user1@example.com",
+        false,
+        user_id,
+    );
+    let app = create_test_router(server);
+
+    // Test filtering by hourly period
+    let request = Request::builder()
+        .method(Method::GET)
+        .uri("/usage/summaries?period_type=hourly")
+        .header(AUTHORIZATION, format!("Bearer {token}"))
+        .body(Body::empty())
+        .unwrap();
+
+    let response = app.oneshot(request).await.unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    let json: Value = serde_json::from_slice(&body).unwrap();
+
+    let summaries_array = json["summaries"].as_array().unwrap();
+    assert_eq!(summaries_array.len(), 1);
+    assert_eq!(summaries_array[0]["period_type"], "hourly");
+    assert_eq!(summaries_array[0]["total_requests"], 5);
+
+    // Test filtering by weekly period
+    let app2 = create_test_router(server);
+    let request2 = Request::builder()
+        .method(Method::GET)
+        .uri("/usage/summaries?period_type=weekly")
+        .header(AUTHORIZATION, format!("Bearer {token}"))
+        .body(Body::empty())
+        .unwrap();
+
+    let response2 = app2.oneshot(request2).await.unwrap();
+    assert_eq!(response2.status(), StatusCode::OK);
+
+    let body2 = axum::body::to_bytes(response2.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    let json2: Value = serde_json::from_slice(&body2).unwrap();
+
+    let summaries_array2 = json2["summaries"].as_array().unwrap();
+    assert_eq!(summaries_array2.len(), 1);
+    assert_eq!(summaries_array2[0]["period_type"], "weekly");
+    assert_eq!(summaries_array2[0]["total_requests"], 50);
+
+    // Test invalid period type (should default to daily)
+    let app3 = create_test_router(server);
+    let request3 = Request::builder()
+        .method(Method::GET)
+        .uri("/usage/summaries?period_type=invalid")
+        .header(AUTHORIZATION, format!("Bearer {token}"))
+        .body(Body::empty())
+        .unwrap();
+
+    let response3 = app3.oneshot(request3).await.unwrap();
+    assert_eq!(response3.status(), StatusCode::OK);
+
+    let body3 = axum::body::to_bytes(response3.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    let json3: Value = serde_json::from_slice(&body3).unwrap();
+
+    // Should default to daily and return daily summary
+    let summaries_array3 = json3["summaries"].as_array().unwrap();
+    assert_eq!(summaries_array3.len(), 1);
+    assert_eq!(summaries_array3[0]["period_type"], "daily");
+}
+
+database_test!(
+    test_summaries_period_type_filtering,
+    test_summaries_period_type_filtering_impl
+);
+
+// Test empty summaries results
+async fn test_empty_summaries_results_impl(server: &bedrock_sso_proxy::server::Server) {
+    let (user_id, _) = setup_test_data(server.database.as_ref()).await;
+
+    let token = create_test_token(
+        server.jwt_service.as_ref(),
+        "user1@example.com",
+        false,
+        user_id,
+    );
+    let app = create_test_router(server);
+
+    // Test with filter that matches no summaries
+    let request = Request::builder()
+        .method(Method::GET)
+        .uri("/usage/summaries?model_id=nonexistent-model")
+        .header(AUTHORIZATION, format!("Bearer {token}"))
+        .body(Body::empty())
+        .unwrap();
+
+    let response = app.oneshot(request).await.unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    let json: Value = serde_json::from_slice(&body).unwrap();
+
+    // Should return 0 summaries and total should be 0
+    assert_eq!(json["summaries"].as_array().unwrap().len(), 0);
+    assert_eq!(json["total"], 0);
+    assert_eq!(json["limit"], 1000); // Default limit
+    assert_eq!(json["offset"], 0);
+}
+
+database_test!(
+    test_empty_summaries_results,
+    test_empty_summaries_results_impl
 );
