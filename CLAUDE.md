@@ -678,6 +678,179 @@ cargo run --bin bedrock_proxy -- migrate up
     ```
 - If you need to run a test server, you must ask user to do it, you can not spawn background process.
 
+## Deployment
+
+### Docker
+
+**Quick Start with Docker:**
+
+```bash
+# Build the image
+docker build -t bedrock-sso-proxy .
+
+# Run with minimal configuration
+docker run -p 3000:3000 \
+  -e BEDROCK_JWT__SECRET=your-super-secret-jwt-key \
+  -e BEDROCK_AWS__REGION=us-east-1 \
+  -v ./data:/app/data \
+  bedrock-sso-proxy
+```
+
+**Using Docker Compose (Recommended):**
+
+```bash
+# Development with PostgreSQL and Redis
+docker-compose up
+
+# Production deployment with Traefik
+docker-compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+
+# View logs
+docker-compose logs -f bedrock-proxy
+
+# Check database connection
+docker-compose exec postgres psql -U bedrock -d bedrock_sso -c "\l"
+```
+
+### Kubernetes
+
+**Deploy to Kubernetes:**
+
+```bash
+# Create namespace
+kubectl create namespace bedrock-sso-proxy
+
+# Apply all manifests
+kubectl apply -f k8s/ -n bedrock-sso-proxy
+
+# Check deployment status
+kubectl get pods -n bedrock-sso-proxy
+kubectl get services -n bedrock-sso-proxy
+
+# View logs
+kubectl logs -f deployment/bedrock-sso-proxy -n bedrock-sso-proxy
+```
+
+**Required Configuration:**
+
+Before deploying, update the following files:
+
+1. **`k8s/secrets.yaml`** - Add your actual secrets (base64 encoded):
+   ```bash
+   echo -n "your-jwt-secret" | base64
+   echo -n "your-aws-access-key" | base64
+   ```
+
+2. **`k8s/ingress.yaml`** - Update the hostname:
+   ```yaml
+   - host: your-domain.com  # Replace with your actual domain
+   ```
+
+3. **`k8s/configmap.yaml`** - Update AWS region and other settings as needed
+
+### Environment Variables
+
+**Production Environment Variables:**
+
+```bash
+# Required
+export BEDROCK_JWT__SECRET=your-super-secret-jwt-key-change-this
+export AWS_ACCESS_KEY_ID=your-aws-access-key
+export AWS_SECRET_ACCESS_KEY=your-aws-secret-key
+
+# Optional but recommended
+export BEDROCK_AWS__REGION=us-east-1
+export BEDROCK_CACHE__BACKEND=redis
+export BEDROCK_CACHE__REDIS_URL=redis://redis:6379
+export BEDROCK_DATABASE__URL=postgres://user:pass@postgres:5432/bedrock_sso
+export BEDROCK_METRICS__ENABLED=true
+export BEDROCK_JOBS__ENABLED=true
+```
+
+### CI/CD Pipeline
+
+The project includes GitHub Actions workflows:
+
+- **`ci.yml`**: Runs on every push/PR with full test suite
+- **`release.yml`**: Builds and publishes Docker images on releases
+
+**Creating a Release:**
+
+```bash
+# Tag and push
+git tag v1.0.0
+git push origin v1.0.0
+
+# Or create release via GitHub UI
+# This triggers automatic Docker image build and push to ghcr.io
+```
+
+**Using Pre-built Images:**
+
+```bash
+# Pull latest image
+docker pull ghcr.io/bearice/bedrock_sso_proxy:latest
+
+# Or specific version
+docker pull ghcr.io/bearice/bedrock_sso_proxy:v1.0.0
+```
+
+### Production Checklist
+
+**Security:**
+- [ ] Change default JWT secret (`BEDROCK_JWT__SECRET`)
+- [ ] Use proper AWS credentials (IAM roles recommended)
+- [ ] Enable HTTPS/TLS termination
+- [ ] Configure proper CORS settings
+- [ ] Review and set appropriate timeouts
+
+**Performance:**
+- [ ] Use Redis for caching in production
+- [ ] Configure database connection pooling
+- [ ] Set up proper resource limits (CPU/memory)
+- [ ] Enable metrics collection
+- [ ] Configure log aggregation
+
+**Monitoring:**
+- [ ] Set up health check endpoints (`/health`)
+- [ ] Configure Prometheus metrics scraping (port 9090)
+- [ ] Set up alerting for service failures
+- [ ] Monitor disk usage for SQLite databases
+- [ ] Configure log rotation
+
+**Backup:**
+- [ ] Regular database backups
+- [ ] Backup encryption keys and secrets
+- [ ] Test disaster recovery procedures
+
+### Troubleshooting
+
+**Common Issues:**
+
+1. **JWT Secret Error**: Ensure `BEDROCK_JWT__SECRET` is set and not the default value
+2. **AWS Credentials**: Check AWS credential chain and permissions
+3. **Database Connection**: Verify database URL and connectivity
+4. **Redis Connection**: Ensure Redis is running and accessible
+5. **Port Conflicts**: Check if ports 3000/9090 are available
+
+**Debug Commands:**
+
+```bash
+# Check container logs
+docker logs bedrock-sso-proxy
+
+# Check health endpoint
+curl http://localhost:3000/health
+
+# Check metrics
+curl http://localhost:3000:9090/metrics
+
+# Test JWT token generation (development only)
+curl -X POST http://localhost:3000/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"username":"test","password":"test"}'
+```
+
 ## Testing Memories
 
 - If you need to run tests in `/test`, remember to use `cargo test --test ***_integration_tests` not `cargo test ***_integration_tests`

@@ -1,0 +1,66 @@
+# Rust build artifacts
+target/
+
+# Database files
+data/
+*.db
+*.db-*
+
+# Logs
+*.log
+
+# Environment files
+.env
+.env.local
+.env.production
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Git
+.git/
+.gitignore
+
+# Documentation
+*.md
+docs/
+
+# CI/CD
+.github/
+
+# Node modules (will be installed in build stage)
+frontend/node_modules/
+frontend/dist/
+
+# Test files
+tests/
+**/*_test.rs
+**/*_tests.rs
+
+# Development tools
+.cargo/
+rust-toolchain.toml
+
+# Docker files
+Dockerfile*
+docker-compose*.yml
+.dockerignore
+
+# Kubernetes
+k8s/
+
+# Temporary files
+tmp/
+temp/

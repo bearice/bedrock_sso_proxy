@@ -1,0 +1,64 @@
+version: '3.8'
+
+services:
+  bedrock-proxy:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: rust-builder  # Stop at build stage for development
+      args:
+        - BUILDKIT_INLINE_CACHE=1
+    command: cargo run --bin bedrock_proxy
+    ports:
+      - "3000:3000"
+      - "9090:9090"  # Metrics port
+    environment:
+      - BEDROCK_DATABASE__URL=postgres://bedrock:bedrock_password@postgres:5432/bedrock_sso
+      - BEDROCK_CACHE__BACKEND=redis
+      - BEDROCK_CACHE__REDIS_URL=redis://redis:6379
+    volumes:
+      - .:/app
+    working_dir: /app
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  postgres:
+    image: postgres:15-alpine
+    environment:
+      - POSTGRES_DB=bedrock_sso
+      - POSTGRES_USER=bedrock
+      - POSTGRES_PASSWORD=bedrock_password
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U bedrock -d bedrock_sso"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  redis-data:
+  postgres-data:
