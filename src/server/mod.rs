@@ -17,7 +17,7 @@ use crate::{
     metrics,
     model_service::{ModelService, ModelServiceImpl},
     routes::{
-        self, create_admin_api_routes, create_anthropic_routes, create_auth_routes, create_bedrock_routes, create_frontend_router, create_health_routes, create_protected_auth_routes, create_user_api_routes
+        self, create_admin_api_routes, create_anthropic_routes, create_auth_routes, create_bedrock_routes, create_frontend_router, create_graphql_routes, create_graphql_playground_routes, create_health_routes, create_protected_auth_routes, create_user_api_routes
     },
     server::route_builder::middleware_factories::request_response_logger,
     shutdown::{ShutdownCoordinator, ShutdownManager, StreamingConnectionManager},
@@ -49,6 +49,7 @@ pub struct Server {
     pub shutdown_coordinator: Arc<ShutdownCoordinator>,
     pub cost_service: Arc<crate::cost::CostTrackingService>,
     pub job_scheduler: Arc<tokio::sync::RwLock<JobScheduler>>,
+    pub graphql_schema: Option<Arc<crate::graphql::schema::AppSchema>>,
 }
 
 impl Server {
@@ -144,6 +145,9 @@ impl Server {
         ));
 
         let config = Arc::new(config);
+        // Initialize GraphQL schema
+        let graphql_schema = Arc::new(crate::graphql::schema::create_schema());
+
         Ok(Self {
             config,
             jwt_service,
@@ -156,6 +160,7 @@ impl Server {
             shutdown_coordinator,
             cost_service,
             job_scheduler,
+            graphql_schema: Some(graphql_schema),
         })
     }
 
@@ -278,6 +283,10 @@ impl Server {
             // API routes
             .nest("/api", self.user_api_routes())
             .nest("/api", self.admin_api_routes())
+            // GraphQL routes (protected)
+            .merge(self.graphql_routes())
+            // GraphQL playground (public)
+            .merge(create_graphql_playground_routes())
             // Model API routes
             .nest("/bedrock", self.bedrock_routes())
             .nest("/anthropic", self.anthropic_routes())
@@ -320,6 +329,14 @@ impl Server {
                 self.clone(),
                 admin_middleware,
             ))
+    }
+
+    /// Helper method for GraphQL routes
+    fn graphql_routes(&self) -> Router<Server> {
+        create_graphql_routes().layer(middleware::from_fn_with_state(
+            self.clone(),
+            jwt_auth_middleware,
+        ))
     }
 
     /// Helper method for bedrock routes

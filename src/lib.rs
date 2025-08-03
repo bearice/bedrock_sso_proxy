@@ -7,6 +7,7 @@ pub mod config;
 pub mod cost;
 pub mod database;
 pub mod error;
+pub mod graphql;
 pub mod health;
 pub mod jobs;
 pub mod metrics;

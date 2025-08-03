@@ -6,6 +6,7 @@ pub mod usage_records;
 pub mod usage_summaries;
 pub mod users;
 
+use async_graphql::Enum;
 use chrono::{DateTime, Datelike, Duration, DurationRound, Utc};
 use sea_orm::entity::prelude::*;
 use sea_orm::sea_query::StringLen;
@@ -13,7 +14,7 @@ use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 
 /// Period types for usage aggregation
-#[derive(Debug, Clone, Copy, PartialEq, Eq, EnumIter, DeriveActiveEnum, Serialize, Deserialize, ToSchema)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, EnumIter, DeriveActiveEnum, Serialize, Deserialize, ToSchema, Enum)]
 #[sea_orm(rs_type = "String", db_type = "String(StringLen::N(16))")]
 pub enum PeriodType {
     #[sea_orm(string_value = "hourly")]

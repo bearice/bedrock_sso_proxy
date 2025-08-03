@@ -197,6 +197,7 @@ impl TestServerBuilder {
             shutdown_coordinator,
             cost_service,
             job_scheduler,
+            graphql_schema: Some(Arc::new(crate::graphql::schema::create_schema())),
         })
     }
 }

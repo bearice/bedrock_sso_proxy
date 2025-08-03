@@ -1,6 +1,8 @@
 use crate::cache::object::typed_cache;
+
+use async_graphql::{ComplexObject, Context, Result as GraphQLResult, SimpleObject};
 use chrono::{DateTime, Utc};
-use rand::{Rng, distr::Alphanumeric};
+use rand::{distr::Alphanumeric, Rng};
 use sea_orm::entity::prelude::*;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -12,7 +14,9 @@ pub const API_KEY_PREFIX: &str = "SSOK_";
 /// API key length after prefix (32 alphanumeric characters)
 pub const API_KEY_LENGTH: usize = 32;
 
-#[derive(Clone, Debug, PartialEq, DeriveEntityModel, Eq, Serialize, Deserialize, ToSchema)]
+#[derive(Clone, Debug, PartialEq, DeriveEntityModel, Eq, Serialize, Deserialize, ToSchema, SimpleObject)]
+#[graphql(complex)]
+#[graphql(name = "ApiKey")]
 #[sea_orm(table_name = "api_keys")]
 #[typed_cache(ttl = 300)] // 5 minutes
 pub struct Model {
@@ -136,6 +140,36 @@ pub fn validate_api_key_format(
     }
 
     Ok(())
+}
+
+#[ComplexObject]
+impl Model {
+    /// Get key hash - only accessible to the key owner or admins
+    async fn secure_key_hash(&self, ctx: &Context<'_>) -> GraphQLResult<Option<String>> {
+        if let Ok(user_context) = ctx.data::<crate::graphql::UserContext>() {
+            if user_context.user_id == self.user_id || user_context.is_admin {
+                return Ok(Some(self.key_hash.clone()));
+            }
+        }
+        Ok(None)
+    }
+
+    /// Check if this key is valid (not expired, not revoked)
+    async fn is_key_valid(&self) -> bool {
+        self.is_valid()
+    }
+
+    /// Get user who owns this key - only accessible to the key owner or admins
+    async fn owner(&self, ctx: &Context<'_>) -> GraphQLResult<Option<crate::database::entities::UserRecord>> {
+        if let Ok(user_context) = ctx.data::<crate::graphql::UserContext>() {
+            if user_context.user_id == self.user_id || user_context.is_admin {
+                // In a real implementation, you'd fetch the user from database
+                // For now, we'll return None to avoid circular dependencies
+                return Ok(None);
+            }
+        }
+        Ok(None)
+    }
 }
 
 #[cfg(test)]

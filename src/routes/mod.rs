@@ -6,6 +6,7 @@ pub mod bedrock;
 pub mod cost;
 pub mod docs;
 pub mod frontend;
+pub mod graphql;
 pub mod health;
 pub mod usage;
 
@@ -17,6 +18,7 @@ pub use bedrock::create_bedrock_routes;
 pub use cost::create_admin_cost_routes;
 pub use docs::create_docs_routes;
 pub use frontend::create_frontend_router;
+pub use graphql::{create_graphql_routes, create_graphql_playground_routes};
 pub use health::create_health_routes;
 pub use usage::{create_admin_usage_routes, create_user_usage_routes};
 

@@ -1,12 +1,15 @@
 use crate::cache::object::typed_cache;
 
+use async_graphql::{ComplexObject, Context, Result as GraphQLResult, SimpleObject};
 use chrono::{DateTime, Utc};
 use rust_decimal::Decimal;
 use sea_orm::entity::prelude::*;
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 
-#[derive(Clone, Debug, PartialEq, DeriveEntityModel, Serialize, Deserialize, ToSchema)]
+#[derive(Clone, Debug, PartialEq, DeriveEntityModel, Serialize, Deserialize, ToSchema, SimpleObject)]
+#[graphql(complex)]
+#[graphql(name = "UsageRecord")]
 #[sea_orm(table_name = "usage_records")]
 #[typed_cache(ttl = 300)] // 5 minutes
 pub struct Model {
@@ -32,3 +35,26 @@ pub struct Model {
 pub enum Relation {}
 
 impl ActiveModelBehavior for ActiveModel {}
+
+#[ComplexObject]
+impl Model {
+    /// Get cost information - only accessible to the record owner or admins
+    async fn secure_cost_usd(&self, ctx: &Context<'_>) -> GraphQLResult<Option<Decimal>> {
+        if let Ok(user_context) = ctx.data::<crate::graphql::UserContext>() {
+            if user_context.user_id == self.user_id || user_context.is_admin {
+                return Ok(self.cost_usd);
+            }
+        }
+        Ok(None)
+    }
+
+    /// Get error message - only accessible to the record owner or admins
+    async fn secure_error_message(&self, ctx: &Context<'_>) -> GraphQLResult<Option<String>> {
+        if let Ok(user_context) = ctx.data::<crate::graphql::UserContext>() {
+            if user_context.user_id == self.user_id || user_context.is_admin {
+                return Ok(self.error_message.clone());
+            }
+        }
+        Ok(None)
+    }
+}
