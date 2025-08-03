@@ -114,7 +114,7 @@ export function UsageTracking() {
     } finally {
       setIsExporting(false);
     }
-  }, [token, filters.start_date, filters.end_date, filters.model, filters.success_only]);
+  }, [token, filters.start_date, filters.end_date, filters.model, filters.success_only, totalCount]);
 
   // Handle filter changes
   const handleFiltersChange = useCallback((newFilters: UsageQuery) => {
@@ -224,10 +224,10 @@ export function UsageTracking() {
       />
 
       {/* Usage Summary Charts */}
-      <UsageSummaryCharts 
+      <UsageSummaryCharts
         summaries={summaries}
-        isLoading={isLoadingSummaries} 
-        error={summariesError} 
+        isLoading={isLoadingSummaries}
+        error={summariesError}
       />
 
       {/* Usage Records */}
@@ -242,7 +242,7 @@ export function UsageTracking() {
       />
 
       {/* Debug Info (development only) */}
-      { (
+      {
         <details
           style={{
             marginTop: '2rem',
@@ -258,14 +258,15 @@ export function UsageTracking() {
               <strong>Current Filters:</strong> {JSON.stringify(filters, null, 2)}
             </div>
             <div>
-              <strong>Loading States:</strong> Summaries: {isLoadingSummaries.toString()}, Records: {isLoadingRecords.toString()}
+              <strong>Loading States:</strong> Summaries: {isLoadingSummaries.toString()}, Records:{' '}
+              {isLoadingRecords.toString()}
             </div>
             <div>
               <strong>Records Count:</strong> {records.length} loaded, {totalCount} total
             </div>
           </div>
         </details>
-      )}
+      }
     </div>
   );
 }
