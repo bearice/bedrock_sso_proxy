@@ -30,7 +30,10 @@ fn build_frontend() {
 
     // Check if this is a test or check command via args
     let args: Vec<String> = std::env::args().collect();
-    if args.iter().any(|arg| arg == "test" || arg == "check" || arg == "clippy") {
+    if args
+        .iter()
+        .any(|arg| arg == "test" || arg == "check" || arg == "clippy")
+    {
         println!("cargo:info=Skipping frontend build for test/check/clippy command");
         return;
     }
@@ -108,4 +111,3 @@ fn build_frontend() {
         }
     }
 }
-

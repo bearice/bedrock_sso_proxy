@@ -114,7 +114,14 @@ export function UsageTracking() {
     } finally {
       setIsExporting(false);
     }
-  }, [token, filters.start_date, filters.end_date, filters.model, filters.success_only, totalCount]);
+  }, [
+    token,
+    filters.start_date,
+    filters.end_date,
+    filters.model,
+    filters.success_only,
+    totalCount,
+  ]);
 
   // Handle filter changes
   const handleFiltersChange = useCallback((newFilters: UsageQuery) => {
