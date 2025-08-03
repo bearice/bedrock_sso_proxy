@@ -9,19 +9,32 @@ const NPM_CMD: &str = "npm";
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     build_frontend();
-    embed_csv_modified_time();
 
     // Tell cargo to re-run this build script if files change
     println!("cargo:rerun-if-changed=frontend/src");
     println!("cargo:rerun-if-changed=frontend/package.json");
     println!("cargo:rerun-if-changed=frontend/vite.config.ts");
     println!("cargo:rerun-if-changed=build.rs");
-    println!("cargo:rerun-if-changed=bedrock_pricing.csv");
 
     Ok(())
 }
 
 fn build_frontend() {
+    // Skip frontend build for test/check commands
+    if let Ok(cargo_cmd) = std::env::var("CARGO_MAKE_TASK") {
+        if cargo_cmd.contains("test") || cargo_cmd.contains("check") {
+            println!("cargo:info=Skipping frontend build for {cargo_cmd} command");
+            return;
+        }
+    }
+
+    // Check if this is a test or check command via args
+    let args: Vec<String> = std::env::args().collect();
+    if args.iter().any(|arg| arg == "test" || arg == "check" || arg == "clippy") {
+        println!("cargo:info=Skipping frontend build for test/check/clippy command");
+        return;
+    }
+
     let frontend_dir = Path::new("frontend");
 
     if !frontend_dir.exists() {
@@ -96,23 +109,3 @@ fn build_frontend() {
     }
 }
 
-fn embed_csv_modified_time() {
-    let csv_path = Path::new("bedrock_pricing.csv");
-
-    if let Ok(metadata) = std::fs::metadata(csv_path) {
-        if let Ok(modified) = metadata.modified() {
-            // Convert to Unix timestamp
-            let timestamp = modified
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
-                .as_secs();
-
-            println!("cargo:rustc-env=BEDROCK_CSV_MODIFIED_TIME={timestamp}");
-            println!("cargo:info=Embedded CSV modification time: {timestamp}");
-        } else {
-            println!("cargo:warning=Could not get CSV modification time, using current time");
-        }
-    } else {
-        println!("cargo:warning=bedrock_pricing.csv not found, using current time");
-    }
-}
