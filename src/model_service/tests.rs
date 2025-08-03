@@ -204,6 +204,75 @@ async fn test_track_usage() {
     assert_eq!(paginated_records.records[0].model_id, "test-model");
 }
 
+#[tokio::test]
+async fn test_failed_request_tracking() {
+    let server = TestServerBuilder::new().build().await;
+    let database = server.database.clone();
+
+    // Create a test user first (using same pattern as other tests)
+    let user_record = UserRecord {
+        id: 0,
+        provider_user_id: "test-user".to_string(),
+        provider: "google".to_string(),
+        email: "test@example.com".to_string(),
+        display_name: Some("Test User".to_string()),
+        created_at: chrono::Utc::now(),
+        updated_at: chrono::Utc::now(),
+        last_login: Some(chrono::Utc::now()),
+    };
+    let user_id = database.users().upsert(&user_record).await.unwrap();
+
+    // Create model service using the same pattern as other tests
+    let config = create_test_config();
+    let bedrock = Arc::new(BedrockRuntimeImpl::new_test().await);
+    let model_service = ModelServiceImpl::new(bedrock, database.clone(), config);
+
+    // Create a request
+    let request = ModelRequest {
+        request_id: RequestId::new(),
+        user_id,
+        model_id: "test-model".to_string(),
+        body: b"test request".to_vec(),
+        headers: axum::http::HeaderMap::new(),
+        endpoint_type: "bedrock".to_string(),
+    };
+
+    // Test create_failed_usage_metadata method
+    let failed_usage_metadata = model_service.create_failed_usage_metadata(&request, 500);
+
+    // Verify metadata structure for failed requests
+    assert_eq!(failed_usage_metadata.input_tokens, 0);
+    assert_eq!(failed_usage_metadata.output_tokens, 0);
+    assert_eq!(failed_usage_metadata.cache_write_tokens, None);
+    assert_eq!(failed_usage_metadata.cache_read_tokens, None);
+    assert_eq!(failed_usage_metadata.response_time_ms, 500);
+    assert_eq!(failed_usage_metadata.region, "us-east-1");
+
+    // Track the failed usage
+    model_service
+        .track_usage(&request, &failed_usage_metadata)
+        .await
+        .unwrap();
+
+    // Verify usage was recorded for failed request
+    let paginated_records = database
+        .usage()
+        .get_records(&UsageQuery {
+            user_id: Some(user_id),
+            ..Default::default()
+        })
+        .await
+        .unwrap();
+
+    assert_eq!(paginated_records.records.len(), 1);
+    let record = &paginated_records.records[0];
+    assert_eq!(record.input_tokens, 0);
+    assert_eq!(record.output_tokens, 0);
+    assert_eq!(record.model_id, "test-model");
+    assert_eq!(record.response_time_ms, 500);
+    assert_eq!(record.region, "us-east-1");
+}
+
 #[test]
 fn test_event_stream_parser() {
     let mut parser = EventStreamParser::new();

@@ -123,6 +123,22 @@ impl ModelServiceImpl {
         task_id
     }
 
+    /// Create usage metadata for failed requests (0 tokens, but track the attempt)
+    fn create_failed_usage_metadata(
+        &self,
+        _request: &ModelRequest,
+        response_time_ms: i32,
+    ) -> UsageMetadata {
+        UsageMetadata {
+            input_tokens: 0,
+            output_tokens: 0,
+            cache_write_tokens: None,
+            cache_read_tokens: None,
+            response_time_ms,
+            region: self.config.aws.region.clone(),
+        }
+    }
+
     /// Extract usage metadata from AWS response body and headers
     fn extract_usage_metadata(
         &self,
@@ -147,8 +163,8 @@ impl ModelService for ModelServiceImpl {
     async fn invoke_model(&self, request: ModelRequest) -> Result<ModelResponse, AppError> {
         let start_time = Instant::now();
 
-        // 1. Make AWS API call
-        let aws_response = self
+        // 1. Make AWS API call and handle both success and error cases for usage tracking
+        match self
             .bedrock
             .invoke_model(
                 &request.model_id,
@@ -159,30 +175,48 @@ impl ModelService for ModelServiceImpl {
                 request.headers.get("accept").and_then(|h| h.to_str().ok()),
                 request.body.clone(),
             )
-            .await?;
+            .await
+        {
+            Ok(aws_response) => {
+                let response_time_ms = start_time.elapsed().as_millis() as i32;
 
-        let response_time_ms = start_time.elapsed().as_millis() as i32;
+                // 2. Extract usage metadata from successful AWS response
+                let usage_metadata = self.extract_usage_metadata(
+                    &aws_response.headers,
+                    &aws_response.body,
+                    response_time_ms,
+                )?;
 
-        // 2. Extract usage metadata from AWS response
-        let usage_metadata = self.extract_usage_metadata(
-            &aws_response.headers,
-            &aws_response.body,
-            response_time_ms,
-        )?;
+                let response = ModelResponse {
+                    status: aws_response.status,
+                    headers: aws_response.headers.clone(),
+                    body: aws_response.body,
+                    usage_metadata: Some(usage_metadata.clone()),
+                };
 
-        let response = ModelResponse {
-            status: aws_response.status,
-            headers: aws_response.headers.clone(),
-            body: aws_response.body,
-            usage_metadata: Some(usage_metadata.clone()),
-        };
+                // 3. Track usage for successful request
+                if let Err(e) = self.track_usage(&request, &usage_metadata).await {
+                    tracing::warn!("Failed to track usage for successful request: {}", e);
+                }
 
-        // 3. Track usage automatically (internal call)
-        if let Err(e) = self.track_usage(&request, &usage_metadata).await {
-            tracing::warn!("Failed to track usage: {}", e);
+                Ok(response)
+            }
+            Err(aws_error) => {
+                let response_time_ms = start_time.elapsed().as_millis() as i32;
+
+                // 2. Create usage metadata for failed request (0 tokens, but track the attempt)
+                let failed_usage_metadata =
+                    self.create_failed_usage_metadata(&request, response_time_ms);
+
+                // 3. Track usage for failed request
+                if let Err(e) = self.track_usage(&request, &failed_usage_metadata).await {
+                    tracing::warn!("Failed to track usage for failed request: {}", e);
+                }
+
+                // 4. Return the original error
+                Err(aws_error)
+            }
         }
-
-        Ok(response)
     }
 
     /// Streaming model invocation with automatic usage tracking
@@ -192,8 +226,8 @@ impl ModelService for ModelServiceImpl {
     ) -> Result<ModelStreamResponse, AppError> {
         let start_time = Instant::now();
 
-        // 1. Make AWS streaming API call
-        let aws_response = self
+        // 1. Make AWS streaming API call and handle both success and error cases for usage tracking
+        let aws_response = match self
             .bedrock
             .invoke_model_with_response_stream(
                 &request.model_id,
@@ -205,7 +239,25 @@ impl ModelService for ModelServiceImpl {
                 request.headers.get("accept").and_then(|h| h.to_str().ok()),
                 request.body.clone(),
             )
-            .await?;
+            .await
+        {
+            Ok(response) => response,
+            Err(aws_error) => {
+                let response_time_ms = start_time.elapsed().as_millis() as i32;
+
+                // Create usage metadata for failed streaming request
+                let failed_usage_metadata =
+                    self.create_failed_usage_metadata(&request, response_time_ms);
+
+                // Track usage for failed streaming request
+                if let Err(e) = self.track_usage(&request, &failed_usage_metadata).await {
+                    tracing::warn!("Failed to track usage for failed streaming request: {}", e);
+                }
+
+                // Return the original error
+                return Err(aws_error);
+            }
+        };
 
         // 2. Extract fields needed for registration before moving request
         let user_id = request.user_id;
