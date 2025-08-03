@@ -3,7 +3,7 @@ pub mod route_builder;
 
 use crate::{
     auth::{
-        jwt::{parse_algorithm, JwtService, JwtServiceImpl},
+        jwt::{JwtService, JwtServiceImpl, parse_algorithm},
         middleware::{admin_middleware, auth_middleware, jwt_auth_middleware},
         oauth::OAuthService,
     },
@@ -17,7 +17,9 @@ use crate::{
     metrics,
     model_service::{ModelService, ModelServiceImpl},
     routes::{
-        self, create_admin_api_routes, create_anthropic_routes, create_auth_routes, create_bedrock_routes, create_frontend_router, create_health_routes, create_protected_auth_routes, create_user_api_routes
+        self, create_admin_api_routes, create_anthropic_routes, create_auth_routes,
+        create_bedrock_routes, create_frontend_router, create_health_routes,
+        create_protected_auth_routes, create_user_api_routes,
     },
     server::route_builder::middleware_factories::request_response_logger,
     shutdown::{ShutdownCoordinator, ShutdownManager, StreamingConnectionManager},

@@ -169,7 +169,7 @@ impl DataGenerator {
     }
 
     async fn generate_users(&mut self, count: usize) -> Result<(), Box<dyn std::error::Error>> {
-        println!("Generating {} test users...", count);
+        println!("Generating {count} test users...");
 
         let providers = ["google", "github", "microsoft", "gitlab"];
         let domains = ["example.com", "test.org", "demo.net", "sample.io"];
@@ -181,7 +181,7 @@ impl DataGenerator {
 
         for i in 0..count {
             if i % 10 == 0 {
-                println!("Generated {} / {} users", i, count);
+                println!("Generated {i} / {count} users");
             }
 
             let provider = providers.choose(&mut self.rng).unwrap();
@@ -189,9 +189,9 @@ impl DataGenerator {
             let name = names.choose(&mut self.rng).unwrap();
 
             let user_id = self.rng.random_range(100000..999999);
-            let provider_user_id = format!("test_{}", user_id);
+            let provider_user_id = format!("test_{user_id}");
             let email = format!("{}{}@{}", name.to_lowercase(), user_id, domain);
-            let display_name = format!("{} Test{}", name, user_id);
+            let display_name = format!("{name} Test{user_id}");
 
             let now = Utc::now();
             let created_at = now - Duration::days(self.rng.random_range(1..365) as i64);
@@ -214,7 +214,7 @@ impl DataGenerator {
             self.database.users().upsert(&user).await?;
         }
 
-        println!("Successfully generated {} test users", count);
+        println!("Successfully generated {count} test users");
 
         // Update our internal users list
         self.users = Self::get_all_users_from_db(&self.database).await?;
@@ -262,7 +262,7 @@ impl DataGenerator {
 
         for i in 0..count {
             if i % 100 == 0 {
-                println!("Generated {} / {} records", i, count);
+                println!("Generated {i} / {count} records");
             }
 
             // Generate random timestamp within the range
@@ -351,7 +351,7 @@ impl DataGenerator {
             self.database.usage().store_record(&record).await?;
         }
 
-        println!("Successfully generated {} usage records", count);
+        println!("Successfully generated {count} usage records");
         Ok(())
     }
 
@@ -442,7 +442,7 @@ impl DataGenerator {
             current_time = period_end;
         }
 
-        println!("Successfully generated {} usage summaries", summary_count);
+        println!("Successfully generated {summary_count} usage summaries");
         Ok(())
     }
 
@@ -458,7 +458,7 @@ impl DataGenerator {
         };
 
         if !force {
-            println!("This will delete {}. Are you sure? (y/N)", what_to_clear);
+            println!("This will delete {what_to_clear}. Are you sure? (y/N)");
             let mut input = String::new();
             std::io::stdin().read_line(&mut input)?;
             if input.trim().to_lowercase() != "y" {
@@ -467,7 +467,7 @@ impl DataGenerator {
             }
         }
 
-        println!("Clearing {}...", what_to_clear);
+        println!("Clearing {what_to_clear}...");
 
         // Clear records and summaries using direct SeaORM operations
         use bedrock_sso_proxy::database::entities::users;
@@ -607,7 +607,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
             // Generate users first if none exist
             if generator.users.is_empty() {
-                println!("No users found. Generating {} test users first...", users);
+                println!("No users found. Generating {users} test users first...");
                 generator.generate_users(users).await?;
             }
 

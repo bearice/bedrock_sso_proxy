@@ -7,13 +7,13 @@ use crate::{
     error::AppError,
     routes::ApiErrorResponse,
 };
+use axum::http::header;
 use axum::{
     Router,
     extract::{Query, State},
     response::{IntoResponse, Json},
     routing::get,
 };
-use axum::http::header;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use utoipa::{IntoParams, ToSchema};
@@ -107,10 +107,10 @@ async fn handle_usage_records(
 ) -> Result<impl IntoResponse, AppError> {
     let limit = params.limit.unwrap_or(50).min(500);
     let offset = params.offset.unwrap_or(0);
-    
+
     // Use override (for user endpoints) or query param (for admin endpoints)
     let user_id = user_id_override.or(params.user_id);
-    
+
     let query = UsageQuery {
         user_id,
         model_id: params.model.clone(),
@@ -121,9 +121,9 @@ async fn handle_usage_records(
         offset: Some(offset),
         ..Default::default()
     };
-    
+
     let paginated_records = server.database.usage().get_records(&query).await?;
-    
+
     if params.format.as_deref() == Some("csv") {
         let mut wtr = csv::WriterBuilder::new().from_writer(vec![]);
 
@@ -195,10 +195,10 @@ async fn handle_usage_summaries(
 ) -> Result<Json<UsageSummariesResponse>, AppError> {
     let limit = params.limit.unwrap_or(1000).min(5000); // Max 5000 summaries
     let offset = params.offset.unwrap_or(0);
-    
+
     // Use override (for user endpoints) or query param (for admin endpoints)
     let user_id = user_id_override.or(params.user_id);
-    
+
     // Parse period type
     let period_type = if let Some(ref period_str) = params.period_type {
         match period_str.as_str() {

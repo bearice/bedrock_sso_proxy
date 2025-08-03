@@ -1411,7 +1411,6 @@ database_test!(
 
 // Test summaries pagination
 
-
 // Test summaries with different period types
 async fn test_summaries_period_type_filtering_impl(server: &bedrock_sso_proxy::server::Server) {
     let (user_id, _) = setup_test_data(server.database.as_ref()).await;
