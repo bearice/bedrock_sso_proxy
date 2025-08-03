@@ -1,6 +1,6 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { UsageQuery } from '../../types/usage';
-import { Calendar, Filter, RotateCcw, Search } from 'lucide-react';
+import { Calendar, Filter, RotateCcw, Search, Check } from 'lucide-react';
 
 interface UsageFiltersProps {
   filters: UsageQuery;
@@ -16,6 +16,8 @@ export function UsageFilters({
   isLoading = false,
 }: UsageFiltersProps) {
   const [showAdvanced, setShowAdvanced] = useState(false);
+  const [draftFilters, setDraftFilters] = useState<UsageQuery>(filters);
+  const [hasChanges, setHasChanges] = useState(false);
 
   // Convert ISO date to YYYY-MM-DD for date inputs
   const formatDateForInput = (isoDate?: string): string => {
@@ -30,6 +32,58 @@ export function UsageFilters({
     return new Date(dateString + 'T00:00:00.000Z').toISOString();
   };
 
+  // Check if draft filters differ from current filters
+  const filtersEqual = useCallback((a: UsageQuery, b: UsageQuery): boolean => {
+    const keys = [
+      'start_date',
+      'end_date',
+      'model',
+      'success_only',
+      'min_tokens',
+      'max_tokens',
+    ] as const;
+    return keys.every((key) => a[key] === b[key]);
+  }, []);
+
+  // Apply draft filters
+  const applyFilters = useCallback(() => {
+    onFiltersChange({
+      ...draftFilters,
+      offset: 0, // Reset to first page when filters change
+    });
+    setHasChanges(false);
+  }, [draftFilters, onFiltersChange]);
+
+  // Discard draft changes
+  const discardChanges = useCallback(() => {
+    setDraftFilters(filters);
+    setHasChanges(false);
+  }, [filters]);
+
+  // Update draft filters when filters prop changes (e.g., reset)
+  useEffect(() => {
+    setDraftFilters(filters);
+    setHasChanges(false);
+  }, [filters]);
+
+  // Handle keyboard shortcuts
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (!hasChanges) return;
+
+      if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) {
+        event.preventDefault();
+        applyFilters();
+      } else if (event.key === 'Escape') {
+        event.preventDefault();
+        discardChanges();
+      }
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [hasChanges, applyFilters, discardChanges]);
+
   const handleInputChange = useCallback(
     (field: keyof UsageQuery, value: string | number | boolean | undefined) => {
       let processedValue = value;
@@ -39,38 +93,67 @@ export function UsageFilters({
         processedValue = formatDateForApi(value);
       }
 
-      onFiltersChange({
-        ...filters,
+      const newDraftFilters = {
+        ...draftFilters,
         [field]: processedValue || undefined,
-      });
+      };
+
+      setDraftFilters(newDraftFilters);
+      setHasChanges(!filtersEqual(newDraftFilters, filters));
     },
-    [filters, onFiltersChange]
+    [draftFilters, filters, filtersEqual]
   );
 
-  const resetFilters = useCallback(() => {
+  const getThisMonthRange = useCallback(() => {
     const now = new Date();
-    const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
 
-    onFiltersChange({
-      start_date: thirtyDaysAgo.toISOString(),
-      end_date: now.toISOString(),
+    // Set end date to end of today to include all of today's data
+    const endOfToday = new Date(now);
+    endOfToday.setHours(23, 59, 59, 999);
+
+    return {
+      start_date: startOfMonth.toISOString(),
+      end_date: endOfToday.toISOString(),
+    };
+  }, []);
+
+  const resetFilters = useCallback(() => {
+    const thisMonthRange = getThisMonthRange();
+
+    const resetFilters = {
+      ...thisMonthRange,
       limit: 50,
       offset: 0,
-    });
-  }, [onFiltersChange]);
+    };
+
+    setDraftFilters(resetFilters);
+    onFiltersChange(resetFilters);
+    setHasChanges(false);
+  }, [onFiltersChange, getThisMonthRange]);
 
   const getPresetRange = useCallback(
     (days: number) => {
       const now = new Date();
       const startDate = new Date(now.getTime() - days * 24 * 60 * 60 * 1000);
 
-      onFiltersChange({
-        ...filters,
+      // Set end date to end of today to include all of today's data
+      const endOfToday = new Date(now);
+      endOfToday.setHours(23, 59, 59, 999);
+
+      const newFilters = {
+        ...draftFilters,
         start_date: startDate.toISOString(),
-        end_date: now.toISOString(),
-      });
+        end_date: endOfToday.toISOString(),
+        offset: 0, // Reset to first page when date range changes
+      };
+
+      // Apply immediately - no need to wait for user confirmation on preset ranges
+      setDraftFilters(newFilters);
+      onFiltersChange(newFilters);
+      setHasChanges(false);
     },
-    [filters, onFiltersChange]
+    [draftFilters, onFiltersChange]
   );
 
   return (
@@ -96,8 +179,63 @@ export function UsageFilters({
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
           <Filter size={20} style={{ color: '#4f46e5' }} />
           <h3 style={{ margin: 0, fontSize: '1.125rem', fontWeight: 600 }}>Usage Filters</h3>
+          {hasChanges && (
+            <span
+              style={{
+                fontSize: '0.75rem',
+                background: '#fbbf24',
+                color: '#92400e',
+                padding: '0.25rem 0.5rem',
+                borderRadius: '12px',
+                fontWeight: 500,
+              }}
+              title="You have unsaved filter changes. Press Ctrl+Enter to apply or Escape to discard."
+            >
+              Pending Changes
+            </span>
+          )}
         </div>
         <div style={{ display: 'flex', gap: '0.5rem' }}>
+          {hasChanges && (
+            <>
+              <button
+                onClick={applyFilters}
+                disabled={isLoading}
+                style={{
+                  background: '#059669',
+                  color: 'white',
+                  border: '1px solid #059669',
+                  borderRadius: '6px',
+                  padding: '0.5rem 0.75rem',
+                  fontSize: '0.875rem',
+                  cursor: isLoading ? 'not-allowed' : 'pointer',
+                  opacity: isLoading ? 0.5 : 1,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.25rem',
+                }}
+              >
+                <Check size={14} />
+                Apply Filters
+              </button>
+              <button
+                onClick={discardChanges}
+                disabled={isLoading}
+                style={{
+                  background: 'none',
+                  border: '1px solid #d1d5db',
+                  borderRadius: '6px',
+                  padding: '0.5rem 0.75rem',
+                  fontSize: '0.875rem',
+                  cursor: isLoading ? 'not-allowed' : 'pointer',
+                  color: '#6b7280',
+                  opacity: isLoading ? 0.5 : 1,
+                }}
+              >
+                Discard
+              </button>
+            </>
+          )}
           <button
             onClick={() => setShowAdvanced(!showAdvanced)}
             style={{
@@ -180,7 +318,7 @@ export function UsageFilters({
             <input
               id="start-date"
               type="date"
-              value={formatDateForInput(filters.start_date)}
+              value={formatDateForInput(draftFilters.start_date)}
               onChange={(e) => handleInputChange('start_date', e.target.value)}
               disabled={isLoading}
               style={{
@@ -209,7 +347,7 @@ export function UsageFilters({
             <input
               id="end-date"
               type="date"
-              value={formatDateForInput(filters.end_date)}
+              value={formatDateForInput(draftFilters.end_date)}
               onChange={(e) => handleInputChange('end_date', e.target.value)}
               disabled={isLoading}
               style={{
@@ -233,6 +371,33 @@ export function UsageFilters({
             flexWrap: 'wrap',
           }}
         >
+          <button
+            onClick={() => {
+              const thisMonthRange = getThisMonthRange();
+              const newFilters = {
+                ...draftFilters,
+                ...thisMonthRange,
+                offset: 0,
+              };
+              setDraftFilters(newFilters);
+              onFiltersChange(newFilters);
+              setHasChanges(false);
+            }}
+            disabled={isLoading}
+            style={{
+              background: '#4f46e5',
+              color: 'white',
+              border: '1px solid #4f46e5',
+              borderRadius: '6px',
+              padding: '0.25rem 0.5rem',
+              fontSize: '0.75rem',
+              cursor: isLoading ? 'not-allowed' : 'pointer',
+              fontWeight: 500,
+              opacity: isLoading ? 0.5 : 1,
+            }}
+          >
+            This Month
+          </button>
           {[
             { label: 'Last 7 days', days: 7 },
             { label: 'Last 30 days', days: 30 },
@@ -286,7 +451,7 @@ export function UsageFilters({
             </label>
             <select
               id="model-filter"
-              value={filters.model || ''}
+              value={draftFilters.model || ''}
               onChange={(e) => handleInputChange('model', e.target.value)}
               disabled={isLoading}
               style={{
@@ -324,7 +489,9 @@ export function UsageFilters({
             </label>
             <select
               id="success-filter"
-              value={filters.success_only === undefined ? '' : filters.success_only.toString()}
+              value={
+                draftFilters.success_only === undefined ? '' : draftFilters.success_only.toString()
+              }
               onChange={(e) =>
                 handleInputChange(
                   'success_only',
@@ -364,7 +531,7 @@ export function UsageFilters({
             </label>
             <select
               id="limit-filter"
-              value={filters.limit || 50}
+              value={draftFilters.limit || 50}
               onChange={(e) => handleInputChange('limit', parseInt(e.target.value))}
               disabled={isLoading}
               style={{
@@ -402,7 +569,7 @@ export function UsageFilters({
               id="min-tokens"
               type="number"
               min="0"
-              value={filters.min_tokens || ''}
+              value={draftFilters.min_tokens || ''}
               onChange={(e) =>
                 handleInputChange(
                   'min_tokens',
@@ -440,7 +607,7 @@ export function UsageFilters({
               id="max-tokens"
               type="number"
               min="0"
-              value={filters.max_tokens || ''}
+              value={draftFilters.max_tokens || ''}
               onChange={(e) =>
                 handleInputChange(
                   'max_tokens',
@@ -464,10 +631,10 @@ export function UsageFilters({
       )}
 
       {/* Active Filters Summary */}
-      {(filters.model ||
-        filters.success_only !== undefined ||
-        filters.min_tokens ||
-        filters.max_tokens) && (
+      {(draftFilters.model ||
+        draftFilters.success_only !== undefined ||
+        draftFilters.min_tokens ||
+        draftFilters.max_tokens) && (
         <div
           style={{
             marginTop: '1rem',
@@ -490,12 +657,18 @@ export function UsageFilters({
             <span style={{ fontWeight: 500, color: '#075985' }}>Active Filters:</span>
           </div>
           <div style={{ color: '#0c4a6e', lineHeight: 1.4 }}>
-            {filters.model && <div>• Model: {filters.model}</div>}
-            {filters.success_only !== undefined && (
-              <div>• Status: {filters.success_only ? 'Successful' : 'Failed'} requests only</div>
+            {draftFilters.model && <div>• Model: {draftFilters.model}</div>}
+            {draftFilters.success_only !== undefined && (
+              <div>
+                • Status: {draftFilters.success_only ? 'Successful' : 'Failed'} requests only
+              </div>
             )}
-            {filters.min_tokens && <div>• Min tokens: {filters.min_tokens.toLocaleString()}</div>}
-            {filters.max_tokens && <div>• Max tokens: {filters.max_tokens.toLocaleString()}</div>}
+            {draftFilters.min_tokens && (
+              <div>• Min tokens: {draftFilters.min_tokens.toLocaleString()}</div>
+            )}
+            {draftFilters.max_tokens && (
+              <div>• Max tokens: {draftFilters.max_tokens.toLocaleString()}</div>
+            )}
           </div>
         </div>
       )}

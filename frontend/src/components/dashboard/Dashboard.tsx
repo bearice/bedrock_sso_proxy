@@ -5,12 +5,13 @@ import { ApiKeyInfo } from '../../types/auth';
 import {
   Copy,
   User,
-  Shield,
   Key,
   ExternalLink,
-  Terminal,
+  Rocket,
   FileText,
   Plus,
+  Route,
+  Wrench,
   AlertTriangle,
 } from 'lucide-react';
 
@@ -127,7 +128,7 @@ export function Dashboard() {
           style={{ background: '#f8fafc', border: '2px solid #4f46e5', borderRadius: '12px' }}
         >
           <h2 style={{ color: '#4f46e5', fontSize: '1.5rem', marginBottom: '1rem' }}>
-            <Terminal size={24} style={{ marginRight: '0.5rem', verticalAlign: 'text-bottom' }} />
+            <Rocket size={24} style={{ marginRight: '0.5rem', verticalAlign: 'text-bottom' }} />
             🚀 Use with Claude Code
           </h2>
           <p
@@ -181,11 +182,10 @@ export function Dashboard() {
       {/* Claude Code Setup Instructions */}
       <div className="setup-section">
         <h3>
-          <Terminal size={20} style={{ marginRight: '0.5rem', verticalAlign: 'text-bottom' }} />
+          <Wrench size={20} style={{ marginRight: '0.5rem', verticalAlign: 'text-bottom' }} />
           🔧 Claude Code Setup
         </h3>
 
-        <h4>Claude Code Integration</h4>
         <p>Configure Claude Code to use this proxy as an LLM gateway:</p>
 
         <h5>Method 1: Anthropic Gateway Mode</h5>
@@ -197,8 +197,13 @@ export ANTHROPIC_BASE_URL="${currentDomain}/anthropic"`}</pre>
 export ANTHROPIC_AUTH_TOKEN="${activeApiKeysCount > 0 ? 'SSOK_your_api_key_here' : token?.substring(0, 20) + '...'}"
 export CLAUDE_CODE_SKIP_BEDROCK_AUTH=1
 export CLAUDE_CODE_USE_BEDROCK=1`}</pre>
+      </div>
 
-        <h4>API Usage</h4>
+      <div className="setup-section">
+        <h3>
+          <Route size={20} style={{ marginRight: '0.5rem', verticalAlign: 'text-bottom' }} />
+          API Usage
+        </h3>
         <p>
           This proxy supports both Bedrock and Anthropic API formats for maximum compatibility. Use
           the API key as a Bearer token in the Authorization header:
@@ -245,7 +250,7 @@ export CLAUDE_CODE_USE_BEDROCK=1`}</pre>
       {/* Testing Section */}
       <div className="card">
         <h3>
-          <Shield size={20} style={{ marginRight: '0.5rem', verticalAlign: 'text-bottom' }} />
+          <FileText size={20} style={{ marginRight: '0.5rem', verticalAlign: 'text-bottom' }} />
           🧪 Test Your Setup
         </h3>
         <p>

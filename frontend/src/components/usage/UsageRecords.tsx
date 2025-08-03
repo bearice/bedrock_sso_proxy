@@ -1,5 +1,7 @@
-import { useState } from 'react';
-import { UsageRecord } from '../../types/usage';
+import { useState, useEffect, useCallback } from 'react';
+import { useAuth } from '../../hooks/useAuth';
+import { usageApi, ApiError } from '../../services/api';
+import { UsageRecord, UsageQuery } from '../../types/usage';
 import {
   Clock,
   Zap,
@@ -12,29 +14,98 @@ import {
   Activity,
   Eye,
   EyeOff,
+  RefreshCw,
+  Download,
 } from 'lucide-react';
 
 interface UsageRecordsProps {
-  records: UsageRecord[];
-  isLoading: boolean;
-  error: string | null;
-  totalCount?: number;
-  currentPage: number;
-  pageSize: number;
-  onPageChange: (page: number) => void;
+  filters: UsageQuery;
+  onRefresh?: () => void;
+  onExport?: () => void;
+  isExporting?: boolean;
 }
 
 export function UsageRecords({
-  records,
-  isLoading,
-  error,
-  totalCount = 0,
-  currentPage,
-  pageSize,
-  onPageChange,
+  filters,
+  onRefresh,
+  onExport,
+  isExporting = false,
 }: UsageRecordsProps) {
+  const { token } = useAuth();
+  const [records, setRecords] = useState<UsageRecord[]>([]);
+  const [totalCount, setTotalCount] = useState(0);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isPaginationLoading, setIsPaginationLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [currentPage, setCurrentPage] = useState(1);
   const [showDetails, setShowDetails] = useState<Set<number>>(new Set());
   const [expandedErrors, setExpandedErrors] = useState<Set<number>>(new Set());
+
+  const pageSize = filters.limit || 50;
+
+  // Load usage records
+  const loadRecords = useCallback(
+    async (isPagination = false) => {
+      if (!token) return;
+
+      try {
+        if (isPagination) {
+          setIsPaginationLoading(true);
+        } else {
+          setIsLoading(true);
+        }
+        setError(null);
+
+        const recordsFilters = {
+          ...filters,
+          offset: (currentPage - 1) * pageSize,
+          limit: pageSize,
+        };
+
+        const response = await usageApi.getUsageRecords(token, recordsFilters);
+        setRecords(response.records);
+        setTotalCount(response.total || response.records.length);
+      } catch (err) {
+        console.error('Failed to load usage records:', err);
+        setError(err instanceof ApiError ? err.message : 'Failed to load usage records');
+      } finally {
+        if (isPagination) {
+          setIsPaginationLoading(false);
+        } else {
+          setIsLoading(false);
+        }
+      }
+    },
+    [token, filters, currentPage, pageSize]
+  );
+
+  // Handle page changes
+  const handlePageChange = (page: number) => {
+    setCurrentPage(page);
+  };
+
+  // Effect to load records when page changes (pagination)
+  useEffect(() => {
+    if (token) {
+      // Check if this is a page change by comparing with a flag or tracking previous values
+      // For now, we'll check if we have data and this might be a page change
+      if (records.length > 0 || currentPage > 1) {
+        loadRecords(true); // Use pagination loading
+      }
+    }
+  }, [currentPage, token, loadRecords, records.length]);
+
+  // Reset to first page when filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [filters.start_date, filters.end_date, filters.model, filters.success_only]);
+
+  // Load records when dependencies change (initial load and filter changes)
+  useEffect(() => {
+    if (token) {
+      loadRecords(false); // Use full loading
+    }
+  }, [token, filters, loadRecords]);
 
   const toggleDetails = (recordId: number) => {
     const newShowDetails = new Set(showDetails);
@@ -181,10 +252,128 @@ export function UsageRecords({
               : `${records.length} records`}
           </p>
         </div>
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+          {/* Action Buttons */}
+          <div style={{ display: 'flex', gap: '0.5rem' }}>
+            {onRefresh && (
+              <button
+                onClick={onRefresh}
+                disabled={isLoading || isPaginationLoading}
+                style={{
+                  background: 'white',
+                  border: '1px solid #d1d5db',
+                  borderRadius: '6px',
+                  padding: '0.5rem 0.75rem',
+                  fontSize: '0.875rem',
+                  cursor: isLoading || isPaginationLoading ? 'not-allowed' : 'pointer',
+                  opacity: isLoading || isPaginationLoading ? 0.5 : 1,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.5rem',
+                  color: '#374151',
+                }}
+              >
+                <RefreshCw
+                  size={16}
+                  className={isLoading || isPaginationLoading ? 'loading-spinner' : ''}
+                />
+                Refresh
+              </button>
+            )}
+            {onExport && (
+              <button
+                onClick={onExport}
+                disabled={isExporting || isLoading}
+                style={{
+                  background: '#059669',
+                  color: 'white',
+                  border: '1px solid #059669',
+                  borderRadius: '6px',
+                  padding: '0.5rem 0.75rem',
+                  fontSize: '0.875rem',
+                  cursor: isExporting || isLoading ? 'not-allowed' : 'pointer',
+                  opacity: isExporting || isLoading ? 0.5 : 1,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.5rem',
+                }}
+              >
+                <Download size={16} />
+                {isExporting ? 'Exporting...' : 'Export CSV'}
+              </button>
+            )}
+          </div>
+
+          {/* Top Pagination */}
+          {totalPages > 1 && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+              <div style={{ fontSize: '0.875rem', color: '#6c757d' }}>
+                Page {currentPage} of {totalPages}
+              </div>
+              <div style={{ display: 'flex', gap: '0.5rem' }}>
+                <button
+                  onClick={() => handlePageChange(currentPage - 1)}
+                  disabled={currentPage <= 1 || isPaginationLoading}
+                  style={{
+                    background: 'white',
+                    border: '1px solid #d1d5db',
+                    borderRadius: '6px',
+                    padding: '0.5rem',
+                    cursor: currentPage <= 1 || isPaginationLoading ? 'not-allowed' : 'pointer',
+                    opacity: currentPage <= 1 || isPaginationLoading ? 0.5 : 1,
+                    display: 'flex',
+                    alignItems: 'center',
+                  }}
+                >
+                  <ChevronLeft size={16} />
+                </button>
+                <button
+                  onClick={() => handlePageChange(currentPage + 1)}
+                  disabled={currentPage >= totalPages || isPaginationLoading}
+                  style={{
+                    background: 'white',
+                    border: '1px solid #d1d5db',
+                    borderRadius: '6px',
+                    padding: '0.5rem',
+                    cursor:
+                      currentPage >= totalPages || isPaginationLoading ? 'not-allowed' : 'pointer',
+                    opacity: currentPage >= totalPages || isPaginationLoading ? 0.5 : 1,
+                    display: 'flex',
+                    alignItems: 'center',
+                  }}
+                >
+                  <ChevronRight size={16} />
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Records List */}
-      <div style={{ padding: '0' }}>
+      <div style={{ padding: '0', position: 'relative' }}>
+        {/* Pagination Loading Overlay */}
+        {isPaginationLoading && (
+          <div
+            style={{
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              background: 'rgba(255, 255, 255, 0.8)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              zIndex: 10,
+              backdropFilter: 'blur(1px)',
+            }}
+          >
+            <Activity size={24} className="loading-spinner" style={{ color: '#3b82f6' }} />
+          </div>
+        )}
+
         {records.map((record, index) => {
           const isDetailsVisible = showDetails.has(record.id);
           const isLastItem = index === records.length - 1;
@@ -486,15 +675,15 @@ export function UsageRecords({
           </div>
           <div style={{ display: 'flex', gap: '0.5rem' }}>
             <button
-              onClick={() => onPageChange(currentPage - 1)}
-              disabled={currentPage <= 1}
+              onClick={() => handlePageChange(currentPage - 1)}
+              disabled={currentPage <= 1 || isPaginationLoading}
               style={{
                 background: 'white',
                 border: '1px solid #d1d5db',
                 borderRadius: '6px',
                 padding: '0.5rem',
-                cursor: currentPage <= 1 ? 'not-allowed' : 'pointer',
-                opacity: currentPage <= 1 ? 0.5 : 1,
+                cursor: currentPage <= 1 || isPaginationLoading ? 'not-allowed' : 'pointer',
+                opacity: currentPage <= 1 || isPaginationLoading ? 0.5 : 1,
                 display: 'flex',
                 alignItems: 'center',
               }}
@@ -502,15 +691,16 @@ export function UsageRecords({
               <ChevronLeft size={16} />
             </button>
             <button
-              onClick={() => onPageChange(currentPage + 1)}
-              disabled={currentPage >= totalPages}
+              onClick={() => handlePageChange(currentPage + 1)}
+              disabled={currentPage >= totalPages || isPaginationLoading}
               style={{
                 background: 'white',
                 border: '1px solid #d1d5db',
                 borderRadius: '6px',
                 padding: '0.5rem',
-                cursor: currentPage >= totalPages ? 'not-allowed' : 'pointer',
-                opacity: currentPage >= totalPages ? 0.5 : 1,
+                cursor:
+                  currentPage >= totalPages || isPaginationLoading ? 'not-allowed' : 'pointer',
+                opacity: currentPage >= totalPages || isPaginationLoading ? 0.5 : 1,
                 display: 'flex',
                 alignItems: 'center',
               }}
