@@ -263,17 +263,18 @@ cargo run --bin bedrock_proxy -- job list                                      #
 cargo run --bin bedrock_proxy -- job status                                    # Check job system status
 
 # Usage summary generation (improves API performance - runs automatically or manually)
-cargo run --bin bedrock_proxy -- job run summaries --period daily              # Generate daily summaries for last 30 days
-cargo run --bin bedrock_proxy -- job run summaries --period weekly             # Generate weekly summaries
-cargo run --bin bedrock_proxy -- job run summaries --period monthly            # Generate monthly summaries
-cargo run --bin bedrock_proxy -- job run summaries --days-back 90              # Process last 90 days
-cargo run --bin bedrock_proxy -- job run summaries --user-id 123               # Process specific user only
-cargo run --bin bedrock_proxy -- job run summaries --model-id claude-sonnet-4  # Process specific model only
-cargo run --bin bedrock_proxy -- job run summaries --dry-run                   # Preview what would be generated
+cargo run --bin bedrock_proxy -- job summaries --period daily --days-back 30   # Generate daily summaries for last 30 days
+cargo run --bin bedrock_proxy -- job summaries --period weekly                  # Generate weekly summaries (default: 30 days)
+cargo run --bin bedrock_proxy -- job summaries --period monthly --days-back 90 # Generate monthly summaries for last 90 days
+cargo run --bin bedrock_proxy -- job summaries --user-id 123                    # Process specific user only
+cargo run --bin bedrock_proxy -- job summaries --model-id claude-sonnet-4       # Process specific model only
+cargo run --bin bedrock_proxy -- job summaries --dry-run                        # Preview what would be generated
 
 # Database cleanup commands
-cargo run --bin bedrock_proxy -- job run cleanup --dry-run                     # Preview old usage records to be deleted
-cargo run --bin bedrock_proxy -- job run cleanup --days-back 30                # Delete usage records older than 30 days
+cargo run --bin bedrock_proxy -- job cleanup --dry-run                          # Preview cleanup of all types (uses config defaults)
+cargo run --bin bedrock_proxy -- job cleanup --days-back 30                     # Clean all types with 30-day override
+cargo run --bin bedrock_proxy -- job cleanup --target records --dry-run         # Preview raw records only (uses config: 30 days)
+cargo run --bin bedrock_proxy -- job cleanup --target daily --days-back 180    # Clean daily summaries with override
 ```
 
 ## Service Layer Architecture
@@ -402,7 +403,11 @@ jobs:
   usage_cleanup:
     schedule: "0 3 * * *"  # Daily at 3 AM
     raw_records_days: 30
-    summaries_days: 365
+    summaries_retention_days:  # Period-specific retention (defaults provided if not specified)
+      hourly: 7     # Keep hourly summaries for 7 days
+      daily: 90     # Keep daily summaries for 90 days
+      weekly: 365   # Keep weekly summaries for 1 year
+      monthly: 1095 # Keep monthly summaries for 3 years
 shutdown:
   timeout_seconds: 30
   streaming_timeout_seconds: 30
@@ -427,6 +432,10 @@ Use `BEDROCK_` prefix with double underscores for nesting:
 - `BEDROCK_JOBS__ENABLED=true`
 - `BEDROCK_JOBS__USAGE_SUMMARIES__SCHEDULE="0 2 * * *"`
 - `BEDROCK_JOBS__USAGE_CLEANUP__RAW_RECORDS_DAYS=30`
+- `BEDROCK_JOBS__USAGE_CLEANUP__SUMMARIES_RETENTION_DAYS__HOURLY=7`
+- `BEDROCK_JOBS__USAGE_CLEANUP__SUMMARIES_RETENTION_DAYS__DAILY=90`
+- `BEDROCK_JOBS__USAGE_CLEANUP__SUMMARIES_RETENTION_DAYS__WEEKLY=365`
+- `BEDROCK_JOBS__USAGE_CLEANUP__SUMMARIES_RETENTION_DAYS__MONTHLY=1095`
 - `BEDROCK_SHUTDOWN__TIMEOUT_SECONDS=30`
 - `BEDROCK_SHUTDOWN__STREAMING_TIMEOUT_SECONDS=30`
 

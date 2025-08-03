@@ -1,5 +1,5 @@
 use super::{Job, JobResult, UsageCleanupConfig};
-use crate::{error::AppError, summarization::SummarizationService};
+use crate::{database::entities::PeriodType, error::AppError, summarization::SummarizationService};
 use async_trait::async_trait;
 use std::sync::Arc;
 use tracing::info;
@@ -39,19 +39,27 @@ impl Job for CleanupJob {
         total_cleaned += records_cleaned;
         info!("Cleaned up {} raw usage records", records_cleaned);
 
-        // Clean up old summaries
-        info!(
-            "Cleaning up usage summaries older than {} days",
-            self.config.summaries_days
-        );
+        // Clean up old summaries - clean each period type with its specific retention
+        for period_type in [
+            PeriodType::Hourly,
+            PeriodType::Daily,
+            PeriodType::Weekly,
+            PeriodType::Monthly,
+        ] {
+            let retention_days = self.config.get_retention_days(period_type);
 
-        let summaries_cleaned = self
-            .service
-            .cleanup_summaries(self.config.summaries_days)
-            .await?;
+            info!(
+                "Cleaning up {:?} summaries older than {} days",
+                period_type, retention_days
+            );
 
-        total_cleaned += summaries_cleaned;
-        info!("Cleaned up {} usage summaries", summaries_cleaned);
+            let summaries_cleaned = self
+                .service
+                .cleanup_summaries_by_period(period_type, retention_days)
+                .await?;
+
+            total_cleaned += summaries_cleaned;
+        }
 
         Ok(JobResult::success_with_count(total_cleaned))
     }

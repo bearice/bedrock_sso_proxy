@@ -320,7 +320,7 @@ async fn test_cleanup_summaries() {
     // Create test data using the service's own methods to ensure summaries exist
     let now = Utc::now();
     let old_date = now - Duration::days(10); // Use 10 days to ensure it's in a completed period
-    let recent_date = now - Duration::days(3); // Use 3 days 
+    let recent_date = now - Duration::days(3); // Use 3 days
 
     // Create old usage records
     create_test_usage_record(
@@ -370,10 +370,22 @@ async fn test_cleanup_summaries() {
 
     if initial_summaries.is_empty() {
         println!("No summaries generated, testing cleanup method with empty database");
-        // Test that cleanup works even with no summaries
-        let deleted_count = service.cleanup_summaries(30).await.unwrap();
+        // Test that cleanup works even with no summaries - test all period types
+        let mut total_deleted = 0;
+        for period_type in [
+            PeriodType::Hourly,
+            PeriodType::Daily,
+            PeriodType::Weekly,
+            PeriodType::Monthly,
+        ] {
+            let deleted_count = service
+                .cleanup_summaries_by_period(period_type, 30)
+                .await
+                .unwrap();
+            total_deleted += deleted_count;
+        }
         assert_eq!(
-            deleted_count, 0,
+            total_deleted, 0,
             "Should delete 0 summaries from empty database"
         );
         println!("✅ Cleanup summaries tests passed (empty database)!");
@@ -389,8 +401,19 @@ async fn test_cleanup_summaries() {
         );
     }
 
-    // Test cleanup with 5 days retention (should delete some summaries)
-    let deleted_count = service.cleanup_summaries(5).await.unwrap();
+    // Test cleanup with 5 days retention (should delete some summaries) - test all period types
+    let mut deleted_count = 0;
+    for period_type in [
+        PeriodType::Hourly,
+        PeriodType::Daily,
+        PeriodType::Weekly,
+        PeriodType::Monthly,
+    ] {
+        deleted_count += service
+            .cleanup_summaries_by_period(period_type, 5)
+            .await
+            .unwrap();
+    }
 
     println!("Deleted {deleted_count} summaries with 5-day retention");
 
@@ -412,7 +435,18 @@ async fn test_cleanup_summaries() {
     );
 
     // Test cleanup with very short retention (should delete all remaining summaries)
-    let deleted_count_final = service.cleanup_summaries(0).await.unwrap();
+    let mut deleted_count_final = 0;
+    for period_type in [
+        PeriodType::Hourly,
+        PeriodType::Daily,
+        PeriodType::Weekly,
+        PeriodType::Monthly,
+    ] {
+        deleted_count_final += service
+            .cleanup_summaries_by_period(period_type, 0)
+            .await
+            .unwrap();
+    }
 
     println!("Deleted {deleted_count_final} summaries with 0-day retention");
 

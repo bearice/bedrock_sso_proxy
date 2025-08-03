@@ -258,16 +258,23 @@ impl SummarizationService {
         Ok(deleted_count)
     }
 
-    /// Clean up old usage summaries
-    pub async fn cleanup_summaries(&self, retention_days: u32) -> Result<u64, AppError> {
+    /// Clean up old usage summaries for a specific period type
+    pub async fn cleanup_summaries_by_period(
+        &self,
+        period_type: PeriodType,
+        retention_days: u32,
+    ) -> Result<u64, AppError> {
         let deleted_count = self
             .database
             .usage()
-            .cleanup_old_summaries(retention_days)
+            .cleanup_old_summaries_by_period(period_type, retention_days)
             .await
             .map_err(|e| AppError::Internal(format!("Failed to cleanup summaries: {e}")))?;
 
-        info!("Cleaned up {} old usage summaries", deleted_count);
+        info!(
+            "Cleaned up {} old {:?} summaries (retention: {} days)",
+            deleted_count, period_type, retention_days
+        );
         Ok(deleted_count)
     }
 }

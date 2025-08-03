@@ -14,7 +14,17 @@ use utoipa::ToSchema;
 
 /// Period types for usage aggregation
 #[derive(
-    Debug, Clone, Copy, PartialEq, Eq, EnumIter, DeriveActiveEnum, Serialize, Deserialize, ToSchema,
+    Debug,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    Hash,
+    EnumIter,
+    DeriveActiveEnum,
+    Serialize,
+    Deserialize,
+    ToSchema,
 )]
 #[sea_orm(rs_type = "String", db_type = "String(StringLen::N(16))")]
 pub enum PeriodType {

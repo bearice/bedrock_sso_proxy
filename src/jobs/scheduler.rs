@@ -188,7 +188,7 @@ mod tests {
             usage_cleanup: crate::jobs::UsageCleanupConfig {
                 schedule: "0 0 3 * * *".to_string(),
                 raw_records_days: 30,
-                summaries_days: 365,
+                summaries_retention_days: crate::jobs::default_summaries_retention_days(),
             },
         };
         JobScheduler::new(config)

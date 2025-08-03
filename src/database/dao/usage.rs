@@ -399,7 +399,7 @@ impl UsageDao {
         })
     }
 
-    /// Fallback method to get stats from raw records (used when summaries don't exist)  
+    /// Fallback method to get stats from raw records (used when summaries don't exist)
     /// Note: Ignores pagination params since stats should aggregate ALL matching records
     async fn get_stats_from_records(&self, query: &UsageQuery) -> DatabaseResult<UsageStats> {
         let mut base_query = usage_records::Entity::find();
@@ -636,10 +636,15 @@ impl UsageDao {
         Ok(result.rows_affected)
     }
 
-    /// Clean up old usage summaries
-    pub async fn cleanup_old_summaries(&self, retention_days: u32) -> DatabaseResult<u64> {
+    /// Clean up old usage summaries for a specific period type
+    pub async fn cleanup_old_summaries_by_period(
+        &self,
+        period_type: PeriodType,
+        retention_days: u32,
+    ) -> DatabaseResult<u64> {
         let cutoff = Utc::now() - chrono::Duration::days(retention_days as i64);
         let result = usage_summaries::Entity::delete_many()
+            .filter(usage_summaries::Column::PeriodType.eq(period_type))
             .filter(usage_summaries::Column::PeriodStart.lt(cutoff))
             .exec(&self.db)
             .await

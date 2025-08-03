@@ -2,9 +2,10 @@ pub mod cleanup;
 pub mod scheduler;
 pub mod summaries;
 
-use crate::error::AppError;
+use crate::{database::entities::PeriodType, error::AppError};
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 
 pub use cleanup::CleanupJob;
 pub use scheduler::JobScheduler;
@@ -19,7 +20,7 @@ pub struct JobsConfig {
     /// Usage summaries job configuration
     pub usage_summaries: UsageSummariesConfig,
 
-    /// Usage cleanup job configuration  
+    /// Usage cleanup job configuration
     pub usage_cleanup: UsageCleanupConfig,
 }
 
@@ -37,8 +38,33 @@ pub struct UsageCleanupConfig {
     pub schedule: String,
     /// Retention for raw records in days
     pub raw_records_days: u32,
-    /// Retention for summaries in days
-    pub summaries_days: u32,
+    /// Retention for summaries by period type in days
+    #[serde(default = "default_summaries_retention_days")]
+    pub summaries_retention_days: HashMap<PeriodType, u32>,
+}
+
+/// Default values for summaries retention days by period type
+pub fn default_summaries_retention_days() -> HashMap<PeriodType, u32> {
+    let mut map = HashMap::new();
+    map.insert(PeriodType::Hourly, 7); // Keep hourly summaries for 7 days
+    map.insert(PeriodType::Daily, 90); // Keep daily summaries for 90 days
+    map.insert(PeriodType::Weekly, 365); // Keep weekly summaries for 1 year
+    map.insert(PeriodType::Monthly, 1095); // Keep monthly summaries for 3 years
+    map
+}
+
+impl UsageCleanupConfig {
+    /// Get the retention days for a specific period type
+    pub fn get_retention_days(&self, period_type: PeriodType) -> u32 {
+        self.summaries_retention_days
+            .get(&period_type)
+            .copied()
+            .unwrap_or_else(|| {
+                // Fallback to defaults if not specified
+                let defaults = default_summaries_retention_days();
+                defaults.get(&period_type).copied().unwrap_or(365)
+            })
+    }
 }
 
 impl Default for JobsConfig {
@@ -52,7 +78,7 @@ impl Default for JobsConfig {
             usage_cleanup: UsageCleanupConfig {
                 schedule: "0 0 3 * * *".to_string(), // Daily at 3 AM
                 raw_records_days: 30,
-                summaries_days: 365,
+                summaries_retention_days: default_summaries_retention_days(),
             },
         }
     }
