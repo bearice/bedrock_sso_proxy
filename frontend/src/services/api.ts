@@ -212,7 +212,10 @@ export const usageApi = {
   },
 
   // Get user's usage summaries
-  async getUserUsageSummaries(token: string, query?: UsageSummariesQuery): Promise<UsageSummariesResponse> {
+  async getUserUsageSummaries(
+    token: string,
+    query?: UsageSummariesQuery
+  ): Promise<UsageSummariesResponse> {
     const params = new URLSearchParams();
     if (query?.limit) params.append('limit', query.limit.toString());
     if (query?.offset) params.append('offset', query.offset.toString());
@@ -246,7 +249,10 @@ export const usageApi = {
     );
   },
 
-  async getAdminUsageSummaries(token: string, query?: UsageSummariesQuery): Promise<UsageSummariesResponse> {
+  async getAdminUsageSummaries(
+    token: string,
+    query?: UsageSummariesQuery
+  ): Promise<UsageSummariesResponse> {
     const params = new URLSearchParams();
     if (query?.limit) params.append('limit', query.limit.toString());
     if (query?.offset) params.append('offset', query.offset.toString());
@@ -267,7 +273,10 @@ export const usageApi = {
     return this.getUserUsageRecords(token, query);
   },
 
-  async getUsageSummaries(token: string, query?: UsageSummariesQuery): Promise<UsageSummariesResponse> {
+  async getUsageSummaries(
+    token: string,
+    query?: UsageSummariesQuery
+  ): Promise<UsageSummariesResponse> {
     return this.getUserUsageSummaries(token, query);
   },
 
