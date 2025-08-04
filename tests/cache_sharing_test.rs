@@ -20,6 +20,7 @@ async fn test_cache_manager_memory_sharing() {
         created_at: Utc::now(),
         updated_at: Utc::now(),
         last_login: None,
+        ..Default::default()
     };
 
     // Set a value using cache1
@@ -56,6 +57,7 @@ async fn test_different_cache_managers_are_isolated() {
         created_at: Utc::now(),
         updated_at: Utc::now(),
         last_login: None,
+        ..Default::default()
     };
 
     // Set a value using cache1 (from manager1)
@@ -88,6 +90,7 @@ async fn test_type_safety_with_shared_store() {
         created_at: Utc::now(),
         updated_at: Utc::now(),
         last_login: None,
+        ..Default::default()
     };
 
     let test_api_key = ApiKeyRecord {

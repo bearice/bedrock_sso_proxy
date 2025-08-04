@@ -256,6 +256,7 @@ mod tests {
             created_at: chrono::Utc::now(),
             updated_at: chrono::Utc::now(),
             last_login: Some(chrono::Utc::now()),
+            ..Default::default()
         };
         server.database.users().upsert(&user).await.unwrap()
     }

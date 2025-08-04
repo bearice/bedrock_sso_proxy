@@ -309,6 +309,7 @@ mod tests {
             created_at: Utc::now(),
             updated_at: Utc::now(),
             last_login: None,
+            ..Default::default()
         };
 
         // Test cache miss and compute
@@ -350,6 +351,7 @@ mod tests {
                     created_at: Utc::now(),
                     updated_at: Utc::now(),
                     last_login: None,
+                    ..Default::default()
                 },
             )
             .await;

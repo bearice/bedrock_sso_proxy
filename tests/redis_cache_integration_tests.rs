@@ -104,6 +104,7 @@ async fn test_redis_user_record_serialization() {
         created_at: Utc::now(),
         updated_at: Utc::now(),
         last_login: Some(Utc::now()),
+        ..Default::default()
     };
 
     // Test serialization round-trip
@@ -164,6 +165,7 @@ async fn test_redis_cache_ttl_functionality() {
         created_at: Utc::now(),
         updated_at: Utc::now(),
         last_login: None,
+        ..Default::default()
     };
 
     // Set with 1 second TTL
@@ -206,6 +208,7 @@ async fn test_redis_cache_type_isolation() {
         created_at: Utc::now(),
         updated_at: Utc::now(),
         last_login: None,
+        ..Default::default()
     };
 
     let test_model = ModelCost {
@@ -303,6 +306,7 @@ async fn test_redis_cache_get_or_compute() {
         created_at: Utc::now(),
         updated_at: Utc::now(),
         last_login: None,
+        ..Default::default()
     };
 
     // First call should compute and cache
@@ -326,6 +330,7 @@ async fn test_redis_cache_get_or_compute() {
         created_at: Utc::now(),
         updated_at: Utc::now(),
         last_login: None,
+        ..Default::default()
     };
 
     let result = typed_cache

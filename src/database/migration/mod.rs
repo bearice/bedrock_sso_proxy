@@ -10,6 +10,7 @@ mod m20241226_120400_create_usage_summaries_table;
 mod m20241226_120500_create_model_costs_table;
 mod m20241226_120600_create_api_keys_table;
 mod m20250127_000001_add_cache_token_fields;
+mod m20250804_000001_add_user_state_column;
 
 pub struct Migrator;
 
@@ -25,6 +26,7 @@ impl MigratorTrait for Migrator {
             Box::new(m20241226_120500_create_model_costs_table::Migration),
             Box::new(m20241226_120600_create_api_keys_table::Migration),
             Box::new(m20250127_000001_add_cache_token_fields::Migration),
+            Box::new(m20250804_000001_add_user_state_column::Migration),
         ]
     }
 }
@@ -41,6 +43,7 @@ pub enum Users {
     CreatedAt,
     UpdatedAt,
     LastLogin,
+    State,
 }
 
 #[derive(Iden)]

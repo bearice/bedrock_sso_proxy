@@ -209,6 +209,7 @@ impl DataGenerator {
                 } else {
                     None
                 },
+                ..Default::default()
             };
 
             self.database.users().upsert(&user).await?;

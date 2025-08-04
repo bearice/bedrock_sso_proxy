@@ -101,6 +101,7 @@ async fn setup_test_data(database: &dyn DatabaseManager) -> i32 {
         created_at: Utc::now(),
         updated_at: Utc::now(),
         last_login: Some(Utc::now()),
+        ..Default::default()
     };
     let admin_id = database.users().upsert(&admin_user).await.unwrap();
 
@@ -438,6 +439,7 @@ async fn test_non_admin_access_forbidden_impl(server: &bedrock_sso_proxy::server
         created_at: Utc::now(),
         updated_at: Utc::now(),
         last_login: Some(Utc::now()),
+        ..Default::default()
     };
     let user_id = server.database.users().upsert(&user).await.unwrap();
 

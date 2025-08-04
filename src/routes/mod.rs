@@ -8,6 +8,7 @@ pub mod docs;
 pub mod frontend;
 pub mod health;
 pub mod usage;
+pub mod users;
 
 pub use anthropic::create_anthropic_routes;
 pub use api_keys::create_api_key_routes;
@@ -19,6 +20,7 @@ pub use docs::create_docs_routes;
 pub use frontend::create_frontend_router;
 pub use health::create_health_routes;
 pub use usage::{create_admin_usage_routes, create_user_usage_routes};
+pub use users::create_admin_user_routes;
 
 use crate::Server;
 use axum::Router;
@@ -40,6 +42,7 @@ pub fn create_admin_api_routes() -> Router<Server> {
         .merge(create_admin_usage_routes())
         .merge(create_admin_cost_routes())
         .merge(create_admin_audit_logs_routes())
+        .merge(create_admin_user_routes())
 }
 
 /// Create user API routes

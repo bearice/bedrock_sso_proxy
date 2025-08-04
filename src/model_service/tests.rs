@@ -162,6 +162,7 @@ async fn test_track_usage() {
         created_at: chrono::Utc::now(),
         updated_at: chrono::Utc::now(),
         last_login: Some(chrono::Utc::now()),
+        ..Default::default()
     };
     let user_id = database.users().upsert(&user_record).await.unwrap();
 
@@ -219,6 +220,7 @@ async fn test_failed_request_tracking() {
         created_at: chrono::Utc::now(),
         updated_at: chrono::Utc::now(),
         last_login: Some(chrono::Utc::now()),
+        ..Default::default()
     };
     let user_id = database.users().upsert(&user_record).await.unwrap();
 

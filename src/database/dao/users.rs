@@ -1,8 +1,9 @@
-use crate::database::entities::{UserRecord, users};
+use crate::database::entities::{UserRecord, UserState, users};
 use crate::database::{DatabaseError, DatabaseResult};
 use chrono::Utc;
 use sea_orm::{
-    ActiveModelTrait, ActiveValue, ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter, Set,
+    ActiveModelTrait, ActiveValue, ColumnTrait, DatabaseConnection, EntityTrait, PaginatorTrait,
+    QueryFilter, Set,
 };
 use sea_orm_migration::sea_query::OnConflict;
 
@@ -28,6 +29,7 @@ impl UsersDao {
             created_at: Set(user.created_at),
             updated_at: Set(user.updated_at),
             last_login: Set(user.last_login),
+            state: Set(user.state),
         };
 
         let on_conflict =
@@ -114,5 +116,59 @@ impl UsersDao {
             .map_err(|e| DatabaseError::Database(e.to_string()))?;
 
         Ok(updated_user)
+    }
+
+    /// Update user state
+    pub async fn update_state(&self, user_id: i32, state: UserState) -> DatabaseResult<UserRecord> {
+        let active_model = users::ActiveModel {
+            id: Set(user_id),
+            state: Set(state),
+            updated_at: Set(Utc::now()),
+            ..Default::default()
+        };
+
+        let updated_user = active_model
+            .update(&self.db)
+            .await
+            .map_err(|e| DatabaseError::Database(e.to_string()))?;
+
+        Ok(updated_user)
+    }
+
+    /// Find users by state
+    pub async fn find_by_state(&self, state: UserState) -> DatabaseResult<Vec<UserRecord>> {
+        let users = users::Entity::find()
+            .filter(users::Column::State.eq(state))
+            .all(&self.db)
+            .await
+            .map_err(|e| DatabaseError::Database(e.to_string()))?;
+
+        Ok(users)
+    }
+
+    /// Count users by state
+    pub async fn count_by_state(&self, state: UserState) -> DatabaseResult<u64> {
+        let count = users::Entity::find()
+            .filter(users::Column::State.eq(state))
+            .count(&self.db)
+            .await
+            .map_err(|e| DatabaseError::Database(e.to_string()))?;
+
+        Ok(count)
+    }
+
+    /// Check if user is active (not disabled or expired)
+    pub async fn is_user_active(&self, user_id: i32) -> DatabaseResult<bool> {
+        let user = self.find_by_id(user_id).await?;
+        Ok(user.map(|u| u.state.is_active()).unwrap_or(false))
+    }
+
+    /// Get users count by state breakdown
+    pub async fn get_user_state_counts(&self) -> DatabaseResult<(u64, u64, u64)> {
+        let active_count = self.count_by_state(UserState::Active).await?;
+        let disabled_count = self.count_by_state(UserState::Disabled).await?;
+        let expired_count = self.count_by_state(UserState::Expired).await?;
+
+        Ok((active_count, disabled_count, expired_count))
     }
 }

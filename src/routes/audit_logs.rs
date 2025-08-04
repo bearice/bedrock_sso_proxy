@@ -216,6 +216,7 @@ mod tests {
             created_at: Utc::now(),
             updated_at: Utc::now(),
             last_login: Some(Utc::now()),
+            ..Default::default()
         };
         let user_id = server.database.users().upsert(&user).await.unwrap();
 
@@ -281,6 +282,7 @@ mod tests {
             created_at: Utc::now(),
             updated_at: Utc::now(),
             last_login: Some(Utc::now()),
+            ..Default::default()
         };
         let user_id = server.database.users().upsert(&user).await.unwrap();
 
@@ -346,6 +348,7 @@ mod tests {
             created_at: Utc::now(),
             updated_at: Utc::now(),
             last_login: Some(Utc::now()),
+            ..Default::default()
         };
         let user_id = server.database.users().upsert(&user).await.unwrap();
 
@@ -415,6 +418,7 @@ mod tests {
             created_at: Utc::now(),
             updated_at: Utc::now(),
             last_login: Some(Utc::now()),
+            ..Default::default()
         };
         let user_id = server.database.users().upsert(&user).await.unwrap();
 

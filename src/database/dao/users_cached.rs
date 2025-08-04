@@ -7,7 +7,7 @@ use super::cached::{CacheKeyBuilder, CachedDao};
 use super::users::UsersDao;
 use crate::cache::CacheManager;
 use crate::database::DatabaseResult;
-use crate::database::entities::UserRecord;
+use crate::database::entities::{UserRecord, UserState};
 
 /// Cached Users DAO providing transparent caching for user operations
 pub struct CachedUsersDao {
@@ -99,6 +99,39 @@ impl CachedUsersDao {
             .await
     }
 
+    /// Update user state with cache invalidation
+    pub async fn update_state(&self, user_id: i32, state: UserState) -> DatabaseResult<UserRecord> {
+        // Generate cache keys that might be affected
+        let cache_keys = vec![self.key_builder.id_key(user_id)];
+
+        self.cached_dao
+            .update_and_invalidate(
+                || async { self.cached_dao.inner().update_state(user_id, state).await },
+                &cache_keys,
+            )
+            .await
+    }
+
+    /// Find users by state (no caching - typically used for admin operations)
+    pub async fn find_by_state(&self, state: UserState) -> DatabaseResult<Vec<UserRecord>> {
+        self.cached_dao.inner().find_by_state(state).await
+    }
+
+    /// Count users by state (no caching - typically used for admin operations)
+    pub async fn count_by_state(&self, state: UserState) -> DatabaseResult<u64> {
+        self.cached_dao.inner().count_by_state(state).await
+    }
+
+    /// Check if user is active (no caching - bool return type incompatible with cache)
+    pub async fn is_user_active(&self, user_id: i32) -> DatabaseResult<bool> {
+        self.cached_dao.inner().is_user_active(user_id).await
+    }
+
+    /// Get users count by state breakdown (no caching - admin operation)
+    pub async fn get_user_state_counts(&self) -> DatabaseResult<(u64, u64, u64)> {
+        self.cached_dao.inner().get_user_state_counts().await
+    }
+
     /// Invalidate all cache entries for a user
     pub async fn invalidate_user_cache(&self, user: &UserRecord) -> DatabaseResult<()> {
         let cache_keys = self.generate_user_cache_keys(user);
@@ -144,6 +177,7 @@ mod tests {
             created_at: Utc::now(),
             updated_at: Utc::now(),
             last_login: None,
+            state: UserState::Active,
         }
     }
 

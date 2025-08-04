@@ -209,16 +209,9 @@ impl Default for TestServerBuilder {
 
 /// Create a test user in the database
 pub async fn create_test_user(database: &Arc<dyn DatabaseManager>) -> i32 {
-    let user = UserRecord {
-        id: 0,
-        provider_user_id: "test_user_123".to_string(),
-        provider: "test".to_string(),
-        email: "test@example.com".to_string(),
-        display_name: Some("Test User".to_string()),
-        created_at: Utc::now(),
-        updated_at: Utc::now(),
-        last_login: Some(Utc::now()),
-    };
+    let user = UserRecord::new("test", "test_user_123", "test@example.com")
+        .with_display_name(Some("Test User"))
+        .with_last_login(Utc::now());
     database.users().upsert(&user).await.unwrap()
 }
 
@@ -229,16 +222,9 @@ pub async fn create_test_user_with_data(
     provider: &str,
     email: &str,
 ) -> i32 {
-    let user = UserRecord {
-        id: 0,
-        provider_user_id: provider_user_id.to_string(),
-        provider: provider.to_string(),
-        email: email.to_string(),
-        display_name: Some("Test User".to_string()),
-        created_at: Utc::now(),
-        updated_at: Utc::now(),
-        last_login: Some(Utc::now()),
-    };
+    let user = UserRecord::new(provider, provider_user_id, email)
+        .with_display_name(Some("Test User"))
+        .with_last_login(Utc::now());
     database.users().upsert(&user).await.unwrap()
 }
 

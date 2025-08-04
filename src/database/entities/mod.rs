@@ -142,5 +142,8 @@ pub type ApiKeyRecord = api_keys::Model;
 // Export audit event type
 pub use audit_logs::AuditEventType;
 
+// Export user state enum
+pub use users::UserState;
+
 // Database entities use derive macro with TTL attributes
 // All implementations are generated automatically via #[derive(CacheableDeriv)]

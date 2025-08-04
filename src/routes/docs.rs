@@ -29,6 +29,10 @@ use utoipa_swagger_ui::SwaggerUi;
         crate::routes::usage::get_system_usage_records,
         crate::routes::usage::get_admin_usage_summaries,
         crate::routes::audit_logs::get_audit_logs,
+        crate::routes::users::list_users,
+        crate::routes::users::get_user_by_id,
+        crate::routes::users::search_users,
+        crate::routes::users::update_user_state,
     ),
     components(
         schemas(
@@ -56,6 +60,12 @@ use utoipa_swagger_ui::SwaggerUi;
             crate::database::AuditLogQueryParams,
             crate::routes::audit_logs::AuditLogsResponse,
             crate::routes::audit_logs::AuditLogEntry,
+            crate::routes::users::UserResponse,
+            crate::routes::users::UserListResponse,
+            crate::routes::users::UserSearchQuery,
+            crate::routes::users::UserListQuery,
+            crate::routes::users::UpdateUserStateRequest,
+            crate::database::entities::UserState,
         )
     ),
     tags(
@@ -67,6 +77,7 @@ use utoipa_swagger_ui::SwaggerUi;
         (name = "Usage Tracking", description = "User usage tracking endpoints"),
         (name = "Admin Usage Management", description = "System-wide usage tracking endpoints (admin only)"),
         (name = "admin-audit", description = "Admin audit log operations (admin only)"),
+        (name = "admin_users", description = "Admin user management endpoints (admin only)"),
     ),
     modifiers(&SecurityAddon)
 )]

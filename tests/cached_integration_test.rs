@@ -40,6 +40,7 @@ impl MockUsersDao {
                 created_at: Utc::now(),
                 updated_at: Utc::now(),
                 last_login: None,
+                ..Default::default()
             }))
         } else {
             Ok(None)
@@ -292,6 +293,7 @@ async fn test_type_safety_with_different_entities() {
         created_at: Utc::now(),
         updated_at: Utc::now(),
         last_login: None,
+        ..Default::default()
     };
 
     let api_key = ApiKeyRecord {

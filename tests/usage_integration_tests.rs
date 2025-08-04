@@ -121,6 +121,7 @@ async fn setup_test_data(database: &dyn DatabaseManager) -> (i32, i32) {
         created_at: Utc::now(),
         updated_at: Utc::now(),
         last_login: Some(Utc::now()),
+        ..Default::default()
     };
     let user1_id = database.users().upsert(&user1).await.unwrap();
 
@@ -133,6 +134,7 @@ async fn setup_test_data(database: &dyn DatabaseManager) -> (i32, i32) {
         created_at: Utc::now(),
         updated_at: Utc::now(),
         last_login: Some(Utc::now()),
+        ..Default::default()
     };
     let admin_id = database.users().upsert(&admin_user).await.unwrap();
 
@@ -492,6 +494,7 @@ async fn test_realtime_hourly_summary_updates_impl(server: &bedrock_sso_proxy::s
         created_at: Utc::now(),
         updated_at: Utc::now(),
         last_login: None,
+        ..Default::default()
     };
     let user_id = database.users().upsert(&user).await.unwrap();
 
@@ -670,6 +673,7 @@ async fn test_realtime_hourly_summary_different_keys_impl(
         created_at: Utc::now(),
         updated_at: Utc::now(),
         last_login: None,
+        ..Default::default()
     };
     let user2 = users::Model {
         id: 0, // Will be set by database
@@ -680,6 +684,7 @@ async fn test_realtime_hourly_summary_different_keys_impl(
         created_at: Utc::now(),
         updated_at: Utc::now(),
         last_login: None,
+        ..Default::default()
     };
     let user1_id = database.users().upsert(&user1).await.unwrap();
     let user2_id = database.users().upsert(&user2).await.unwrap();
@@ -1257,6 +1262,7 @@ async fn test_admin_get_usage_summaries_success_impl(server: &bedrock_sso_proxy:
         created_at: Utc::now(),
         updated_at: Utc::now(),
         last_login: Some(Utc::now()),
+        ..Default::default()
     };
     let user2_id = server.database.users().upsert(&user2).await.unwrap();
 
