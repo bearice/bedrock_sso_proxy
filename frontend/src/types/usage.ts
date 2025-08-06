@@ -15,6 +15,7 @@ export interface UsageRecord {
   response_time_ms: number;
   success: boolean;
   error_message?: string | null;
+  stop_reason?: string | null;
   cost_usd?: string | null;
 }
 

@@ -652,6 +652,41 @@ export function UsageRecords({
                       </div>
                     </div>
                   )}
+
+                  {/* Stop Reason */}
+                  {record.stop_reason && (
+                    <div
+                      style={{
+                        background: '#f0f9ff',
+                        border: '1px solid #bae6fd',
+                        borderRadius: '6px',
+                        padding: '0.75rem',
+                        marginTop: record.error_message ? '0.75rem' : 0,
+                      }}
+                    >
+                      <div
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '0.5rem',
+                        }}
+                      >
+                        <strong style={{ color: '#0369a1' }}>Stop Reason:</strong>
+                        <span
+                          style={{
+                            color: '#0c4a6e',
+                            fontSize: '0.875rem',
+                            fontFamily: 'monospace',
+                            background: '#e0f2fe',
+                            padding: '0.125rem 0.375rem',
+                            borderRadius: '3px',
+                          }}
+                        >
+                          {record.stop_reason}
+                        </span>
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
