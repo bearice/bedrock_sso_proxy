@@ -39,6 +39,7 @@ impl UsageTrackingService {
         let mut output_tokens = 0;
         let mut cache_write_tokens = None;
         let mut cache_read_tokens = None;
+        let mut stop_reason = None;
 
         // Attempt to parse JSON response body for usage information
         if let Ok(body_str) = std::str::from_utf8(response_body) {
@@ -47,6 +48,7 @@ impl UsageTrackingService {
                 output_tokens = response_with_usage.usage.output_tokens;
                 cache_write_tokens = response_with_usage.usage.cache_creation_input_tokens;
                 cache_read_tokens = response_with_usage.usage.cache_read_input_tokens;
+                stop_reason = response_with_usage.stop_reason;
             }
         }
 
@@ -79,6 +81,8 @@ impl UsageTrackingService {
             cache_read_tokens,
             region,
             response_time_ms,
+            stop_reason,
+            error_message: None, // Will be set by caller for error cases
         })
     }
 
@@ -198,9 +202,67 @@ impl UsageTrackingService {
                 + usage_metadata.cache_write_tokens.unwrap_or(0)
                 + usage_metadata.cache_read_tokens.unwrap_or(0),
             response_time_ms: usage_metadata.response_time_ms,
-            success: true,
-            error_message: None,
+            success: usage_metadata.error_message.is_none(),
+            error_message: usage_metadata.error_message.clone(),
+            stop_reason: usage_metadata.stop_reason.clone(),
             cost_usd: cost_usd.map(|c| Decimal::from_f64_retain(c).unwrap_or_default()),
+        };
+
+        // Get usage DAO once and reuse it
+        let usage_dao = self.database.usage();
+
+        // Store usage record
+        usage_dao
+            .store_record(&usage_record)
+            .await
+            .map_err(AppError::Database)?;
+
+        // Update hourly summary
+        usage_dao
+            .update_hourly_summary(&usage_record)
+            .await
+            .map_err(AppError::Database)?;
+
+        Ok(())
+    }
+
+    /// Track failed usage for a model request
+    pub async fn track_failed_usage(
+        &self,
+        request: &ModelRequest,
+        error_message: &str,
+        response_time_ms: i32,
+    ) -> Result<(), AppError> {
+        let user_id = request.user_id;
+
+        // Strip regional prefix from model ID for consistent storage
+        let normalized_model_id = self.model_mapping.strip_regional_prefix(&request.model_id);
+
+        tracing::debug!(
+            "Tracking failed usage for user_id={} model={} error={} request_id={}",
+            user_id,
+            normalized_model_id,
+            error_message,
+            request.request_id
+        );
+
+        let usage_record = crate::database::entities::usage_records::Model {
+            id: 0, // Will be set by database
+            user_id,
+            model_id: normalized_model_id,
+            endpoint_type: request.endpoint_type.clone(),
+            region: self.config.aws.region.clone(), // Use config region for failed requests
+            request_time: Utc::now(),
+            input_tokens: 0, // No tokens counted for failed requests
+            output_tokens: 0,
+            cache_write_tokens: None,
+            cache_read_tokens: None,
+            total_tokens: 0,
+            response_time_ms,
+            success: false,
+            error_message: Some(error_message.to_string()),
+            stop_reason: None,
+            cost_usd: None, // No cost for failed requests
         };
 
         // Get usage DAO once and reuse it
@@ -235,4 +297,5 @@ struct ResponseUsage {
 #[derive(Debug, Deserialize, Serialize)]
 struct ResponseWithUsage {
     pub usage: ResponseUsage,
+    pub stop_reason: Option<String>,
 }

@@ -30,6 +30,11 @@ async fn create_test_usage_record(
         total_tokens: 300,
         success,
         error_message: None,
+        stop_reason: if success {
+            Some("end_turn".to_string())
+        } else {
+            None
+        },
         cost_usd: cost,
     };
 

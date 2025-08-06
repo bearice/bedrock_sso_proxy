@@ -12,6 +12,7 @@ mod m20241226_120600_create_api_keys_table;
 mod m20250127_000001_add_cache_token_fields;
 mod m20250804_000001_add_user_state_column;
 mod m20250806_135819_add_cache_tokens_to_summaries;
+mod m20250806_140000_add_stop_reason_to_usage_records;
 
 pub struct Migrator;
 
@@ -29,6 +30,7 @@ impl MigratorTrait for Migrator {
             Box::new(m20250127_000001_add_cache_token_fields::Migration),
             Box::new(m20250804_000001_add_user_state_column::Migration),
             Box::new(m20250806_135819_add_cache_tokens_to_summaries::Migration),
+            Box::new(m20250806_140000_add_stop_reason_to_usage_records::Migration),
         ]
     }
 }
@@ -94,6 +96,7 @@ pub enum UsageRecords {
     ResponseTimeMs,
     Success,
     ErrorMessage,
+    StopReason,
     CostUsd,
 }
 

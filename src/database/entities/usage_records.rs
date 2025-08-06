@@ -25,6 +25,7 @@ pub struct Model {
     pub response_time_ms: i32,
     pub success: bool,
     pub error_message: Option<String>,
+    pub stop_reason: Option<String>,
     pub cost_usd: Option<Decimal>,
 }
 

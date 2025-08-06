@@ -176,6 +176,7 @@ async fn setup_test_data(database: &dyn DatabaseManager) -> (i32, i32) {
             response_time_ms: 200 + (i as i32 * 50),
             success: true,
             error_message: None,
+            stop_reason: Some("end_turn".to_string()),
             cost_usd: Some(*cost),
         };
         database.usage().store_record(&record).await.unwrap();
@@ -516,6 +517,7 @@ async fn test_realtime_hourly_summary_updates_impl(server: &bedrock_sso_proxy::s
         response_time_ms: 500,
         success: true,
         error_message: None,
+        stop_reason: Some("end_turn".to_string()),
         cost_usd: Some(Decimal::new(25, 3)), // 0.025
     };
 
@@ -565,6 +567,7 @@ async fn test_realtime_hourly_summary_updates_impl(server: &bedrock_sso_proxy::s
         response_time_ms: 300,
         success: false, // Failed request
         error_message: Some("Test error".to_string()),
+        stop_reason: None,                   // No stop_reason for failed requests
         cost_usd: Some(Decimal::new(50, 3)), // 0.050
     };
 
@@ -616,6 +619,7 @@ async fn test_realtime_hourly_summary_updates_impl(server: &bedrock_sso_proxy::s
         response_time_ms: 200,
         success: true,
         error_message: None,
+        stop_reason: Some("end_turn".to_string()),
         cost_usd: Some(Decimal::new(10, 3)), // 0.010
     };
 
@@ -711,6 +715,7 @@ async fn test_realtime_hourly_summary_different_keys_impl(
             response_time_ms: 300,
             success: true,
             error_message: None,
+            stop_reason: Some("end_turn".to_string()),
             cost_usd: Some(Decimal::new(20, 3)),
         },
         // User 1, Model B
@@ -729,6 +734,7 @@ async fn test_realtime_hourly_summary_different_keys_impl(
             response_time_ms: 400,
             success: true,
             error_message: None,
+            stop_reason: Some("end_turn".to_string()),
             cost_usd: Some(Decimal::new(15, 3)),
         },
         // User 2, Model A
@@ -747,6 +753,7 @@ async fn test_realtime_hourly_summary_different_keys_impl(
             response_time_ms: 500,
             success: true,
             error_message: None,
+            stop_reason: Some("end_turn".to_string()),
             cost_usd: Some(Decimal::new(30, 3)),
         },
     ];
@@ -823,6 +830,7 @@ async fn test_pagination_total_count_accuracy_impl(server: &bedrock_sso_proxy::s
             response_time_ms: 150,
             success: true,
             error_message: None,
+            stop_reason: Some("end_turn".to_string()),
             cost_usd: Some(Decimal::new(10, 4)), // 0.001
         };
         server.database.usage().store_record(&record).await.unwrap();
@@ -954,6 +962,7 @@ async fn test_pagination_with_filters_total_count_impl(server: &bedrock_sso_prox
             response_time_ms: 150,
             success: true,
             error_message: None,
+            stop_reason: Some("end_turn".to_string()),
             cost_usd: Some(Decimal::new(10, 4)),
         };
         server.database.usage().store_record(&record).await.unwrap();

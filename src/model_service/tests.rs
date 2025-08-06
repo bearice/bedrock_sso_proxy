@@ -7,6 +7,7 @@ use crate::{
     database::{UsageQuery, entities::*},
     model_service::streaming::{EventStreamParser, ParsedEventStream},
     model_service::types::*,
+    model_service::usage_tracking,
     test_utils::TestServerBuilder,
     utils::RequestId,
 };
@@ -182,6 +183,8 @@ async fn test_track_usage() {
         cache_read_tokens: None,
         region: "us-east-1".to_string(),
         response_time_ms: 250,
+        stop_reason: Some("end_turn".to_string()),
+        error_message: None,
     };
 
     // Track usage
@@ -239,20 +242,13 @@ async fn test_failed_request_tracking() {
         endpoint_type: "bedrock".to_string(),
     };
 
-    // Test create_failed_usage_metadata method
-    let failed_usage_metadata = model_service.create_failed_usage_metadata(&request, 500);
+    // Test track_failed_usage method directly
+    let usage_tracker =
+        usage_tracking::UsageTrackingService::new(create_test_config(), database.clone());
 
-    // Verify metadata structure for failed requests
-    assert_eq!(failed_usage_metadata.input_tokens, 0);
-    assert_eq!(failed_usage_metadata.output_tokens, 0);
-    assert_eq!(failed_usage_metadata.cache_write_tokens, None);
-    assert_eq!(failed_usage_metadata.cache_read_tokens, None);
-    assert_eq!(failed_usage_metadata.response_time_ms, 500);
-    assert_eq!(failed_usage_metadata.region, "us-east-1");
-
-    // Track the failed usage
-    model_service
-        .track_usage(&request, &failed_usage_metadata)
+    let error_message = "Test error message";
+    usage_tracker
+        .track_failed_usage(&request, error_message, 500)
         .await
         .unwrap();
 
@@ -273,6 +269,9 @@ async fn test_failed_request_tracking() {
     assert_eq!(record.model_id, "test-model");
     assert_eq!(record.response_time_ms, 500);
     assert_eq!(record.region, "us-east-1");
+    assert_eq!(record.success, false);
+    assert_eq!(record.error_message, Some("Test error message".to_string()));
+    assert_eq!(record.stop_reason, None); // No stop_reason for failed requests
 }
 
 #[test]

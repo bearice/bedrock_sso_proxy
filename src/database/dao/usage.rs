@@ -88,6 +88,7 @@ impl UsageDao {
             response_time_ms: Set(record.response_time_ms),
             success: Set(record.success),
             error_message: Set(record.error_message.clone()),
+            stop_reason: Set(record.stop_reason.clone()),
             cost_usd: Set(record.cost_usd),
         };
 

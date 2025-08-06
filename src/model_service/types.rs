@@ -78,6 +78,8 @@ pub struct UsageMetadata {
     pub cache_read_tokens: Option<i32>,
     pub region: String,
     pub response_time_ms: i32,
+    pub stop_reason: Option<String>,
+    pub error_message: Option<String>,
 }
 
 /// AWS Bedrock invocation metrics from streaming response

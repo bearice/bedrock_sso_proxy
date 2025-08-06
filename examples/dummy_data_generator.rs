@@ -316,6 +316,11 @@ impl DataGenerator {
             } else {
                 None
             };
+            let stop_reason = if success {
+                Some(self.generate_random_stop_reason())
+            } else {
+                None
+            };
 
             // Calculate cost based on model costs
             let cost_usd = if success {
@@ -346,6 +351,7 @@ impl DataGenerator {
                 response_time_ms,
                 success,
                 error_message,
+                stop_reason,
                 cost_usd,
             };
 
@@ -558,6 +564,11 @@ impl DataGenerator {
             "Internal server error",
         ];
         errors.choose(&mut rng()).unwrap().to_string()
+    }
+
+    fn generate_random_stop_reason(&self) -> String {
+        let stop_reasons = ["end_turn", "max_tokens", "stop_sequence"];
+        stop_reasons.choose(&mut rng()).unwrap().to_string()
     }
 }
 

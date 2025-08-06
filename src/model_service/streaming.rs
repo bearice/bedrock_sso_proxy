@@ -11,6 +11,7 @@ use crate::model_service::types::{SseEvent, UsageMetrics, UsageTracker};
 pub struct EventStreamParser {
     buffer: Vec<u8>,
     pub usage_metrics: UsageMetrics,
+    pub stop_reason: Option<String>,
 }
 
 impl EventStreamParser {
@@ -135,6 +136,11 @@ impl EventStreamParser {
         &mut self,
         event: &serde_json::Value,
     ) -> Result<(), Box<dyn std::error::Error>> {
+        // Always try to extract stop_reason from any event
+        if let Some(stop_reason) = event["stop_reason"].as_str() {
+            self.stop_reason = Some(stop_reason.to_string());
+        }
+
         match event["type"].as_str() {
             Some("message_start") => {
                 self.extract_cache_tokens(event)?;
@@ -177,12 +183,18 @@ impl EventStreamParser {
                 self.usage_metrics.output_tokens = output_tokens as i32;
             }
         }
+
         Ok(())
     }
 
     /// Get current usage metrics
     pub fn get_usage_metrics(&self) -> UsageMetrics {
         self.usage_metrics.clone()
+    }
+
+    /// Get stop reason from the stream
+    pub fn get_stop_reason(&self) -> Option<String> {
+        self.stop_reason.clone()
     }
 }
 
@@ -294,6 +306,8 @@ impl Stream for ParsedEventStream {
                         cache_read_tokens: usage_metrics.cache_read_tokens,
                         region: "us-east-1".to_string(), // Default region - will be properly set by track_usage method
                         response_time_ms,
+                        stop_reason: self.parser.get_stop_reason(),
+                        error_message: None, // Streaming completed successfully
                     };
 
                     let model_service = tracker.model_service.clone();

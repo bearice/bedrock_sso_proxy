@@ -123,22 +123,6 @@ impl ModelServiceImpl {
         task_id
     }
 
-    /// Create usage metadata for failed requests (0 tokens, but track the attempt)
-    fn create_failed_usage_metadata(
-        &self,
-        _request: &ModelRequest,
-        response_time_ms: i32,
-    ) -> UsageMetadata {
-        UsageMetadata {
-            input_tokens: 0,
-            output_tokens: 0,
-            cache_write_tokens: None,
-            cache_read_tokens: None,
-            response_time_ms,
-            region: self.config.aws.region.clone(),
-        }
-    }
-
     /// Extract usage metadata from AWS response body and headers
     fn extract_usage_metadata(
         &self,
@@ -204,16 +188,19 @@ impl ModelService for ModelServiceImpl {
             Err(aws_error) => {
                 let response_time_ms = start_time.elapsed().as_millis() as i32;
 
-                // 2. Create usage metadata for failed request (0 tokens, but track the attempt)
-                let failed_usage_metadata =
-                    self.create_failed_usage_metadata(&request, response_time_ms);
-
-                // 3. Track usage for failed request
-                if let Err(e) = self.track_usage(&request, &failed_usage_metadata).await {
+                // 2. Track usage for failed request using the new method
+                let usage_tracker = usage_tracking::UsageTrackingService::new(
+                    self.config.clone(),
+                    self.database.clone(),
+                );
+                if let Err(e) = usage_tracker
+                    .track_failed_usage(&request, &aws_error.to_string(), response_time_ms)
+                    .await
+                {
                     tracing::warn!("Failed to track usage for failed request: {}", e);
                 }
 
-                // 4. Return the original error
+                // 3. Return the original error
                 Err(aws_error)
             }
         }
@@ -245,12 +232,15 @@ impl ModelService for ModelServiceImpl {
             Err(aws_error) => {
                 let response_time_ms = start_time.elapsed().as_millis() as i32;
 
-                // Create usage metadata for failed streaming request
-                let failed_usage_metadata =
-                    self.create_failed_usage_metadata(&request, response_time_ms);
-
-                // Track usage for failed streaming request
-                if let Err(e) = self.track_usage(&request, &failed_usage_metadata).await {
+                // Track usage for failed streaming request using the new method
+                let usage_tracker = usage_tracking::UsageTrackingService::new(
+                    self.config.clone(),
+                    self.database.clone(),
+                );
+                if let Err(e) = usage_tracker
+                    .track_failed_usage(&request, &aws_error.to_string(), response_time_ms)
+                    .await
+                {
                     tracing::warn!("Failed to track usage for failed streaming request: {}", e);
                 }
 
