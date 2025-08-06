@@ -227,11 +227,6 @@ async fn test_failed_request_tracking() {
     };
     let user_id = database.users().upsert(&user_record).await.unwrap();
 
-    // Create model service using the same pattern as other tests
-    let config = create_test_config();
-    let bedrock = Arc::new(BedrockRuntimeImpl::new_test().await);
-    let model_service = ModelServiceImpl::new(bedrock, database.clone(), config);
-
     // Create a request
     let request = ModelRequest {
         request_id: RequestId::new(),
@@ -269,7 +264,7 @@ async fn test_failed_request_tracking() {
     assert_eq!(record.model_id, "test-model");
     assert_eq!(record.response_time_ms, 500);
     assert_eq!(record.region, "us-east-1");
-    assert_eq!(record.success, false);
+    assert!(!record.success);
     assert_eq!(record.error_message, Some("Test error message".to_string()));
     assert_eq!(record.stop_reason, None); // No stop_reason for failed requests
 }

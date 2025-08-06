@@ -9,6 +9,7 @@ use utoipa::ToSchema;
 #[derive(Clone, Debug, PartialEq, DeriveEntityModel, Eq, Serialize, Deserialize, ToSchema)]
 #[typed_cache(ttl = 3600)] // Cache for 1 hour since costs change infrequently
 #[sea_orm(table_name = "model_costs")]
+#[schema(as = ModelCost)]
 pub struct Model {
     #[sea_orm(primary_key)]
     pub id: i32,

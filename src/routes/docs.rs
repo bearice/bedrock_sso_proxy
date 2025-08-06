@@ -55,7 +55,7 @@ use utoipa_swagger_ui::SwaggerUi;
             crate::routes::usage::UsageRecordsResponse,
             crate::routes::usage::UsageSummariesResponse,
             crate::database::entities::UsageRecord,
-            crate::database::entities::usage_summaries::Model,
+            crate::database::entities::UsageSummary,
             crate::database::entities::PeriodType,
             crate::database::AuditLogQueryParams,
             crate::routes::audit_logs::AuditLogsResponse,

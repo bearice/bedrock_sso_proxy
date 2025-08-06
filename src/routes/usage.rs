@@ -2,7 +2,7 @@ use crate::{
     auth::middleware::UserExtractor,
     database::{
         dao::usage::UsageQuery,
-        entities::{PeriodType, UsageRecord},
+        entities::{PeriodType, UsageRecord, UsageSummary},
     },
     error::AppError,
     routes::ApiErrorResponse,
@@ -90,7 +90,7 @@ pub struct UsageRecordsResponse {
 #[derive(Debug, Serialize, ToSchema)]
 pub struct UsageSummariesResponse {
     /// List of usage summaries
-    pub summaries: Vec<crate::database::entities::usage_summaries::Model>,
+    pub summaries: Vec<UsageSummary>,
     /// Total number of matching summaries (for pagination)
     pub total: u64,
     /// Number of summaries returned in this page

@@ -15,6 +15,7 @@ pub const API_KEY_LENGTH: usize = 32;
 #[derive(Clone, Debug, PartialEq, DeriveEntityModel, Eq, Serialize, Deserialize, ToSchema)]
 #[sea_orm(table_name = "api_keys")]
 #[typed_cache(ttl = 300)] // 5 minutes
+#[schema(as = ApiKey)]
 pub struct Model {
     #[sea_orm(primary_key)]
     pub id: i32,
