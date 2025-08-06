@@ -18,18 +18,19 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use sha2::{Digest, Sha256};
 use std::{collections::HashMap, sync::Arc};
+use utoipa::ToSchema;
 use uuid::Uuid;
 
 use super::providers::Oauth2Client;
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, ToSchema)]
 pub struct AuthorizeResponse {
     pub authorization_url: String,
     pub state: String,
     pub provider: String,
 }
 
-#[derive(Debug, Deserialize, Clone)]
+#[derive(Debug, Deserialize, Clone, ToSchema)]
 pub struct TokenRequest {
     pub provider: String,
     pub authorization_code: String,
@@ -37,12 +38,12 @@ pub struct TokenRequest {
     pub state: String,
 }
 
-#[derive(Debug, Deserialize, Clone)]
+#[derive(Debug, Deserialize, Clone, ToSchema)]
 pub struct RefreshRequest {
     pub refresh_token: String,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, ToSchema)]
 pub struct TokenResponse {
     pub access_token: String,
     pub token_type: String,
@@ -51,14 +52,14 @@ pub struct TokenResponse {
     pub scope: String,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, ToSchema)]
 pub struct ProviderInfo {
     pub name: String,
     pub display_name: String,
     pub scopes: Vec<String>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, ToSchema)]
 pub struct ProvidersResponse {
     pub providers: Vec<ProviderInfo>,
 }

@@ -1,7 +1,10 @@
 use crate::{
-    auth::oauth::{RefreshRequest, TokenRequest},
+    auth::oauth::{
+        AuthorizeResponse, ProvidersResponse, RefreshRequest, TokenRequest, TokenResponse,
+    },
     database::entities::UserRecord,
     error::AppError,
+    routes::ApiErrorResponse,
     server::Server,
     utils::request_context::RequestContext,
 };
@@ -14,8 +17,9 @@ use axum::{
 };
 use serde::Deserialize;
 use url::Url;
+use utoipa::ToSchema;
 
-#[derive(Deserialize)]
+#[derive(Deserialize, ToSchema)]
 pub struct AuthorizeQuery {
     pub redirect_uri: Option<String>,
     pub state: Option<String>,
@@ -34,6 +38,21 @@ pub fn create_protected_auth_routes() -> Router<Server> {
     Router::new().route("/me", get(me_handler))
 }
 
+#[utoipa::path(
+    get,
+    path = "/auth/authorize/{provider}",
+    tags = ["Authentication"],
+    summary = "Initiate OAuth authorization flow",
+    description = "Generates an authorization URL for the specified OAuth provider",
+    params(
+        ("provider" = String, Path, description = "OAuth provider name (google, github, microsoft, etc.)")
+    ),
+    responses(
+        (status = 200, description = "Authorization URL generated successfully", body = AuthorizeResponse),
+        (status = 400, description = "Invalid provider or request parameters", body = ApiErrorResponse),
+        (status = 500, description = "Internal server error", body = ApiErrorResponse)
+    )
+)]
 pub async fn authorize_handler(
     State(server): State<Server>,
     Path(provider): Path<String>,
@@ -52,6 +71,19 @@ pub async fn authorize_handler(
     Ok(Json(response))
 }
 
+#[utoipa::path(
+    post,
+    path = "/auth/token",
+    tags = ["Authentication"],
+    summary = "Exchange authorization code for access token",
+    description = "Exchanges an OAuth authorization code for an access token and refresh token",
+    request_body = TokenRequest,
+    responses(
+        (status = 200, description = "Token exchange successful", body = TokenResponse),
+        (status = 400, description = "Invalid authorization code or request parameters", body = ApiErrorResponse),
+        (status = 500, description = "Internal server error", body = ApiErrorResponse)
+    )
+)]
 pub async fn token_handler(
     State(server): State<Server>,
     headers: HeaderMap,
@@ -65,6 +97,20 @@ pub async fn token_handler(
     Ok(Json(response))
 }
 
+#[utoipa::path(
+    post,
+    path = "/auth/refresh",
+    tags = ["Authentication"],
+    summary = "Refresh access token",
+    description = "Refreshes an expired access token using a refresh token",
+    request_body = RefreshRequest,
+    responses(
+        (status = 200, description = "Token refreshed successfully", body = TokenResponse),
+        (status = 400, description = "Invalid refresh token", body = ApiErrorResponse),
+        (status = 401, description = "Refresh token expired or revoked", body = ApiErrorResponse),
+        (status = 500, description = "Internal server error", body = ApiErrorResponse)
+    )
+)]
 pub async fn refresh_handler(
     State(server): State<Server>,
     headers: HeaderMap,
@@ -75,6 +121,17 @@ pub async fn refresh_handler(
     Ok(Json(response))
 }
 
+#[utoipa::path(
+    get,
+    path = "/auth/providers",
+    tags = ["Authentication"],
+    summary = "List available OAuth providers",
+    description = "Returns a list of configured OAuth providers with their display names and scopes",
+    responses(
+        (status = 200, description = "OAuth providers retrieved successfully", body = ProvidersResponse),
+        (status = 500, description = "Internal server error", body = ApiErrorResponse)
+    )
+)]
 pub async fn providers_handler(
     State(server): State<Server>,
 ) -> Result<Json<crate::auth::oauth::ProvidersResponse>, AppError> {
@@ -150,6 +207,21 @@ pub async fn callback_handler(
 }
 
 /// Get current user information (requires authentication)
+#[utoipa::path(
+    get,
+    path = "/auth/me",
+    tags = ["Authentication"],
+    summary = "Get current user information",
+    description = "Returns information about the currently authenticated user",
+    responses(
+        (status = 200, description = "User information retrieved successfully", body = UserRecord),
+        (status = 401, description = "Authentication required", body = ApiErrorResponse),
+        (status = 500, description = "Internal server error", body = ApiErrorResponse)
+    ),
+    security(
+        ("jwt_auth" = [])
+    )
+)]
 pub async fn me_handler(
     Extension(user): Extension<UserRecord>,
 ) -> Result<Json<UserRecord>, AppError> {
@@ -157,7 +229,7 @@ pub async fn me_handler(
     Ok(Json(user))
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, ToSchema)]
 pub struct CallbackQuery {
     pub code: Option<String>,
     pub state: Option<String>,

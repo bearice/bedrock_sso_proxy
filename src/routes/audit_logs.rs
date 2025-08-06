@@ -26,7 +26,7 @@ use utoipa::{OpenApi, ToSchema};
         )
     ),
     tags(
-        (name = "admin-audit", description = "Admin audit log operations")
+        (name = "Admin Audit Logs", description = "Admin audit log operations")
     )
 )]
 pub struct AdminAuditLogsApi;
@@ -106,7 +106,7 @@ impl From<crate::database::entities::audit_logs::Model> for AuditLogEntry {
     security(
         ("bearer_auth" = [])
     ),
-    tag = "admin-audit"
+    tag = "Admin Audit Logs"
 )]
 pub async fn get_audit_logs(
     State(server): State<Server>,

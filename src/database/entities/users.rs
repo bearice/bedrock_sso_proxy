@@ -21,6 +21,7 @@ use utoipa::ToSchema;
 )]
 #[sea_orm(rs_type = "String", db_type = "String(StringLen::N(16))")]
 #[derive(Default)]
+#[schema(as = UserRecord)]
 pub enum UserState {
     #[sea_orm(string_value = "active")]
     #[serde(rename = "active")]
@@ -69,7 +70,7 @@ impl UserState {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, DeriveEntityModel, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, DeriveEntityModel, Eq, Serialize, Deserialize, ToSchema)]
 #[sea_orm(table_name = "users")]
 #[typed_cache(ttl = 900)] // 15 minutes
 pub struct Model {

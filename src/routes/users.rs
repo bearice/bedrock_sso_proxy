@@ -37,7 +37,7 @@ use utoipa::{IntoParams, OpenApi, ToSchema};
         ApiErrorResponse
     )),
     tags(
-        (name = "admin_users", description = "Admin user management endpoints")
+        (name = "Admin User Management", description = "Admin user management endpoints")
     )
 )]
 pub struct AdminUsersApi;
@@ -159,7 +159,7 @@ pub struct UpdateUserStateRequest {
         (status = 403, description = "Forbidden - admin access required", body = ApiErrorResponse),
         (status = 500, description = "Internal server error", body = ApiErrorResponse)
     ),
-    tag = "admin_users",
+    tag = "Admin User Management",
     security(
         ("jwt_auth" = [])
     )
@@ -245,7 +245,7 @@ pub async fn list_users(
         (status = 404, description = "User not found", body = ApiErrorResponse),
         (status = 500, description = "Internal server error", body = ApiErrorResponse)
     ),
-    tag = "admin_users",
+    tag = "Admin User Management",
     security(
         ("jwt_auth" = [])
     )
@@ -279,7 +279,7 @@ pub async fn get_user_by_id(
         (status = 403, description = "Forbidden - admin access required", body = ApiErrorResponse),
         (status = 500, description = "Internal server error", body = ApiErrorResponse)
     ),
-    tag = "admin_users",
+    tag = "Admin User Management",
     security(
         ("jwt_auth" = [])
     )
@@ -362,7 +362,7 @@ pub async fn search_users(
         (status = 404, description = "User not found", body = ApiErrorResponse),
         (status = 500, description = "Internal server error", body = ApiErrorResponse)
     ),
-    tag = "admin_users",
+    tag = "Admin User Management",
     security(
         ("jwt_auth" = [])
     )
