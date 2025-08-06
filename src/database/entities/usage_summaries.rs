@@ -19,6 +19,8 @@ pub struct Model {
     pub successful_requests: i32,
     pub total_input_tokens: i64,
     pub total_output_tokens: i64,
+    pub total_cache_write_tokens: i64,
+    pub total_cache_read_tokens: i64,
     pub total_tokens: i64,
     pub avg_response_time_ms: f32,
     pub estimated_cost: Option<Decimal>,

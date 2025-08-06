@@ -425,6 +425,8 @@ impl DataGenerator {
                         successful_requests,
                         total_input_tokens,
                         total_output_tokens,
+                        total_cache_write_tokens: 0,
+                        total_cache_read_tokens: 0,
                         total_tokens,
                         avg_response_time_ms,
                         estimated_cost,

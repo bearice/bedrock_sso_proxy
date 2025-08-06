@@ -307,7 +307,7 @@ mod tests {
             created_at: chrono::Utc::now(),
             updated_at: chrono::Utc::now(),
             last_login: Some(chrono::Utc::now()),
-            ..Default::default()  // Uses default state and other fields
+            ..Default::default() // Uses default state and other fields
         };
         server.database.users().upsert(&user).await.unwrap()
     }
@@ -558,7 +558,7 @@ mod tests {
                 created_at: Utc::now(),
                 updated_at: Utc::now(),
                 last_login: None,
-                ..Default::default()  // Uses default state and other fields
+                ..Default::default() // Uses default state and other fields
             };
             server.database.users().upsert(&user).await.unwrap()
         }

@@ -118,6 +118,8 @@ impl UsageDao {
             total_requests: Set(1), // First request for this hour
             total_input_tokens: Set(usage_record.input_tokens as i64),
             total_output_tokens: Set(usage_record.output_tokens as i64),
+            total_cache_write_tokens: Set(usage_record.cache_write_tokens.unwrap_or(0) as i64),
+            total_cache_read_tokens: Set(usage_record.cache_read_tokens.unwrap_or(0) as i64),
             total_tokens: Set(usage_record.total_tokens as i64),
             avg_response_time_ms: Set(usage_record.response_time_ms as f32),
             successful_requests: Set(if usage_record.success { 1 } else { 0 }),
@@ -164,6 +166,22 @@ impl UsageDao {
                 usage_summaries::Column::TotalOutputTokens,
             ))
             .add(usage_record.output_tokens as i64),
+        )
+        .value(
+            usage_summaries::Column::TotalCacheWriteTokens,
+            sea_orm::sea_query::Expr::col((
+                usage_summaries::Entity,
+                usage_summaries::Column::TotalCacheWriteTokens,
+            ))
+            .add(usage_record.cache_write_tokens.unwrap_or(0) as i64),
+        )
+        .value(
+            usage_summaries::Column::TotalCacheReadTokens,
+            sea_orm::sea_query::Expr::col((
+                usage_summaries::Entity,
+                usage_summaries::Column::TotalCacheReadTokens,
+            ))
+            .add(usage_record.cache_read_tokens.unwrap_or(0) as i64),
         )
         .value(
             usage_summaries::Column::TotalTokens,
@@ -540,6 +558,8 @@ impl UsageDao {
                 successful_requests: Set(summary.successful_requests),
                 total_input_tokens: Set(summary.total_input_tokens),
                 total_output_tokens: Set(summary.total_output_tokens),
+                total_cache_write_tokens: Set(summary.total_cache_write_tokens),
+                total_cache_read_tokens: Set(summary.total_cache_read_tokens),
                 total_tokens: Set(summary.total_tokens),
                 avg_response_time_ms: Set(summary.avg_response_time_ms),
                 estimated_cost: Set(summary.estimated_cost),
@@ -560,6 +580,8 @@ impl UsageDao {
             usage_summaries::Column::SuccessfulRequests,
             usage_summaries::Column::TotalInputTokens,
             usage_summaries::Column::TotalOutputTokens,
+            usage_summaries::Column::TotalCacheWriteTokens,
+            usage_summaries::Column::TotalCacheReadTokens,
             usage_summaries::Column::TotalTokens,
             usage_summaries::Column::AvgResponseTimeMs,
             usage_summaries::Column::EstimatedCost,

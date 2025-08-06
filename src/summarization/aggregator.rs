@@ -17,6 +17,8 @@ struct SummaryData {
     total_requests: i32,
     total_input_tokens: i64,
     total_output_tokens: i64,
+    total_cache_write_tokens: i64,
+    total_cache_read_tokens: i64,
     total_tokens: i64,
     total_response_time: f64,
     successful_requests: i32,
@@ -243,6 +245,8 @@ impl SummaryAggregator {
             data.total_requests += 1;
             data.total_input_tokens += record.input_tokens as i64;
             data.total_output_tokens += record.output_tokens as i64;
+            data.total_cache_write_tokens += record.cache_write_tokens.unwrap_or(0) as i64;
+            data.total_cache_read_tokens += record.cache_read_tokens.unwrap_or(0) as i64;
             data.total_tokens += record.total_tokens as i64;
             data.total_response_time += record.response_time_ms as f64;
 
@@ -278,6 +282,8 @@ impl SummaryAggregator {
             data.total_requests += summary.total_requests;
             data.total_input_tokens += summary.total_input_tokens;
             data.total_output_tokens += summary.total_output_tokens;
+            data.total_cache_write_tokens += summary.total_cache_write_tokens;
+            data.total_cache_read_tokens += summary.total_cache_read_tokens;
             data.total_tokens += summary.total_tokens;
 
             // Weighted average for response time
@@ -324,6 +330,8 @@ impl SummaryAggregator {
                 successful_requests: data.successful_requests,
                 total_input_tokens: data.total_input_tokens,
                 total_output_tokens: data.total_output_tokens,
+                total_cache_write_tokens: data.total_cache_write_tokens,
+                total_cache_read_tokens: data.total_cache_read_tokens,
                 total_tokens: data.total_tokens,
                 avg_response_time_ms,
                 estimated_cost: if data.total_cost > Decimal::ZERO {

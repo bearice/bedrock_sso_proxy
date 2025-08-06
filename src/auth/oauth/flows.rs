@@ -256,11 +256,8 @@ impl OAuthFlows {
 
         // Store user information persistently if storage is available
         let (db_user_id, is_admin) = {
-            let user_record = UserRecord::new(
-                &request.provider,
-                user_id,
-                email,
-            ).with_display_name(display_name);
+            let user_record =
+                UserRecord::new(&request.provider, user_id, email).with_display_name(display_name);
 
             let db_user_id = self
                 .database
