@@ -1,5 +1,7 @@
 import { useState, useCallback, useEffect } from 'react';
-import { UsageQuery } from '../../types/usage';
+import type { components } from '../../generated/api';
+
+type UsageQuery = components['schemas']['UsageRecordsQuery'];
 import { Calendar, Filter, RotateCcw, Search, Check } from 'lucide-react';
 
 interface UsageFiltersProps {
@@ -20,7 +22,7 @@ export function UsageFilters({
   const [hasChanges, setHasChanges] = useState(false);
 
   // Convert ISO date to YYYY-MM-DD for date inputs
-  const formatDateForInput = (isoDate?: string): string => {
+  const formatDateForInput = (isoDate?: string | null): string => {
     if (!isoDate) return '';
     return isoDate.split('T')[0];
   };
@@ -34,14 +36,7 @@ export function UsageFilters({
 
   // Check if draft filters differ from current filters
   const filtersEqual = useCallback((a: UsageQuery, b: UsageQuery): boolean => {
-    const keys = [
-      'start_date',
-      'end_date',
-      'model',
-      'success_only',
-      'min_tokens',
-      'max_tokens',
-    ] as const;
+    const keys = ['start_date', 'end_date', 'model', 'success_only'] as const;
     return keys.every((key) => a[key] === b[key]);
   }, []);
 
@@ -490,7 +485,9 @@ export function UsageFilters({
             <select
               id="success-filter"
               value={
-                draftFilters.success_only === undefined ? '' : draftFilters.success_only.toString()
+                draftFilters.success_only === undefined || draftFilters.success_only === null
+                  ? ''
+                  : draftFilters.success_only.toString()
               }
               onChange={(e) =>
                 handleInputChange(
@@ -550,91 +547,11 @@ export function UsageFilters({
               <option value="100">100</option>
             </select>
           </div>
-
-          {/* Min/Max Tokens */}
-          <div>
-            <label
-              htmlFor="min-tokens"
-              style={{
-                display: 'block',
-                fontSize: '0.875rem',
-                fontWeight: 500,
-                color: '#374151',
-                marginBottom: '0.5rem',
-              }}
-            >
-              Min Tokens
-            </label>
-            <input
-              id="min-tokens"
-              type="number"
-              min="0"
-              value={draftFilters.min_tokens || ''}
-              onChange={(e) =>
-                handleInputChange(
-                  'min_tokens',
-                  e.target.value ? parseInt(e.target.value) : undefined
-                )
-              }
-              placeholder="No minimum"
-              disabled={isLoading}
-              style={{
-                width: '100%',
-                padding: '0.5rem',
-                border: '1px solid #d1d5db',
-                borderRadius: '6px',
-                fontSize: '0.875rem',
-                backgroundColor: isLoading ? '#f9fafb' : 'white',
-                opacity: isLoading ? 0.7 : 1,
-              }}
-            />
-          </div>
-
-          <div>
-            <label
-              htmlFor="max-tokens"
-              style={{
-                display: 'block',
-                fontSize: '0.875rem',
-                fontWeight: 500,
-                color: '#374151',
-                marginBottom: '0.5rem',
-              }}
-            >
-              Max Tokens
-            </label>
-            <input
-              id="max-tokens"
-              type="number"
-              min="0"
-              value={draftFilters.max_tokens || ''}
-              onChange={(e) =>
-                handleInputChange(
-                  'max_tokens',
-                  e.target.value ? parseInt(e.target.value) : undefined
-                )
-              }
-              placeholder="No maximum"
-              disabled={isLoading}
-              style={{
-                width: '100%',
-                padding: '0.5rem',
-                border: '1px solid #d1d5db',
-                borderRadius: '6px',
-                fontSize: '0.875rem',
-                backgroundColor: isLoading ? '#f9fafb' : 'white',
-                opacity: isLoading ? 0.7 : 1,
-              }}
-            />
-          </div>
         </div>
       )}
 
       {/* Active Filters Summary */}
-      {(draftFilters.model ||
-        draftFilters.success_only !== undefined ||
-        draftFilters.min_tokens ||
-        draftFilters.max_tokens) && (
+      {(draftFilters.model || draftFilters.success_only !== undefined) && (
         <div
           style={{
             marginTop: '1rem',
@@ -662,12 +579,6 @@ export function UsageFilters({
               <div>
                 • Status: {draftFilters.success_only ? 'Successful' : 'Failed'} requests only
               </div>
-            )}
-            {draftFilters.min_tokens && (
-              <div>• Min tokens: {draftFilters.min_tokens.toLocaleString()}</div>
-            )}
-            {draftFilters.max_tokens && (
-              <div>• Max tokens: {draftFilters.max_tokens.toLocaleString()}</div>
             )}
           </div>
         </div>

@@ -1,7 +1,6 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback } from 'react';
 import { useAuth } from '../../hooks/useAuth';
-import { apiKeyApi } from '../../services/api';
-import { ApiKeyInfo } from '../../types/auth';
+import { useApiKeys } from '../../hooks/api/api-keys';
 import {
   Copy,
   User,
@@ -18,28 +17,9 @@ import {
 export function Dashboard() {
   const { token } = useAuth();
   const [copied, setCopied] = useState<string | null>(null);
-  const [apiKeys, setApiKeys] = useState<ApiKeyInfo[]>([]);
-  const [isLoadingApiKeys, setIsLoadingApiKeys] = useState(true);
 
-  // Load API keys to check if user has any
-  const loadApiKeys = useCallback(async () => {
-    if (!token) return;
-
-    try {
-      setIsLoadingApiKeys(true);
-      const keys = await apiKeyApi.listApiKeys(token);
-      setApiKeys(keys);
-    } catch (err) {
-      console.error('Failed to load API keys:', err);
-    } finally {
-      setIsLoadingApiKeys(false);
-    }
-  }, [token]);
-
-  // Load API keys on initial render
-  useEffect(() => {
-    loadApiKeys();
-  }, [loadApiKeys]);
+  // Load API keys using React Query
+  const { data: apiKeys = [], isLoading: isLoadingApiKeys } = useApiKeys(token || undefined);
 
   // Get active API keys count
   const activeApiKeysCount = apiKeys.filter(

@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
-import { authApi, ApiError } from '../services/api';
+import { useExchangeToken } from '../hooks/api/auth';
+import { ApiError } from '../lib/api-client';
 import { CheckCircle, XCircle, Loader2 } from 'lucide-react';
 import { authLogger } from '../utils/logger';
 
@@ -9,6 +10,7 @@ export function CallbackPage() {
   const { provider } = useParams<{ provider: string }>();
   const navigate = useNavigate();
   const { setTokens, isAuthenticated } = useAuth();
+  const exchangeTokenMutation = useExchangeToken();
 
   const [status, setStatus] = useState<'loading' | 'success' | 'error'>('loading');
   const [error, setError] = useState<string | null>(null);
@@ -113,7 +115,7 @@ export function CallbackPage() {
         const redirectUri = `${window.location.origin}/auth/callback/${provider}`;
 
         // Exchange code for token
-        const tokenResponse = await authApi.exchangeToken({
+        const tokenResponse = await exchangeTokenMutation.mutateAsync({
           provider,
           authorization_code: code,
           redirect_uri: redirectUri,
@@ -149,7 +151,7 @@ export function CallbackPage() {
     };
 
     handleCallback();
-  }, [provider, setTokens, navigate]);
+  }, [provider, setTokens, navigate, exchangeTokenMutation]);
 
   const getProviderDisplayName = (provider: string) => {
     const names: { [key: string]: string } = {

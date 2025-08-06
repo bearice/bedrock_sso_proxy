@@ -1,6 +1,8 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { DollarSign, Zap, Activity, X, TrendingUp } from 'lucide-react';
-import { UsageSummary } from '../../types/usage';
+import type { components } from '../../generated/api';
+
+type UsageSummary = components['schemas']['UsageSummary'];
 
 interface UsageSummaryChartsProps {
   summaries: UsageSummary[];

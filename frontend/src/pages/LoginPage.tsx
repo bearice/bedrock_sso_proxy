@@ -1,6 +1,6 @@
 import { useState } from 'react';
-import { useProviders } from '../hooks/useProviders';
-import { authApi, ApiError } from '../services/api';
+import { useProviders, useAuthorizationUrl, useHealthCheck } from '../hooks/api/auth';
+import { ApiError } from '../lib/api-client';
 import { Shield, RefreshCw, AlertCircle } from 'lucide-react';
 
 const GoogleLogo = () => (
@@ -137,7 +137,15 @@ const getProviderIcon = (name: string) => {
 };
 
 export function LoginPage() {
-  const { providers, loading, error, refreshProviders } = useProviders();
+  const {
+    data: providersData,
+    isLoading: loading,
+    error,
+    refetch: refreshProviders,
+  } = useProviders();
+  const providers = providersData?.providers || [];
+  const authorizationMutation = useAuthorizationUrl();
+  const { refetch: testConnection } = useHealthCheck();
   const [authLoading, setAuthLoading] = useState<string | null>(null);
   const [authError, setAuthError] = useState<string | null>(null);
 
@@ -146,11 +154,8 @@ export function LoginPage() {
       setAuthLoading(providerName);
       setAuthError(null);
 
-      // Get the current page URL as redirect URI
-      const redirectUri = `${window.location.origin}/auth/callback/${providerName}`;
-
       // Get authorization URL from backend
-      const authResponse = await authApi.getAuthorizationUrl(providerName, redirectUri);
+      const authResponse = await authorizationMutation.mutateAsync(providerName);
 
       // Redirect to OAuth provider
       window.location.href = authResponse.authorization_url;
@@ -174,7 +179,7 @@ export function LoginPage() {
 
   const handleTestConnection = async () => {
     try {
-      await authApi.healthCheck();
+      await testConnection();
       alert('✅ Connection successful! Backend is running and accessible.');
     } catch (err) {
       console.error('Health check failed:', err);
@@ -207,9 +212,9 @@ export function LoginPage() {
         {error && (
           <div className="status-message error">
             <AlertCircle size={16} style={{ marginRight: '0.5rem' }} />
-            {error}
+            {error instanceof Error ? error.message : 'Failed to load providers'}
             <button
-              onClick={refreshProviders}
+              onClick={() => refreshProviders()}
               className="btn btn-secondary"
               style={{ marginLeft: '1rem', padding: '0.5rem 1rem' }}
             >
@@ -249,7 +254,7 @@ export function LoginPage() {
     github:
       client_id: "your-github-client-id"
       client_secret: "your-github-client-secret"`}</pre>
-            <button onClick={refreshProviders} className="btn btn-primary">
+            <button onClick={() => refreshProviders()} className="btn btn-primary">
               <RefreshCw size={16} />
               Refresh Providers
             </button>

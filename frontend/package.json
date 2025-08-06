@@ -12,10 +12,15 @@
     "lint:fix": "eslint src --ext ts,tsx --fix",
     "format": "prettier --write \"src/**/*.{ts,tsx,json,css}\"",
     "format:check": "prettier --check \"src/**/*.{ts,tsx,json,css}\"",
-    "type-check": "tsc --noEmit"
+    "type-check": "tsc --noEmit",
+    "generate-api": "openapi-typescript ../openapi.json -o src/generated/api.ts"
   },
   "dependencies": {
+    "@tanstack/react-query": "^5.84.1",
+    "@tanstack/react-query-devtools": "^5.84.1",
     "lucide-react": "^0.536.0",
+    "openapi-fetch": "^0.14.0",
+    "openapi-typescript": "^7.8.0",
     "react": "^19.1.1",
     "react-dom": "^19.1.1",
     "react-router-dom": "^7.7.1"

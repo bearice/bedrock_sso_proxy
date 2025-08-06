@@ -1,5 +1,7 @@
 import { useState, useCallback } from 'react';
-import { ApiKeyInfo } from '../../types/auth';
+import type { components } from '../../generated/api';
+
+type ApiKeyInfo = components['schemas']['ApiKey'];
 import { Copy, Trash2, AlertTriangle, Key, Calendar, CheckCircle, XCircle } from 'lucide-react';
 
 interface ApiKeyCardProps {

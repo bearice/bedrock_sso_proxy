@@ -1,7 +1,20 @@
 import React, { createContext, useState, useEffect, useCallback } from 'react';
-import { AuthState, TokenResponse } from '../types/auth';
-import { authApi } from '../services/api';
+import type { components } from '../generated/api';
+import { useRefreshToken } from '../hooks/api';
 import { authLogger } from '../utils/logger';
+
+type TokenResponse = components['schemas']['TokenResponse'];
+
+// Custom AuthState interface for local state management
+interface AuthState {
+  isAuthenticated: boolean;
+  token: string | null;
+  refreshToken: string | null;
+  provider: string | null;
+  user: string | null;
+  expiresAt: number | null;
+  scopes: string[];
+}
 
 const STORAGE_KEY = 'bedrock_auth';
 
@@ -41,6 +54,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   });
 
   const [loading, setLoading] = useState(true);
+  const refreshTokenMutation = useRefreshToken();
 
   // Debug log only significant state changes
   useEffect(() => {
@@ -84,7 +98,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const refreshTokens = useCallback(
     async (refreshToken: string) => {
       try {
-        const response = await authApi.refreshToken({ refresh_token: refreshToken });
+        const response = await refreshTokenMutation.mutateAsync({ refresh_token: refreshToken });
         const payload = parseJwtPayload(response.access_token);
 
         // Use functional state update to avoid dependency on authState
@@ -109,7 +123,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         throw error;
       }
     },
-    [clearAuth]
+    [clearAuth, refreshTokenMutation]
   );
 
   // Load authentication state from localStorage (run only once on mount)
@@ -130,7 +144,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           // Try to refresh token
           if (parsed.refreshToken) {
             try {
-              const response = await authApi.refreshToken({ refresh_token: parsed.refreshToken });
+              const response = await refreshTokenMutation.mutateAsync({
+                refresh_token: parsed.refreshToken,
+              });
               const payload = parseJwtPayload(response.access_token);
 
               const newAuthState: AuthState = {
@@ -194,7 +210,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     };
 
     loadAuthState();
-  }, []); // Empty dependency array - run only once on mount
+  }, [refreshTokenMutation]); // Include refreshTokenMutation in dependency array
 
   const setTokens = useCallback(
     (tokenResponse: TokenResponse, provider: string) => {

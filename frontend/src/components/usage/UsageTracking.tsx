@@ -1,7 +1,9 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useCallback } from 'react';
 import { useAuth } from '../../hooks/useAuth';
-import { usageApi, ApiError } from '../../services/api';
-import { UsageQuery, UsageSummary, UsageSummariesQuery } from '../../types/usage';
+import { useUserUsageSummaries } from '../../hooks/api/usage';
+import type { components } from '../../generated/api';
+
+type UsageQuery = components['schemas']['UsageRecordsQuery'];
 import { UsageFilters } from './UsageFilters';
 import { UsageRecords } from './UsageRecords';
 import { UsageSummaryCharts } from './UsageSummaryCharts';
@@ -9,12 +11,7 @@ import { Activity, AlertCircle } from 'lucide-react';
 
 export function UsageTracking() {
   const { token } = useAuth();
-  const [summaries, setSummaries] = useState<UsageSummary[]>([]);
-
-  const [isLoadingSummaries, setIsLoadingSummaries] = useState(true);
   const [isExporting, setIsExporting] = useState(false);
-
-  const [summariesError, setSummariesError] = useState<string | null>(null);
 
   // Initialize filters with this month as default
   const getDefaultFilters = useCallback((): UsageQuery => {
@@ -40,194 +37,76 @@ export function UsageTracking() {
     (startDate: string, endDate: string): 'hourly' | 'daily' | 'weekly' | 'monthly' => {
       const start = new Date(startDate);
       const end = new Date(endDate);
-      const daysDiff = Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
+      const diffMs = end.getTime() - start.getTime();
+      const diffDays = diffMs / (1000 * 60 * 60 * 24);
 
-      if (daysDiff <= 2) return 'hourly';
-      if (daysDiff <= 30) return 'daily';
-      if (daysDiff <= 180) return 'weekly';
+      if (diffDays <= 2) return 'hourly';
+      if (diffDays <= 31) return 'daily';
+      if (diffDays <= 90) return 'weekly';
       return 'monthly';
     },
     []
   );
 
-  // Get the current incomplete period bounds
-  const getCurrentPeriodBounds = useCallback((periodType: 'daily' | 'weekly' | 'monthly') => {
-    const now = new Date();
+  // Use React Query hook for summaries
+  const summariesQuery = {
+    start_date: filters.start_date,
+    end_date: filters.end_date,
+    period_type: getOptimalPeriodType(filters.start_date!, filters.end_date!),
+    model_id: filters.model,
+    limit: 1000,
+    offset: 0,
+  };
 
-    switch (periodType) {
-      case 'daily': {
-        // Current day from midnight to now in UTC
-        const startOfDay = new Date(now);
-        startOfDay.setUTCHours(0, 0, 0, 0);
-        return {
-          start: startOfDay.toISOString(),
-          end: now.toISOString(),
-          lowerPeriodType: 'hourly' as const,
-        };
-      }
-      case 'weekly': {
-        // Current week (Monday to now)
-        const startOfWeek = new Date(now);
-        const dayOfWeek = startOfWeek.getUTCDay();
-        const daysToMonday = (dayOfWeek + 6) % 7; // Convert Sunday=0 to Monday=0
-        startOfWeek.setUTCDate(startOfWeek.getUTCDate() - daysToMonday);
-        startOfWeek.setUTCHours(0, 0, 0, 0);
-        return {
-          start: startOfWeek.toISOString(),
-          end: now.toISOString(),
-          lowerPeriodType: 'daily' as const,
-        };
-      }
-      case 'monthly': {
-        // Current month from 1st to now
-        const startOfMonth = new Date(now.getUTCFullYear(), now.getUTCMonth(), 1);
-        return {
-          start: startOfMonth.toISOString(),
-          end: now.toISOString(),
-          lowerPeriodType: 'daily' as const,
-        };
-      }
-    }
+  const {
+    data: summariesData,
+    isLoading: isLoadingSummaries,
+    error: summariesQueryError,
+    refetch: refetchSummaries,
+  } = useUserUsageSummaries(token || undefined, summariesQuery);
+
+  const summaries = summariesData?.summaries || [];
+  const summariesError = summariesQueryError instanceof Error ? summariesQueryError.message : null;
+
+  // Handle filter changes
+  const handleFiltersChange = useCallback((newFilters: UsageQuery) => {
+    setFilters(newFilters);
   }, []);
 
-  // Load usage summaries with intelligent period selection
-  const loadSummaries = useCallback(async () => {
-    if (!token || !filters.start_date || !filters.end_date) return;
+  // Refresh all data
+  const refreshData = useCallback(() => {
+    refetchSummaries();
+  }, [refetchSummaries]);
 
-    try {
-      setIsLoadingSummaries(true);
-      setSummariesError(null);
-
-      const optimalPeriodType = getOptimalPeriodType(filters.start_date, filters.end_date);
-
-      // Main query for the optimal period type
-      const mainQuery: UsageSummariesQuery = {
-        start_date: filters.start_date,
-        end_date: filters.end_date,
-        model_id: filters.model,
-        period_type: optimalPeriodType,
-        limit: 1000,
-      };
-
-      let allSummaries: UsageSummary[] = [];
-
-      // Get main summaries
-      const mainData = await usageApi.getUsageSummaries(token, mainQuery);
-      allSummaries = [...mainData.summaries];
-
-      // If we're not using hourly data, check if we need current period data from lower level
-      if (optimalPeriodType !== 'hourly') {
-        const currentPeriodBounds = getCurrentPeriodBounds(optimalPeriodType);
-        const filterEndDate = new Date(filters.end_date);
-
-        // Only fetch lower-level data if the filter end date includes the current incomplete period
-        if (filterEndDate >= new Date(currentPeriodBounds.start)) {
-          try {
-            const currentPeriodQuery: UsageSummariesQuery = {
-              start_date: currentPeriodBounds.start,
-              end_date: currentPeriodBounds.end,
-              model_id: filters.model,
-              period_type: currentPeriodBounds.lowerPeriodType,
-              limit: 1000,
-            };
-
-            const currentPeriodData = await usageApi.getUsageSummaries(token, currentPeriodQuery);
-
-            // Aggregate current period data by model
-            if (currentPeriodData.summaries.length > 0) {
-              const aggregatedCurrentPeriod: Record<string, UsageSummary> = {};
-
-              currentPeriodData.summaries.forEach((summary) => {
-                const modelId = summary.model_id;
-                if (!aggregatedCurrentPeriod[modelId]) {
-                  aggregatedCurrentPeriod[modelId] = {
-                    ...summary,
-                    id: Date.now() + Math.random(), // Temporary ID for aggregated data
-                    period_type: optimalPeriodType,
-                    period_start: currentPeriodBounds.start,
-                    period_end: currentPeriodBounds.end,
-                    total_requests: 0,
-                    successful_requests: 0,
-                    total_input_tokens: 0,
-                    total_output_tokens: 0,
-                    total_tokens: 0,
-                    avg_response_time_ms: 0,
-                    estimated_cost: '0',
-                  };
-                }
-
-                const agg = aggregatedCurrentPeriod[modelId];
-                agg.total_requests += summary.total_requests;
-                agg.successful_requests += summary.successful_requests;
-                agg.total_input_tokens += summary.total_input_tokens;
-                agg.total_output_tokens += summary.total_output_tokens;
-                agg.total_tokens += summary.total_tokens;
-
-                // Weighted average for response time
-                const totalRequests = agg.total_requests;
-                agg.avg_response_time_ms =
-                  totalRequests > 0
-                    ? (agg.avg_response_time_ms * (totalRequests - summary.total_requests) +
-                        summary.avg_response_time_ms * summary.total_requests) /
-                      totalRequests
-                    : 0;
-
-                // Sum estimated costs
-                const currentCost = parseFloat(agg.estimated_cost || '0');
-                const summaryCost = parseFloat(summary.estimated_cost || '0');
-                agg.estimated_cost = (currentCost + summaryCost).toString();
-              });
-
-              // Remove any existing current period data from main summaries and add aggregated data
-              const currentPeriodStart = new Date(currentPeriodBounds.start);
-              allSummaries = allSummaries.filter((summary) => {
-                const summaryStart = new Date(summary.period_start);
-                return summaryStart < currentPeriodStart;
-              });
-
-              // Add aggregated current period data
-              allSummaries.push(...Object.values(aggregatedCurrentPeriod));
-            }
-          } catch (currentPeriodError) {
-            // If current period fetch fails, log but don't fail the whole operation
-            console.warn('Failed to fetch current period data:', currentPeriodError);
-          }
-        }
-      }
-
-      setSummaries(allSummaries);
-    } catch (err) {
-      console.error('Failed to load usage summaries:', err);
-      setSummariesError(err instanceof ApiError ? err.message : 'Failed to load usage summaries');
-    } finally {
-      setIsLoadingSummaries(false);
-    }
-  }, [
-    token,
-    filters.start_date,
-    filters.end_date,
-    filters.model,
-    getOptimalPeriodType,
-    getCurrentPeriodBounds,
-  ]);
-
-  // Export usage data
+  // Export usage data using direct API call
   const handleExport = useCallback(async () => {
     if (!token) return;
 
     try {
       setIsExporting(true);
 
-      const exportQuery = {
-        start_date: filters.start_date,
-        end_date: filters.end_date,
-        model: filters.model,
-        success: filters.success_only,
-        format: 'csv' as const,
-        limit: 10000, // Export up to 10k records
-      };
+      // Build query parameters
+      const params = new URLSearchParams();
+      if (filters.start_date) params.append('start_date', filters.start_date);
+      if (filters.end_date) params.append('end_date', filters.end_date);
+      if (filters.model) params.append('model', filters.model);
+      if (filters.success_only !== undefined && filters.success_only !== null) {
+        params.append('success_only', filters.success_only.toString());
+      }
+      params.append('format', 'csv');
+      params.append('limit', '10000');
 
-      const blob = await usageApi.exportUsageData(token, exportQuery);
+      const response = await fetch(`/usage/records?${params.toString()}`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error(`Export failed: ${response.statusText}`);
+      }
+
+      const blob = await response.blob();
 
       // Create download link
       const url = window.URL.createObjectURL(blob);
@@ -240,35 +119,11 @@ export function UsageTracking() {
       window.URL.revokeObjectURL(url);
     } catch (err) {
       console.error('Failed to export usage data:', err);
-      alert(err instanceof ApiError ? err.message : 'Failed to export usage data');
+      alert('Failed to export usage data');
     } finally {
       setIsExporting(false);
     }
-  }, [token, filters.start_date, filters.end_date, filters.model, filters.success_only]);
-
-  // Handle filter changes
-  const handleFiltersChange = useCallback((newFilters: UsageQuery) => {
-    setFilters(newFilters);
-  }, []);
-
-  // Refresh all data
-  const refreshData = useCallback(() => {
-    loadSummaries();
-  }, [loadSummaries]);
-
-  // Initial data load
-  useEffect(() => {
-    if (token) {
-      loadSummaries();
-    }
-  }, [token, loadSummaries]);
-
-  // Reload when filters change (but not on initial load)
-  useEffect(() => {
-    if (token) {
-      loadSummaries();
-    }
-  }, [filters, loadSummaries, token]);
+  }, [token, filters]);
 
   if (!token) {
     return (

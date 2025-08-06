@@ -1,5 +1,7 @@
 import { useState, useCallback } from 'react';
-import { CreateApiKeyRequest } from '../../types/auth';
+import type { components } from '../../generated/api';
+
+type CreateApiKeyRequest = components['schemas']['CreateApiKeyRequest'];
 import { X, Key, Calendar, AlertCircle } from 'lucide-react';
 
 interface CreateApiKeyModalProps {

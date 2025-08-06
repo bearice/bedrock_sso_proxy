@@ -4,16 +4,19 @@ import { useAuth } from '../hooks/useAuth';
 import { ApiKeyManagement } from '../components/apikeys';
 import { UsageTracking } from '../components/usage';
 import { Dashboard } from '../components/dashboard';
-import { authApi } from '../services/api';
-import { UserInfo } from '../types/auth';
+import { useValidateToken } from '../hooks/api/auth';
+import type { components } from '../generated/api';
+
+type UserInfo = components['schemas']['Model']; // The /auth/me endpoint returns Model schema
 import { LogOut, User, Key, Activity, Settings } from 'lucide-react';
 
 export function DashboardPage() {
   const { token, provider, user, logout } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
+  const { data: userInfo } = useValidateToken(token || undefined);
 
-  const [userInfo, setUserInfo] = useState<UserInfo | null>(null);
+  const [userInfoState, setUserInfoState] = useState<UserInfo | null>(null);
 
   // Determine active tab from URL
   const getActiveTabFromPath = (pathname: string): 'dashboard' | 'api-keys' | 'usage' => {
@@ -32,23 +35,18 @@ export function DashboardPage() {
     setActiveTab(newTab);
   }, [location.pathname]);
 
-  // Fetch user info from /auth/me API with 401 handling
+  // Update local state when userInfo from React Query changes
   useEffect(() => {
-    const fetchUserInfo = async () => {
-      if (!token) return;
-
-      try {
-        const data = await authApi.validateToken(token);
-        if (data) {
-          setUserInfo(data);
-        }
-      } catch (error) {
-        console.error('Failed to fetch user info:', error);
-      }
-    };
-
-    fetchUserInfo();
-  }, [token]);
+    if (userInfo) {
+      // Convert null to undefined for compatibility with UserInfo type
+      const adaptedUserInfo: UserInfo = {
+        ...userInfo,
+        display_name: userInfo.display_name ?? undefined,
+        last_login: userInfo.last_login ?? undefined,
+      };
+      setUserInfoState(adaptedUserInfo);
+    }
+  }, [userInfo]);
 
   // Listen for tab switching events from the Dashboard component
   useEffect(() => {
@@ -87,10 +85,10 @@ export function DashboardPage() {
           <div className="user-details">
             <h3>
               <User size={20} style={{ marginRight: '0.5rem', verticalAlign: 'text-bottom' }} />
-              Welcome back, {userInfo?.display_name || userInfo?.email || user}!
+              Welcome back, {userInfoState?.display_name || userInfoState?.email || user}!
             </h3>
             <p>
-              <strong>Email:</strong> {userInfo?.email || user}
+              <strong>Email:</strong> {userInfoState?.email || user}
             </p>
             <p>
               <strong>OAuth Provider:</strong> {getProviderDisplayName(provider || '')}
