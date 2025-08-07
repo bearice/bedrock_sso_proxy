@@ -148,7 +148,7 @@ pub struct UpdateUserStateRequest {
 /// List all users with pagination and sorting
 #[utoipa::path(
     get,
-    path = "/admin/users",
+    path = "/api/admin/users",
     summary = "List users",
     description = "Get a paginated list of all users with optional sorting",
     params(UserListQuery),
@@ -232,7 +232,7 @@ pub async fn list_users(
 /// Get user by ID
 #[utoipa::path(
     get,
-    path = "/admin/users/{user_id}",
+    path = "/api/admin/users/{user_id}",
     summary = "Get user by ID",
     description = "Get detailed information about a specific user",
     params(
@@ -268,7 +268,7 @@ pub async fn get_user_by_id(
 /// Search users by email, display name, or provider user ID
 #[utoipa::path(
     get,
-    path = "/admin/users/search",
+    path = "/api/admin/users/search",
     summary = "Search users",
     description = "Search for users by email, display name, or provider user ID",
     params(UserSearchQuery),
@@ -347,7 +347,7 @@ pub async fn search_users(
 /// Update user state
 #[utoipa::path(
     put,
-    path = "/admin/users/{user_id}/state",
+    path = "/api/admin/users/{user_id}/state",
     summary = "Update user state",
     description = "Update the state of a user (active, disabled, or expired)",
     params(

@@ -1,1 +1,3856 @@
-{"openapi":"3.1.0","info":{"title":"Bedrock SSO Proxy API","description":"JWT-authenticated HTTP proxy server that provides secure access to AWS Bedrock APIs","license":{"name":""},"version":"1.0.0"},"paths":{"/admin/costs":{"get":{"tags":["Cost Management"],"summary":"Get All Model Costs","description":"Retrieve all model cost configurations (admin only)","operationId":"get_all_model_costs","responses":{"200":{"description":"List of all model costs","content":{"application/json":{"schema":{"type":"array","items":{"$ref":"#/components/schemas/ModelCost"}}}}},"401":{"description":"Unauthorized","content":{"application/json":{"schema":{"$ref":"#/components/schemas/ApiErrorResponse"}}}},"403":{"description":"Forbidden - admin access required","content":{"application/json":{"schema":{"$ref":"#/components/schemas/ApiErrorResponse"}}}},"500":{"description":"Internal server error","content":{"application/json":{"schema":{"$ref":"#/components/schemas/ApiErrorResponse"}}}}},"security":[{"jwt_auth":[]}]},"post":{"tags":["Cost Management"],"summary":"Batch Update Model Costs","description":"Update multiple model costs from CSV data (admin only)","operationId":"update_all_model_costs","requestBody":{"description":"CSV content with model cost data","content":{"text/csv":{"schema":{"type":"string"}}},"required":true},"responses":{"200":{"description":"Batch update results","content":{"application/json":{"schema":{"$ref":"#/components/schemas/UpdateCostsResult"}}}},"400":{"description":"Bad request - invalid CSV","content":{"application/json":{"schema":{"$ref":"#/components/schemas/ApiErrorResponse"}}}},"401":{"description":"Unauthorized","content":{"application/json":{"schema":{"$ref":"#/components/schemas/ApiErrorResponse"}}}},"403":{"description":"Forbidden - admin access required","content":{"application/json":{"schema":{"$ref":"#/components/schemas/ApiErrorResponse"}}}},"500":{"description":"Internal server error","content":{"application/json":{"schema":{"$ref":"#/components/schemas/ApiErrorResponse"}}}}},"security":[{"jwt_auth":[]}]}},"/admin/costs/{region}/{model_id}":{"get":{"tags":["Cost Management"],"summary":"Get Model Cost","description":"Retrieve cost configuration for a specific model in a region (admin only)","operationId":"get_model_cost","parameters":[{"name":"region","in":"path","description":"AWS region (e.g., us-east-1)","required":true,"schema":{"type":"string"}},{"name":"model_id","in":"path","description":"Model identifier","required":true,"schema":{"type":"string"}}],"responses":{"200":{"description":"Model cost configuration","content":{"application/json":{"schema":{"$ref":"#/components/schemas/ModelCost"}}}},"401":{"description":"Unauthorized","content":{"application/json":{"schema":{"$ref":"#/components/schemas/ApiErrorResponse"}}}},"403":{"description":"Forbidden - admin access required","content":{"application/json":{"schema":{"$ref":"#/components/schemas/ApiErrorResponse"}}}},"404":{"description":"Model cost not found","content":{"application/json":{"schema":{"$ref":"#/components/schemas/ApiErrorResponse"}}}},"500":{"description":"Internal server error","content":{"application/json":{"schema":{"$ref":"#/components/schemas/ApiErrorResponse"}}}}},"security":[{"jwt_auth":[]}]},"put":{"tags":["Cost Management"],"summary":"Create or Update Model Cost","description":"Create or update cost configuration for a specific model (admin only)","operationId":"upsert_model_cost","parameters":[{"name":"region","in":"path","description":"AWS region (e.g., us-east-1)","required":true,"schema":{"type":"string"}},{"name":"model_id","in":"path","description":"Model identifier","required":true,"schema":{"type":"string"}}],"requestBody":{"content":{"application/json":{"schema":{"$ref":"#/components/schemas/ModelCostRequest"}}},"required":true},"responses":{"200":{"description":"Model cost updated successfully"},"401":{"description":"Unauthorized","content":{"application/json":{"schema":{"$ref":"#/components/schemas/ApiErrorResponse"}}}},"403":{"description":"Forbidden - admin access required","content":{"application/json":{"schema":{"$ref":"#/components/schemas/ApiErrorResponse"}}}},"500":{"description":"Internal server error","content":{"application/json":{"schema":{"$ref":"#/components/schemas/ApiErrorResponse"}}}}},"security":[{"jwt_auth":[]}]},"delete":{"tags":["Cost Management"],"summary":"Delete Model Cost","description":"Delete cost configuration for a specific model (admin only)","operationId":"delete_model_cost","parameters":[{"name":"region","in":"path","description":"AWS region (e.g., us-east-1)","required":true,"schema":{"type":"string"}},{"name":"model_id","in":"path","description":"Model identifier","required":true,"schema":{"type":"string"}}],"responses":{"204":{"description":"Model cost deleted successfully"},"401":{"description":"Unauthorized","content":{"application/json":{"schema":{"$ref":"#/components/schemas/ApiErrorResponse"}}}},"403":{"description":"Forbidden - admin access required","content":{"application/json":{"schema":{"$ref":"#/components/schemas/ApiErrorResponse"}}}},"500":{"description":"Internal server error","content":{"application/json":{"schema":{"$ref":"#/components/schemas/ApiErrorResponse"}}}}},"security":[{"jwt_auth":[]}]}},"/admin/usage/records":{"get":{"tags":["Admin Usage Management"],"summary":"Get System Usage Records","description":"Retrieve usage records for all users (admin only)","operationId":"get_system_usage_records","parameters":[{"name":"limit","in":"query","description":"Maximum number of records to return (default: 50, max: 500)","required":false,"schema":{"type":["integer","null"],"format":"int32","minimum":0}},{"name":"offset","in":"query","description":"Number of records to skip for pagination","required":false,"schema":{"type":["integer","null"],"format":"int32","minimum":0}},{"name":"model","in":"query","description":"Filter by specific model ID","required":false,"schema":{"type":["string","null"]}},{"name":"start_date","in":"query","description":"Filter records from this date onwards","required":false,"schema":{"type":["string","null"],"format":"date-time"}},{"name":"end_date","in":"query","description":"Filter records up to this date","required":false,"schema":{"type":["string","null"],"format":"date-time"}},{"name":"success_only","in":"query","description":"If true, only return successful requests","required":false,"schema":{"type":["boolean","null"]}},{"name":"format","in":"query","description":"Response format (json or csv)","required":false,"schema":{"type":["string","null"]}},{"name":"user_id","in":"query","description":"Filter by specific user ID (admin only)","required":false,"schema":{"type":["integer","null"],"format":"int32"}}],"responses":{"200":{"description":"List of system usage records","content":{"application/json":{"schema":{"$ref":"#/components/schemas/UsageRecordsResponse"}}}},"401":{"description":"Unauthorized","content":{"application/json":{"schema":{"$ref":"#/components/schemas/ApiErrorResponse"}}}},"403":{"description":"Forbidden - admin access required","content":{"application/json":{"schema":{"$ref":"#/components/schemas/ApiErrorResponse"}}}},"500":{"description":"Internal server error","content":{"application/json":{"schema":{"$ref":"#/components/schemas/ApiErrorResponse"}}}}},"security":[{"jwt_auth":[]}]}},"/admin/usage/summaries":{"get":{"tags":["Admin Usage Management"],"summary":"Get System Usage Summaries","description":"Retrieve pre-computed usage summaries for all users (admin only)","operationId":"get_admin_usage_summaries","parameters":[{"name":"start_date","in":"query","description":"Filter summaries from this date onwards","required":false,"schema":{"type":["string","null"],"format":"date-time"}},{"name":"end_date","in":"query","description":"Filter summaries up to this date","required":false,"schema":{"type":["string","null"],"format":"date-time"}},{"name":"period_type","in":"query","description":"Period type for aggregation (hourly, daily, weekly, monthly)","required":false,"schema":{"type":["string","null"]}},{"name":"model_id","in":"query","description":"Filter by specific model ID","required":false,"schema":{"type":["string","null"]}},{"name":"limit","in":"query","description":"Maximum number of summaries to return (default: 1000)","required":false,"schema":{"type":["integer","null"],"format":"int32","minimum":0}},{"name":"offset","in":"query","description":"Number of summaries to skip for pagination","required":false,"schema":{"type":["integer","null"],"format":"int32","minimum":0}},{"name":"user_id","in":"query","description":"Filter by specific user ID (admin only)","required":false,"schema":{"type":["integer","null"],"format":"int32"}}],"responses":{"200":{"description":"System usage summaries","content":{"application/json":{"schema":{"$ref":"#/components/schemas/UsageSummariesResponse"}}}},"401":{"description":"Unauthorized","content":{"application/json":{"schema":{"$ref":"#/components/schemas/ApiErrorResponse"}}}},"403":{"description":"Forbidden - admin access required","content":{"application/json":{"schema":{"$ref":"#/components/schemas/ApiErrorResponse"}}}},"500":{"description":"Internal server error","content":{"application/json":{"schema":{"$ref":"#/components/schemas/ApiErrorResponse"}}}}},"security":[{"jwt_auth":[]}]}},"/admin/users":{"get":{"tags":["Admin User Management"],"summary":"List users","description":"Get a paginated list of all users with optional sorting","operationId":"list_users","parameters":[{"name":"limit","in":"query","description":"Maximum number of users to return (default: 50, max: 500)","required":false,"schema":{"type":"integer","format":"int64","minimum":0}},{"name":"offset","in":"query","description":"Number of users to skip for pagination (default: 0)","required":false,"schema":{"type":"integer","format":"int64","minimum":0}},{"name":"sort","in":"query","description":"Sort order: created_at, updated_at, last_login, email (default: created_at)","required":false,"schema":{"type":"string"}},{"name":"order","in":"query","description":"Sort direction: asc or desc (default: desc)","required":false,"schema":{"type":"string"}}],"responses":{"200":{"description":"Users retrieved successfully","content":{"application/json":{"schema":{"$ref":"#/components/schemas/UserListResponse"}}}},"400":{"description":"Invalid query parameters","content":{"application/json":{"schema":{"$ref":"#/components/schemas/ApiErrorResponse"}}}},"401":{"description":"Unauthorized","content":{"application/json":{"schema":{"$ref":"#/components/schemas/ApiErrorResponse"}}}},"403":{"description":"Forbidden - admin access required","content":{"application/json":{"schema":{"$ref":"#/components/schemas/ApiErrorResponse"}}}},"500":{"description":"Internal server error","content":{"application/json":{"schema":{"$ref":"#/components/schemas/ApiErrorResponse"}}}}},"security":[{"jwt_auth":[]}]}},"/admin/users/search":{"get":{"tags":["Admin User Management"],"summary":"Search users","description":"Search for users by email, display name, or provider user ID","operationId":"search_users","parameters":[{"name":"q","in":"query","description":"Search term to match against email, display_name, or provider_user_id","required":true,"schema":{"type":"string"}},{"name":"limit","in":"query","description":"Maximum number of users to return (default: 50, max: 500)","required":false,"schema":{"type":"integer","format":"int64","minimum":0}},{"name":"offset","in":"query","description":"Number of users to skip for pagination (default: 0)","required":false,"schema":{"type":"integer","format":"int64","minimum":0}}],"responses":{"200":{"description":"Search completed successfully","content":{"application/json":{"schema":{"$ref":"#/components/schemas/UserListResponse"}}}},"400":{"description":"Invalid search parameters","content":{"application/json":{"schema":{"$ref":"#/components/schemas/ApiErrorResponse"}}}},"401":{"description":"Unauthorized","content":{"application/json":{"schema":{"$ref":"#/components/schemas/ApiErrorResponse"}}}},"403":{"description":"Forbidden - admin access required","content":{"application/json":{"schema":{"$ref":"#/components/schemas/ApiErrorResponse"}}}},"500":{"description":"Internal server error","content":{"application/json":{"schema":{"$ref":"#/components/schemas/ApiErrorResponse"}}}}},"security":[{"jwt_auth":[]}]}},"/admin/users/{user_id}":{"get":{"tags":["Admin User Management"],"summary":"Get user by ID","description":"Get detailed information about a specific user","operationId":"get_user_by_id","parameters":[{"name":"user_id","in":"path","description":"User ID","required":true,"schema":{"type":"integer","format":"int32"}}],"responses":{"200":{"description":"User retrieved successfully","content":{"application/json":{"schema":{"$ref":"#/components/schemas/UserResponse"}}}},"401":{"description":"Unauthorized","content":{"application/json":{"schema":{"$ref":"#/components/schemas/ApiErrorResponse"}}}},"403":{"description":"Forbidden - admin access required","content":{"application/json":{"schema":{"$ref":"#/components/schemas/ApiErrorResponse"}}}},"404":{"description":"User not found","content":{"application/json":{"schema":{"$ref":"#/components/schemas/ApiErrorResponse"}}}},"500":{"description":"Internal server error","content":{"application/json":{"schema":{"$ref":"#/components/schemas/ApiErrorResponse"}}}}},"security":[{"jwt_auth":[]}]}},"/admin/users/{user_id}/state":{"put":{"tags":["Admin User Management"],"summary":"Update user state","description":"Update the state of a user (active, disabled, or expired)","operationId":"update_user_state","parameters":[{"name":"user_id","in":"path","description":"User ID","required":true,"schema":{"type":"integer","format":"int32"}}],"requestBody":{"content":{"application/json":{"schema":{"$ref":"#/components/schemas/UpdateUserStateRequest"}}},"required":true},"responses":{"200":{"description":"User state updated successfully","content":{"application/json":{"schema":{"$ref":"#/components/schemas/UserResponse"}}}},"400":{"description":"Invalid request data","content":{"application/json":{"schema":{"$ref":"#/components/schemas/ApiErrorResponse"}}}},"401":{"description":"Unauthorized","content":{"application/json":{"schema":{"$ref":"#/components/schemas/ApiErrorResponse"}}}},"403":{"description":"Forbidden - admin access required","content":{"application/json":{"schema":{"$ref":"#/components/schemas/ApiErrorResponse"}}}},"404":{"description":"User not found","content":{"application/json":{"schema":{"$ref":"#/components/schemas/ApiErrorResponse"}}}},"500":{"description":"Internal server error","content":{"application/json":{"schema":{"$ref":"#/components/schemas/ApiErrorResponse"}}}}},"security":[{"jwt_auth":[]}]}},"/anthropic/v1/messages":{"post":{"tags":["Anthropic API"],"summary":"Create Message (Anthropic API)","description":"Create a message using the standard Anthropic API format. Supports both streaming and non-streaming responses.","operationId":"create_message","requestBody":{"description":"Anthropic API message request","content":{"application/json":{"schema":{"$ref":"#/components/schemas/AnthropicRequest"}}},"required":true},"responses":{"200":{"description":"Streaming message response","content":{"text/event-stream":{}}},"400":{"description":"Bad request","content":{"application/json":{"schema":{"$ref":"#/components/schemas/ApiErrorResponse"}}}},"401":{"description":"Unauthorized","content":{"application/json":{"schema":{"$ref":"#/components/schemas/ApiErrorResponse"}}}},"500":{"description":"Internal server error","content":{"application/json":{"schema":{"$ref":"#/components/schemas/ApiErrorResponse"}}}},"502":{"description":"Bad gateway - AWS service error","content":{"application/json":{"schema":{"$ref":"#/components/schemas/ApiErrorResponse"}}}}},"security":[{"jwt_auth":[]},{"api_key_auth":[]},{"x_api_key_auth":[]}]}},"/api/admin/audit-logs":{"get":{"tags":["Admin Audit Logs"],"summary":"Get audit logs with optional filtering","operationId":"get_audit_logs","parameters":[{"name":"user_id","in":"query","description":"Filter by user ID","required":false,"schema":{"type":["integer","null"],"format":"int32"}},{"name":"event_type","in":"query","description":"Filter by event type","required":false,"schema":{"oneOf":[{"type":"null"},{"$ref":"#/components/schemas/AuditEventType"}]}},{"name":"provider","in":"query","description":"Filter by provider","required":false,"schema":{"type":["string","null"]}},{"name":"success","in":"query","description":"Filter by success status","required":false,"schema":{"type":["boolean","null"]}},{"name":"start_date","in":"query","description":"Filter by start date (ISO 8601)","required":false,"schema":{"type":["string","null"],"format":"date-time"}},{"name":"end_date","in":"query","description":"Filter by end date (ISO 8601)","required":false,"schema":{"type":["string","null"],"format":"date-time"}},{"name":"limit","in":"query","description":"Number of records per page (default: 50, max: 1000)","required":false,"schema":{"type":["integer","null"],"format":"int64","minimum":0}},{"name":"offset","in":"query","description":"Page offset (default: 0)","required":false,"schema":{"type":["integer","null"],"format":"int64","minimum":0}}],"responses":{"200":{"description":"Audit logs retrieved successfully","content":{"application/json":{"schema":{"$ref":"#/components/schemas/AuditLogsResponse"}}}},"400":{"description":"Invalid query parameters","content":{"application/json":{"schema":{"$ref":"#/components/schemas/ApiErrorResponse"}}}},"401":{"description":"Authentication required","content":{"application/json":{"schema":{"$ref":"#/components/schemas/ApiErrorResponse"}}}},"403":{"description":"Admin access required","content":{"application/json":{"schema":{"$ref":"#/components/schemas/ApiErrorResponse"}}}},"500":{"description":"Internal server error","content":{"application/json":{"schema":{"$ref":"#/components/schemas/ApiErrorResponse"}}}}},"security":[{"bearer_auth":[]}]}},"/api/keys":{"get":{"tags":["API Keys"],"summary":"List API Keys","description":"Get all API keys for the authenticated user","operationId":"list_api_keys","responses":{"200":{"description":"List of API keys","content":{"application/json":{"schema":{"type":"array","items":{"$ref":"#/components/schemas/ApiKey"}}}}},"401":{"description":"Unauthorized","content":{"application/json":{"schema":{"$ref":"#/components/schemas/ApiErrorResponse"}}}},"500":{"description":"Internal server error","content":{"application/json":{"schema":{"$ref":"#/components/schemas/ApiErrorResponse"}}}}},"security":[{"jwt_auth":[]}]},"post":{"tags":["API Keys"],"summary":"Create API Key","description":"Create a new API key for programmatic access to the proxy","operationId":"create_api_key","requestBody":{"content":{"application/json":{"schema":{"$ref":"#/components/schemas/CreateApiKeyRequest"}}},"required":true},"responses":{"200":{"description":"API key created successfully","content":{"application/json":{"schema":{"$ref":"#/components/schemas/CreateApiKeyResponse"}}}},"400":{"description":"Bad request","content":{"application/json":{"schema":{"$ref":"#/components/schemas/ApiErrorResponse"}}}},"401":{"description":"Unauthorized","content":{"application/json":{"schema":{"$ref":"#/components/schemas/ApiErrorResponse"}}}},"500":{"description":"Internal server error","content":{"application/json":{"schema":{"$ref":"#/components/schemas/ApiErrorResponse"}}}}},"security":[{"jwt_auth":[]}]}},"/api/keys/{key_hash}":{"delete":{"tags":["API Keys"],"summary":"Revoke API Key","description":"Revoke an API key, making it invalid for future requests","operationId":"revoke_api_key","parameters":[{"name":"key_hash","in":"path","description":"Hash of the API key to revoke","required":true,"schema":{"type":"string"}}],"responses":{"200":{"description":"API key revoked successfully","content":{"application/json":{"schema":{}}}},"401":{"description":"Unauthorized","content":{"application/json":{"schema":{"$ref":"#/components/schemas/ApiErrorResponse"}}}},"403":{"description":"Forbidden - not the owner","content":{"application/json":{"schema":{"$ref":"#/components/schemas/ApiErrorResponse"}}}},"404":{"description":"API key not found","content":{"application/json":{"schema":{"$ref":"#/components/schemas/ApiErrorResponse"}}}},"500":{"description":"Internal server error","content":{"application/json":{"schema":{"$ref":"#/components/schemas/ApiErrorResponse"}}}}},"security":[{"jwt_auth":[]}]}},"/auth/authorize/{provider}":{"get":{"tags":["Authentication"],"summary":"Initiate OAuth authorization flow","description":"Generates an authorization URL for the specified OAuth provider","operationId":"authorize_handler","parameters":[{"name":"provider","in":"path","description":"OAuth provider name (google, github, microsoft, etc.)","required":true,"schema":{"type":"string"}}],"responses":{"200":{"description":"Authorization URL generated successfully","content":{"application/json":{"schema":{"$ref":"#/components/schemas/AuthorizeResponse"}}}},"400":{"description":"Invalid provider or request parameters","content":{"application/json":{"schema":{"$ref":"#/components/schemas/ApiErrorResponse"}}}},"500":{"description":"Internal server error","content":{"application/json":{"schema":{"$ref":"#/components/schemas/ApiErrorResponse"}}}}}}},"/auth/me":{"get":{"tags":["Authentication"],"summary":"Get current user information","description":"Returns information about the currently authenticated user","operationId":"me_handler","responses":{"200":{"description":"User information retrieved successfully","content":{"application/json":{"schema":{"$ref":"#/components/schemas/Model"}}}},"401":{"description":"Authentication required","content":{"application/json":{"schema":{"$ref":"#/components/schemas/ApiErrorResponse"}}}},"500":{"description":"Internal server error","content":{"application/json":{"schema":{"$ref":"#/components/schemas/ApiErrorResponse"}}}}},"security":[{"jwt_auth":[]}]}},"/auth/providers":{"get":{"tags":["Authentication"],"summary":"List available OAuth providers","description":"Returns a list of configured OAuth providers with their display names and scopes","operationId":"providers_handler","responses":{"200":{"description":"OAuth providers retrieved successfully","content":{"application/json":{"schema":{"$ref":"#/components/schemas/ProvidersResponse"}}}},"500":{"description":"Internal server error","content":{"application/json":{"schema":{"$ref":"#/components/schemas/ApiErrorResponse"}}}}}}},"/auth/refresh":{"post":{"tags":["Authentication"],"summary":"Refresh access token","description":"Refreshes an expired access token using a refresh token","operationId":"refresh_handler","requestBody":{"content":{"application/json":{"schema":{"$ref":"#/components/schemas/RefreshRequest"}}},"required":true},"responses":{"200":{"description":"Token refreshed successfully","content":{"application/json":{"schema":{"$ref":"#/components/schemas/TokenResponse"}}}},"400":{"description":"Invalid refresh token","content":{"application/json":{"schema":{"$ref":"#/components/schemas/ApiErrorResponse"}}}},"401":{"description":"Refresh token expired or revoked","content":{"application/json":{"schema":{"$ref":"#/components/schemas/ApiErrorResponse"}}}},"500":{"description":"Internal server error","content":{"application/json":{"schema":{"$ref":"#/components/schemas/ApiErrorResponse"}}}}}}},"/auth/token":{"post":{"tags":["Authentication"],"summary":"Exchange authorization code for access token","description":"Exchanges an OAuth authorization code for an access token and refresh token","operationId":"token_handler","requestBody":{"content":{"application/json":{"schema":{"$ref":"#/components/schemas/TokenRequest"}}},"required":true},"responses":{"200":{"description":"Token exchange successful","content":{"application/json":{"schema":{"$ref":"#/components/schemas/TokenResponse"}}}},"400":{"description":"Invalid authorization code or request parameters","content":{"application/json":{"schema":{"$ref":"#/components/schemas/ApiErrorResponse"}}}},"500":{"description":"Internal server error","content":{"application/json":{"schema":{"$ref":"#/components/schemas/ApiErrorResponse"}}}}}}},"/bedrock/model/{model_id}/invoke":{"post":{"tags":["Bedrock Models"],"summary":"Invoke Bedrock Model","description":"Invoke an AWS Bedrock model with a request payload","operationId":"invoke_model","parameters":[{"name":"model_id","in":"path","description":"AWS Bedrock model identifier (e.g., anthropic.claude-sonnet-4-20250514-v1:0)","required":true,"schema":{"type":"string"}}],"requestBody":{"description":"Model invocation payload (varies by model)","content":{"application/json":{"schema":{}}},"required":true},"responses":{"200":{"description":"Model response","content":{"application/json":{"schema":{}}}},"400":{"description":"Bad request","content":{"application/json":{"schema":{"$ref":"#/components/schemas/ApiErrorResponse"}}}},"401":{"description":"Unauthorized","content":{"application/json":{"schema":{"$ref":"#/components/schemas/ApiErrorResponse"}}}},"500":{"description":"Internal server error","content":{"application/json":{"schema":{"$ref":"#/components/schemas/ApiErrorResponse"}}}},"502":{"description":"Bad gateway - AWS service error","content":{"application/json":{"schema":{"$ref":"#/components/schemas/ApiErrorResponse"}}}}},"security":[{"jwt_auth":[]},{"api_key_auth":[]}]}},"/bedrock/model/{model_id}/invoke-with-response-stream":{"post":{"tags":["Bedrock Models"],"summary":"Invoke Bedrock Model with Streaming","description":"Invoke an AWS Bedrock model with streaming response (AWS EventStream format)","operationId":"invoke_model_with_response_stream","parameters":[{"name":"model_id","in":"path","description":"AWS Bedrock model identifier (e.g., anthropic.claude-sonnet-4-20250514-v1:0)","required":true,"schema":{"type":"string"}}],"requestBody":{"description":"Model invocation payload (varies by model)","content":{"application/json":{"schema":{}}},"required":true},"responses":{"200":{"description":"Streaming model response","content":{"application/vnd.amazon.eventstream":{}}},"400":{"description":"Bad request","content":{"application/json":{"schema":{"$ref":"#/components/schemas/ApiErrorResponse"}}}},"401":{"description":"Unauthorized","content":{"application/json":{"schema":{"$ref":"#/components/schemas/ApiErrorResponse"}}}},"500":{"description":"Internal server error","content":{"application/json":{"schema":{"$ref":"#/components/schemas/ApiErrorResponse"}}}},"502":{"description":"Bad gateway - AWS service error","content":{"application/json":{"schema":{"$ref":"#/components/schemas/ApiErrorResponse"}}}}},"security":[{"jwt_auth":[]},{"api_key_auth":[]}]}},"/health":{"get":{"tags":["Health"],"summary":"Health Check","description":"Check the health status of the proxy server and its dependencies","operationId":"health_check","parameters":[{"name":"check","in":"query","description":"Filter health checks by component name","required":false,"schema":{"type":["string","null"]}}],"responses":{"200":{"description":"Health check results","content":{"application/json":{"schema":{"$ref":"#/components/schemas/HealthResponse"}}}},"503":{"description":"Service unavailable","content":{"application/json":{"schema":{"$ref":"#/components/schemas/ApiErrorResponse"}}}}}}},"/usage/records":{"get":{"tags":["Usage Tracking"],"summary":"Get User Usage Records","description":"Retrieve usage records for the authenticated user","operationId":"get_user_usage_records","parameters":[{"name":"limit","in":"query","description":"Maximum number of records to return (default: 50, max: 500)","required":false,"schema":{"type":["integer","null"],"format":"int32","minimum":0}},{"name":"offset","in":"query","description":"Number of records to skip for pagination","required":false,"schema":{"type":["integer","null"],"format":"int32","minimum":0}},{"name":"model","in":"query","description":"Filter by specific model ID","required":false,"schema":{"type":["string","null"]}},{"name":"start_date","in":"query","description":"Filter records from this date onwards","required":false,"schema":{"type":["string","null"],"format":"date-time"}},{"name":"end_date","in":"query","description":"Filter records up to this date","required":false,"schema":{"type":["string","null"],"format":"date-time"}},{"name":"success_only","in":"query","description":"If true, only return successful requests","required":false,"schema":{"type":["boolean","null"]}},{"name":"format","in":"query","description":"Response format (json or csv)","required":false,"schema":{"type":["string","null"]}},{"name":"user_id","in":"query","description":"Filter by specific user ID (admin only)","required":false,"schema":{"type":["integer","null"],"format":"int32"}}],"responses":{"200":{"description":"List of usage records","content":{"application/json":{"schema":{"$ref":"#/components/schemas/UsageRecordsResponse"}}}},"401":{"description":"Unauthorized","content":{"application/json":{"schema":{"$ref":"#/components/schemas/ApiErrorResponse"}}}},"500":{"description":"Internal server error","content":{"application/json":{"schema":{"$ref":"#/components/schemas/ApiErrorResponse"}}}}},"security":[{"jwt_auth":[]},{"api_key_auth":[]}]}},"/usage/summaries":{"get":{"tags":["Usage Tracking"],"summary":"Get User Usage Summaries","description":"Retrieve pre-computed usage summaries for the authenticated user","operationId":"get_user_usage_summaries","parameters":[{"name":"start_date","in":"query","description":"Filter summaries from this date onwards","required":false,"schema":{"type":["string","null"],"format":"date-time"}},{"name":"end_date","in":"query","description":"Filter summaries up to this date","required":false,"schema":{"type":["string","null"],"format":"date-time"}},{"name":"period_type","in":"query","description":"Period type for aggregation (hourly, daily, weekly, monthly)","required":false,"schema":{"type":["string","null"]}},{"name":"model_id","in":"query","description":"Filter by specific model ID","required":false,"schema":{"type":["string","null"]}},{"name":"limit","in":"query","description":"Maximum number of summaries to return (default: 1000)","required":false,"schema":{"type":["integer","null"],"format":"int32","minimum":0}},{"name":"offset","in":"query","description":"Number of summaries to skip for pagination","required":false,"schema":{"type":["integer","null"],"format":"int32","minimum":0}},{"name":"user_id","in":"query","description":"Filter by specific user ID (admin only)","required":false,"schema":{"type":["integer","null"],"format":"int32"}}],"responses":{"200":{"description":"Usage summaries","content":{"application/json":{"schema":{"$ref":"#/components/schemas/UsageSummariesResponse"}}}},"401":{"description":"Unauthorized","content":{"application/json":{"schema":{"$ref":"#/components/schemas/ApiErrorResponse"}}}},"500":{"description":"Internal server error","content":{"application/json":{"schema":{"$ref":"#/components/schemas/ApiErrorResponse"}}}}},"security":[{"jwt_auth":[]},{"api_key_auth":[]}]}}},"components":{"schemas":{"AnthropicRequest":{"type":"object","description":"Anthropic API request format","required":["model","messages","max_tokens"],"properties":{"max_tokens":{"type":"integer","format":"int32","description":"Maximum number of tokens to generate","minimum":0},"messages":{"type":"array","items":{"$ref":"#/components/schemas/Message"},"description":"Array of message objects"},"model":{"type":"string","description":"The model ID in Anthropic format (e.g., \"claude-sonnet-4-20250514\")"},"stop_sequences":{"type":["array","null"],"items":{"type":"string"},"description":"Sequences where the API will stop generating"},"stream":{"type":["boolean","null"],"description":"Whether to stream the response"},"system":{"description":"System prompt to provide context (can be string or array of content blocks)"},"temperature":{"type":["number","null"],"format":"float","description":"Controls randomness: 0.0 is deterministic, 1.0 is maximum randomness"},"tool_choice":{"description":"How the model should use tools. Can be \"auto\", \"any\", or specific tool choice"},"tools":{"type":["array","null"],"items":{"$ref":"#/components/schemas/Tool"},"description":"Tools available for the model to use"},"top_k":{"type":["integer","null"],"format":"int32","description":"Only sample from top K options","minimum":0},"top_p":{"type":["number","null"],"format":"float","description":"Alternative to temperature for nucleus sampling"}},"additionalProperties":{"description":"Passthrough for any additional fields not explicitly handled"}},"ApiErrorResponse":{"type":"object","description":"API Error response for documentation","required":["error","code"],"properties":{"code":{"type":"string","description":"Error code"},"error":{"type":"string","description":"Error message"}}},"ApiKey":{"type":"object","required":["id","key_hash","user_id","name","hint","created_at"],"properties":{"created_at":{"type":"string","format":"date-time"},"expires_at":{"type":["string","null"],"format":"date-time"},"hint":{"type":"string"},"id":{"type":"integer","format":"int32"},"key_hash":{"type":"string"},"last_used":{"type":["string","null"],"format":"date-time"},"name":{"type":"string"},"revoked_at":{"type":["string","null"],"format":"date-time"},"user_id":{"type":"integer","format":"int32"}}},"AuditEventType":{"type":"string","description":"Audit event types for tracking user and system activities","enum":["Login","Logout","OAuthStart","OAuthComplete","TokenRefresh","ApiKeyCreate","ApiKeyDelete","ApiCall","ModelInvoke","AuthFailure","OAuthLogin","OAuthLoginFailed"]},"AuditLogEntry":{"type":"object","description":"Audit log entry for API response","required":["id","event_type","success","created_at"],"properties":{"created_at":{"type":"string","format":"date-time","description":"Event timestamp"},"error_message":{"type":["string","null"],"description":"Error message if not successful (nullable)"},"event_type":{"$ref":"#/components/schemas/AuditEventType","description":"Event type"},"id":{"type":"integer","format":"int32","description":"Unique identifier"},"ip_address":{"type":["string","null"],"description":"Client IP address (nullable)"},"metadata":{"description":"Additional metadata as JSON (nullable)"},"provider":{"type":["string","null"],"description":"OAuth provider (nullable)"},"success":{"type":"boolean","description":"Whether the event was successful"},"user_agent":{"type":["string","null"],"description":"User agent string (nullable)"},"user_id":{"type":["integer","null"],"format":"int32","description":"User ID (nullable for system events)"}}},"AuditLogQueryParams":{"type":"object","description":"Query parameters for audit log filtering","properties":{"end_date":{"type":["string","null"],"format":"date-time","description":"Filter by end date (ISO 8601)"},"event_type":{"oneOf":[{"type":"null"},{"$ref":"#/components/schemas/AuditEventType","description":"Filter by event type"}]},"limit":{"type":["integer","null"],"format":"int64","description":"Number of records per page (default: 50, max: 1000)","minimum":0},"offset":{"type":["integer","null"],"format":"int64","description":"Page offset (default: 0)","minimum":0},"provider":{"type":["string","null"],"description":"Filter by provider"},"start_date":{"type":["string","null"],"format":"date-time","description":"Filter by start date (ISO 8601)"},"success":{"type":["boolean","null"],"description":"Filter by success status"},"user_id":{"type":["integer","null"],"format":"int32","description":"Filter by user ID"}}},"AuditLogsResponse":{"type":"object","description":"Response for audit logs query","required":["logs","total","offset","limit"],"properties":{"limit":{"type":"integer","format":"int64","description":"Records per page","minimum":0},"logs":{"type":"array","items":{"$ref":"#/components/schemas/AuditLogEntry"},"description":"List of audit log entries"},"offset":{"type":"integer","format":"int64","description":"Current page offset","minimum":0},"total":{"type":"integer","format":"int64","description":"Total number of matching records","minimum":0}}},"AuthorizeQuery":{"type":"object","properties":{"redirect_uri":{"type":["string","null"]},"state":{"type":["string","null"]}}},"AuthorizeResponse":{"type":"object","required":["authorization_url","state","provider"],"properties":{"authorization_url":{"type":"string"},"provider":{"type":"string"},"state":{"type":"string"}}},"CallbackQuery":{"type":"object","properties":{"code":{"type":["string","null"]},"error":{"type":["string","null"]},"error_description":{"type":["string","null"]},"state":{"type":["string","null"]}}},"CreateApiKeyRequest":{"type":"object","description":"Request to create a new API key","required":["name"],"properties":{"expires_in_days":{"type":["integer","null"],"format":"int32","description":"Number of days until key expires (optional)","minimum":0},"name":{"type":"string","description":"Human-readable name for the API key"}}},"CreateApiKeyResponse":{"type":"object","description":"Response containing the new API key","required":["id","name","key","created_at"],"properties":{"created_at":{"type":"string","format":"date-time","description":"When the key was created"},"expires_at":{"type":["string","null"],"format":"date-time","description":"When the key expires (if applicable)"},"id":{"type":"integer","format":"int32","description":"Unique key identifier"},"key":{"type":"string","description":"The actual API key (only returned once)"},"name":{"type":"string","description":"Human-readable name"}}},"HealthCheckQuery":{"type":"object","properties":{"check":{"type":["string","null"],"description":"Filter health checks by component name"}}},"HealthCheckResult":{"type":"object","required":["status"],"properties":{"details":{},"duration_ms":{"type":["integer","null"],"format":"int64","minimum":0},"message":{"type":["string","null"]},"status":{"$ref":"#/components/schemas/HealthStatus"}}},"HealthResponse":{"type":"object","required":["status","service","version","timestamp","checks","summary"],"properties":{"checks":{"type":"object","additionalProperties":{"$ref":"#/components/schemas/HealthCheckResult"},"propertyNames":{"type":"string"}},"service":{"type":"string"},"status":{"$ref":"#/components/schemas/HealthStatus"},"summary":{"$ref":"#/components/schemas/HealthSummary"},"timestamp":{"type":"string"},"version":{"type":"string"}}},"HealthStatus":{"type":"string","enum":["Healthy","Degraded","Unhealthy"]},"HealthSummary":{"type":"object","required":["total_checks","healthy_count","degraded_count","unhealthy_count","total_duration_ms"],"properties":{"degraded_count":{"type":"integer","minimum":0},"healthy_count":{"type":"integer","minimum":0},"total_checks":{"type":"integer","minimum":0},"total_duration_ms":{"type":"integer","format":"int64","minimum":0},"unhealthy_count":{"type":"integer","minimum":0}}},"Message":{"type":"object","description":"Message object in the conversation","required":["role","content"],"properties":{"content":{"description":"Content of the message (can be string or array of content blocks)"},"role":{"type":"string","description":"Role of the message sender (\"user\", \"assistant\", or \"system\")"}}},"Model":{"type":"object","required":["id","provider_user_id","provider","email","created_at","updated_at","state"],"properties":{"created_at":{"type":"string","format":"date-time"},"display_name":{"type":["string","null"]},"email":{"type":"string"},"id":{"type":"integer","format":"int32"},"last_login":{"type":["string","null"],"format":"date-time"},"provider":{"type":"string"},"provider_user_id":{"type":"string"},"state":{"$ref":"#/components/schemas/UserRecord"},"updated_at":{"type":"string","format":"date-time"}}},"ModelCost":{"type":"object","required":["id","region","model_id","input_cost_per_1k_tokens","output_cost_per_1k_tokens","updated_at"],"properties":{"cache_read_cost_per_1k_tokens":{"type":["string","null"]},"cache_write_cost_per_1k_tokens":{"type":["string","null"]},"id":{"type":"integer","format":"int32"},"input_cost_per_1k_tokens":{"type":"string"},"model_id":{"type":"string"},"output_cost_per_1k_tokens":{"type":"string"},"region":{"type":"string"},"updated_at":{"type":"string","format":"date-time"}}},"ModelCostRequest":{"type":"object","description":"Request/Response for model cost management","required":["region","model_id","input_cost_per_1k_tokens","output_cost_per_1k_tokens"],"properties":{"cache_read_cost_per_1k_tokens":{"type":["number","null"],"format":"double","description":"Optional cost per 1000 cache read tokens in USD"},"cache_write_cost_per_1k_tokens":{"type":["number","null"],"format":"double","description":"Optional cost per 1000 cache write tokens in USD"},"input_cost_per_1k_tokens":{"type":"number","format":"double","description":"Cost per 1000 input tokens in USD"},"model_id":{"type":"string","description":"Model identifier (e.g., \"anthropic.claude-sonnet-4-20250514-v1:0\")"},"output_cost_per_1k_tokens":{"type":"number","format":"double","description":"Cost per 1000 output tokens in USD"},"region":{"type":"string","description":"AWS region (e.g., \"us-east-1\")"}}},"PeriodType":{"type":"string","description":"Period types for usage aggregation","enum":["hourly","daily","weekly","monthly"]},"ProviderInfo":{"type":"object","required":["name","display_name","scopes"],"properties":{"display_name":{"type":"string"},"name":{"type":"string"},"scopes":{"type":"array","items":{"type":"string"}}}},"ProvidersResponse":{"type":"object","required":["providers"],"properties":{"providers":{"type":"array","items":{"$ref":"#/components/schemas/ProviderInfo"}}}},"RefreshRequest":{"type":"object","required":["refresh_token"],"properties":{"refresh_token":{"type":"string"}}},"TokenRequest":{"type":"object","required":["provider","authorization_code","redirect_uri","state"],"properties":{"authorization_code":{"type":"string"},"provider":{"type":"string"},"redirect_uri":{"type":"string"},"state":{"type":"string"}}},"TokenResponse":{"type":"object","required":["access_token","token_type","expires_in","refresh_token","scope"],"properties":{"access_token":{"type":"string"},"expires_in":{"type":"integer","format":"int64","minimum":0},"refresh_token":{"type":"string"},"scope":{"type":"string"},"token_type":{"type":"string"}}},"Tool":{"type":"object","description":"Tool definition for function calling","required":["name","description","input_schema"],"properties":{"description":{"type":"string","description":"Description of what the tool does and when to use it"},"input_schema":{"$ref":"#/components/schemas/ToolInputSchema","description":"JSON Schema defining the tool's input parameters"},"name":{"type":"string","description":"Name of the tool (must be unique within the request)"}}},"ToolInputSchema":{"type":"object","description":"JSON Schema for tool input parameters","required":["type"],"properties":{"properties":{"type":["object","null"],"description":"Properties of the input object","additionalProperties":{},"propertyNames":{"type":"string"}},"required":{"type":["array","null"],"items":{"type":"string"},"description":"List of required property names"},"type":{"type":"string","description":"Schema type (typically \"object\")"}},"additionalProperties":{"description":"Additional schema properties"}},"UpdateCostsResult":{"type":"object","description":"Result of updating model costs","required":["total_processed"],"properties":{"total_processed":{"type":"integer","description":"Number of model costs processed","minimum":0}}},"UpdateUserStateRequest":{"type":"object","description":"Request model for updating user state","required":["state"],"properties":{"state":{"$ref":"#/components/schemas/UserRecord","description":"New user state"}}},"UsageRecord":{"type":"object","required":["id","user_id","model_id","endpoint_type","region","request_time","input_tokens","output_tokens","total_tokens","response_time_ms","success"],"properties":{"cache_read_tokens":{"type":["integer","null"],"format":"int32"},"cache_write_tokens":{"type":["integer","null"],"format":"int32"},"cost_usd":{"type":["string","null"]},"endpoint_type":{"type":"string"},"error_message":{"type":["string","null"]},"id":{"type":"integer","format":"int32"},"input_tokens":{"type":"integer","format":"int32"},"model_id":{"type":"string"},"output_tokens":{"type":"integer","format":"int32"},"region":{"type":"string"},"request_time":{"type":"string","format":"date-time"},"response_time_ms":{"type":"integer","format":"int32"},"stop_reason":{"type":["string","null"]},"success":{"type":"boolean"},"total_tokens":{"type":"integer","format":"int32"},"user_id":{"type":"integer","format":"int32"}}},"UsageRecordsQuery":{"type":"object","description":"Query parameters for usage records","properties":{"end_date":{"type":["string","null"],"format":"date-time","description":"Filter records up to this date"},"format":{"type":["string","null"],"description":"Response format (json or csv)"},"limit":{"type":["integer","null"],"format":"int32","description":"Maximum number of records to return (default: 50, max: 500)","minimum":0},"model":{"type":["string","null"],"description":"Filter by specific model ID"},"offset":{"type":["integer","null"],"format":"int32","description":"Number of records to skip for pagination","minimum":0},"start_date":{"type":["string","null"],"format":"date-time","description":"Filter records from this date onwards"},"success_only":{"type":["boolean","null"],"description":"If true, only return successful requests"},"user_id":{"type":["integer","null"],"format":"int32","description":"Filter by specific user ID (admin only)"}}},"UsageRecordsResponse":{"type":"object","description":"Response for usage records endpoint","required":["records","total","limit","offset"],"properties":{"limit":{"type":"integer","format":"int32","description":"Number of records returned in this page","minimum":0},"offset":{"type":"integer","format":"int32","description":"Number of records skipped","minimum":0},"records":{"type":"array","items":{"$ref":"#/components/schemas/UsageRecord"},"description":"List of usage records"},"total":{"type":"integer","format":"int64","description":"Total number of matching records (for pagination)","minimum":0}}},"UsageSummariesQuery":{"type":"object","description":"Query parameters for usage summaries","properties":{"end_date":{"type":["string","null"],"format":"date-time","description":"Filter summaries up to this date"},"limit":{"type":["integer","null"],"format":"int32","description":"Maximum number of summaries to return (default: 1000)","minimum":0},"model_id":{"type":["string","null"],"description":"Filter by specific model ID"},"offset":{"type":["integer","null"],"format":"int32","description":"Number of summaries to skip for pagination","minimum":0},"period_type":{"type":["string","null"],"description":"Period type for aggregation (hourly, daily, weekly, monthly)"},"start_date":{"type":["string","null"],"format":"date-time","description":"Filter summaries from this date onwards"},"user_id":{"type":["integer","null"],"format":"int32","description":"Filter by specific user ID (admin only)"}}},"UsageSummariesResponse":{"type":"object","description":"Response for usage summaries endpoint","required":["summaries","total","limit","offset"],"properties":{"limit":{"type":"integer","format":"int32","description":"Number of summaries returned in this page","minimum":0},"offset":{"type":"integer","format":"int32","description":"Number of summaries skipped","minimum":0},"summaries":{"type":"array","items":{"$ref":"#/components/schemas/UsageSummary"},"description":"List of usage summaries"},"total":{"type":"integer","format":"int64","description":"Total number of matching summaries (for pagination)","minimum":0}}},"UsageSummary":{"type":"object","required":["id","user_id","model_id","period_type","period_start","period_end","total_requests","successful_requests","total_input_tokens","total_output_tokens","total_cache_write_tokens","total_cache_read_tokens","total_tokens","avg_response_time_ms","created_at","updated_at"],"properties":{"avg_response_time_ms":{"type":"number","format":"float"},"created_at":{"type":"string","format":"date-time"},"estimated_cost":{"type":["string","null"]},"id":{"type":"integer","format":"int32"},"model_id":{"type":"string"},"period_end":{"type":"string","format":"date-time"},"period_start":{"type":"string","format":"date-time"},"period_type":{"$ref":"#/components/schemas/PeriodType"},"successful_requests":{"type":"integer","format":"int32"},"total_cache_read_tokens":{"type":"integer","format":"int64"},"total_cache_write_tokens":{"type":"integer","format":"int64"},"total_input_tokens":{"type":"integer","format":"int64"},"total_output_tokens":{"type":"integer","format":"int64"},"total_requests":{"type":"integer","format":"int32"},"total_tokens":{"type":"integer","format":"int64"},"updated_at":{"type":"string","format":"date-time"},"user_id":{"type":"integer","format":"int32"}}},"UserListQuery":{"type":"object","description":"Query parameters for user list","properties":{"limit":{"type":"integer","format":"int64","description":"Maximum number of users to return (default: 50, max: 500)","minimum":0},"offset":{"type":"integer","format":"int64","description":"Number of users to skip for pagination (default: 0)","minimum":0},"order":{"type":"string","description":"Sort direction: asc or desc (default: desc)"},"sort":{"type":"string","description":"Sort order: created_at, updated_at, last_login, email (default: created_at)"}}},"UserListResponse":{"type":"object","description":"Response model for user list","required":["users","total","count","offset","limit"],"properties":{"count":{"type":"integer","description":"Number of users returned in this response","minimum":0},"limit":{"type":"integer","format":"int64","description":"Limit used for pagination","minimum":0},"offset":{"type":"integer","format":"int64","description":"Offset used for pagination","minimum":0},"total":{"type":"integer","description":"Total number of users matching the query","minimum":0},"users":{"type":"array","items":{"$ref":"#/components/schemas/UserResponse"},"description":"List of users"}}},"UserRecord":{"type":"string","description":"User state enum for tracking account status","enum":["active","disabled","expired"]},"UserResponse":{"type":"object","description":"User response model for API","required":["id","provider_user_id","provider","email","created_at","updated_at","state"],"properties":{"created_at":{"type":"string","format":"date-time","description":"Account creation timestamp"},"display_name":{"type":["string","null"],"description":"Display name from OAuth provider"},"email":{"type":"string","description":"User email address"},"id":{"type":"integer","format":"int32","description":"User ID"},"last_login":{"type":["string","null"],"format":"date-time","description":"Last login timestamp"},"provider":{"type":"string","description":"OAuth provider name"},"provider_user_id":{"type":"string","description":"Provider user ID (external ID from OAuth provider)"},"state":{"$ref":"#/components/schemas/UserRecord","description":"User account state"},"updated_at":{"type":"string","format":"date-time","description":"Last update timestamp"}}},"UserSearchQuery":{"type":"object","description":"Query parameters for user search","required":["q"],"properties":{"limit":{"type":"integer","format":"int64","description":"Maximum number of users to return (default: 50, max: 500)","minimum":0},"offset":{"type":"integer","format":"int64","description":"Number of users to skip for pagination (default: 0)","minimum":0},"q":{"type":"string","description":"Search term to match against email, display_name, or provider_user_id"}}}},"securitySchemes":{"api_key_auth":{"type":"http","scheme":"bearer"},"jwt_auth":{"type":"http","scheme":"bearer"},"x_api_key_auth":{"type":"apiKey","in":"header","name":"X-API-Key"}}},"tags":[{"name":"Health","description":"Health check endpoints"},{"name":"Authentication","description":"OAuth authentication endpoints"},{"name":"API Keys","description":"API key management endpoints"},{"name":"Bedrock Models","description":"AWS Bedrock model invocation endpoints"},{"name":"Anthropic API","description":"Standard Anthropic API format endpoints"},{"name":"Cost Management","description":"Model cost tracking and management endpoints (admin only)"},{"name":"Usage Tracking","description":"User usage tracking endpoints"},{"name":"Admin Usage Management","description":"System-wide usage tracking endpoints (admin only)"},{"name":"Admin Audit Logs","description":"Admin audit log operations (admin only)"},{"name":"Admin User Management","description":"Admin user management endpoints (admin only)"}]}
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Bedrock SSO Proxy API",
+    "description": "JWT-authenticated HTTP proxy server that provides secure access to AWS Bedrock APIs",
+    "license": {
+      "name": ""
+    },
+    "version": "1.0.0"
+  },
+  "paths": {
+    "/anthropic/v1/messages": {
+      "post": {
+        "tags": [
+          "Anthropic API"
+        ],
+        "summary": "Create Message (Anthropic API)",
+        "description": "Create a message using the standard Anthropic API format. Supports both streaming and non-streaming responses.",
+        "operationId": "create_message",
+        "requestBody": {
+          "description": "Anthropic API message request",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AnthropicRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Streaming message response",
+            "content": {
+              "text/event-stream": {}
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Bad gateway - AWS service error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "jwt_auth": []
+          },
+          {
+            "api_key_auth": []
+          },
+          {
+            "x_api_key_auth": []
+          }
+        ]
+      }
+    },
+    "/api/admin/audit-logs": {
+      "get": {
+        "tags": [
+          "Admin Audit Logs"
+        ],
+        "summary": "Get audit logs with optional filtering",
+        "operationId": "get_audit_logs",
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "query",
+            "description": "Filter by user ID",
+            "required": false,
+            "schema": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "int32"
+            }
+          },
+          {
+            "name": "event_type",
+            "in": "query",
+            "description": "Filter by event type",
+            "required": false,
+            "schema": {
+              "oneOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "$ref": "#/components/schemas/AuditEventType"
+                }
+              ]
+            }
+          },
+          {
+            "name": "provider",
+            "in": "query",
+            "description": "Filter by provider",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          {
+            "name": "success",
+            "in": "query",
+            "description": "Filter by success status",
+            "required": false,
+            "schema": {
+              "type": [
+                "boolean",
+                "null"
+              ]
+            }
+          },
+          {
+            "name": "start_date",
+            "in": "query",
+            "description": "Filter by start date (ISO 8601)",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "format": "date-time"
+            }
+          },
+          {
+            "name": "end_date",
+            "in": "query",
+            "description": "Filter by end date (ISO 8601)",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "format": "date-time"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "description": "Number of records per page (default: 50, max: 1000)",
+            "required": false,
+            "schema": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "int64",
+              "minimum": 0
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "description": "Page offset (default: 0)",
+            "required": false,
+            "schema": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "int64",
+              "minimum": 0
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Audit logs retrieved successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuditLogsResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid query parameters",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Admin access required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer_auth": []
+          }
+        ]
+      }
+    },
+    "/api/admin/costs": {
+      "get": {
+        "tags": [
+          "Cost Management"
+        ],
+        "summary": "Get All Model Costs",
+        "description": "Retrieve all model cost configurations (admin only)",
+        "operationId": "get_all_model_costs",
+        "responses": {
+          "200": {
+            "description": "List of all model costs",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ModelCost"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden - admin access required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "jwt_auth": []
+          }
+        ]
+      },
+      "post": {
+        "tags": [
+          "Cost Management"
+        ],
+        "summary": "Batch Update Model Costs",
+        "description": "Update multiple model costs from CSV data (admin only)",
+        "operationId": "update_all_model_costs",
+        "requestBody": {
+          "description": "CSV content with model cost data",
+          "content": {
+            "text/csv": {
+              "schema": {
+                "type": "string"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Batch update results",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UpdateCostsResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request - invalid CSV",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden - admin access required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "jwt_auth": []
+          }
+        ]
+      }
+    },
+    "/api/admin/costs/{region}/{model_id}": {
+      "get": {
+        "tags": [
+          "Cost Management"
+        ],
+        "summary": "Get Model Cost",
+        "description": "Retrieve cost configuration for a specific model in a region (admin only)",
+        "operationId": "get_model_cost",
+        "parameters": [
+          {
+            "name": "region",
+            "in": "path",
+            "description": "AWS region (e.g., us-east-1)",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "model_id",
+            "in": "path",
+            "description": "Model identifier",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Model cost configuration",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModelCost"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden - admin access required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Model cost not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "jwt_auth": []
+          }
+        ]
+      },
+      "put": {
+        "tags": [
+          "Cost Management"
+        ],
+        "summary": "Create or Update Model Cost",
+        "description": "Create or update cost configuration for a specific model (admin only)",
+        "operationId": "upsert_model_cost",
+        "parameters": [
+          {
+            "name": "region",
+            "in": "path",
+            "description": "AWS region (e.g., us-east-1)",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "model_id",
+            "in": "path",
+            "description": "Model identifier",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ModelCostRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Model cost updated successfully"
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden - admin access required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "jwt_auth": []
+          }
+        ]
+      },
+      "delete": {
+        "tags": [
+          "Cost Management"
+        ],
+        "summary": "Delete Model Cost",
+        "description": "Delete cost configuration for a specific model (admin only)",
+        "operationId": "delete_model_cost",
+        "parameters": [
+          {
+            "name": "region",
+            "in": "path",
+            "description": "AWS region (e.g., us-east-1)",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "model_id",
+            "in": "path",
+            "description": "Model identifier",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Model cost deleted successfully"
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden - admin access required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "jwt_auth": []
+          }
+        ]
+      }
+    },
+    "/api/admin/usage/records": {
+      "get": {
+        "tags": [
+          "Admin Usage Management"
+        ],
+        "summary": "Get System Usage Records",
+        "description": "Retrieve usage records for all users (admin only)",
+        "operationId": "get_system_usage_records",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "description": "Maximum number of records to return (default: 50, max: 500)",
+            "required": false,
+            "schema": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "int32",
+              "minimum": 0
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "description": "Number of records to skip for pagination",
+            "required": false,
+            "schema": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "int32",
+              "minimum": 0
+            }
+          },
+          {
+            "name": "model",
+            "in": "query",
+            "description": "Filter by specific model ID",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          {
+            "name": "start_date",
+            "in": "query",
+            "description": "Filter records from this date onwards",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "format": "date-time"
+            }
+          },
+          {
+            "name": "end_date",
+            "in": "query",
+            "description": "Filter records up to this date",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "format": "date-time"
+            }
+          },
+          {
+            "name": "success_only",
+            "in": "query",
+            "description": "If true, only return successful requests",
+            "required": false,
+            "schema": {
+              "type": [
+                "boolean",
+                "null"
+              ]
+            }
+          },
+          {
+            "name": "format",
+            "in": "query",
+            "description": "Response format (json or csv)",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          {
+            "name": "user_id",
+            "in": "query",
+            "description": "Filter by specific user ID (admin only)",
+            "required": false,
+            "schema": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "List of system usage records",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UsageRecordsResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden - admin access required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "jwt_auth": []
+          }
+        ]
+      }
+    },
+    "/api/admin/usage/summaries": {
+      "get": {
+        "tags": [
+          "Admin Usage Management"
+        ],
+        "summary": "Get System Usage Summaries",
+        "description": "Retrieve pre-computed usage summaries for all users (admin only)",
+        "operationId": "get_admin_usage_summaries",
+        "parameters": [
+          {
+            "name": "start_date",
+            "in": "query",
+            "description": "Filter summaries from this date onwards",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "format": "date-time"
+            }
+          },
+          {
+            "name": "end_date",
+            "in": "query",
+            "description": "Filter summaries up to this date",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "format": "date-time"
+            }
+          },
+          {
+            "name": "period_type",
+            "in": "query",
+            "description": "Period type for aggregation (hourly, daily, weekly, monthly)",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          {
+            "name": "model_id",
+            "in": "query",
+            "description": "Filter by specific model ID",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "description": "Maximum number of summaries to return (default: 1000)",
+            "required": false,
+            "schema": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "int32",
+              "minimum": 0
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "description": "Number of summaries to skip for pagination",
+            "required": false,
+            "schema": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "int32",
+              "minimum": 0
+            }
+          },
+          {
+            "name": "user_id",
+            "in": "query",
+            "description": "Filter by specific user ID (admin only)",
+            "required": false,
+            "schema": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "System usage summaries",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UsageSummariesResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden - admin access required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "jwt_auth": []
+          }
+        ]
+      }
+    },
+    "/api/admin/users": {
+      "get": {
+        "tags": [
+          "Admin User Management"
+        ],
+        "summary": "List users",
+        "description": "Get a paginated list of all users with optional sorting",
+        "operationId": "list_users",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "description": "Maximum number of users to return (default: 50, max: 500)",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int64",
+              "minimum": 0
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "description": "Number of users to skip for pagination (default: 0)",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int64",
+              "minimum": 0
+            }
+          },
+          {
+            "name": "sort",
+            "in": "query",
+            "description": "Sort order: created_at, updated_at, last_login, email (default: created_at)",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "order",
+            "in": "query",
+            "description": "Sort direction: asc or desc (default: desc)",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Users retrieved successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserListResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid query parameters",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden - admin access required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "jwt_auth": []
+          }
+        ]
+      }
+    },
+    "/api/admin/users/search": {
+      "get": {
+        "tags": [
+          "Admin User Management"
+        ],
+        "summary": "Search users",
+        "description": "Search for users by email, display name, or provider user ID",
+        "operationId": "search_users",
+        "parameters": [
+          {
+            "name": "q",
+            "in": "query",
+            "description": "Search term to match against email, display_name, or provider_user_id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "description": "Maximum number of users to return (default: 50, max: 500)",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int64",
+              "minimum": 0
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "description": "Number of users to skip for pagination (default: 0)",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int64",
+              "minimum": 0
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Search completed successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserListResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid search parameters",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden - admin access required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "jwt_auth": []
+          }
+        ]
+      }
+    },
+    "/api/admin/users/{user_id}": {
+      "get": {
+        "tags": [
+          "Admin User Management"
+        ],
+        "summary": "Get user by ID",
+        "description": "Get detailed information about a specific user",
+        "operationId": "get_user_by_id",
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "path",
+            "description": "User ID",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "User retrieved successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden - admin access required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "User not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "jwt_auth": []
+          }
+        ]
+      }
+    },
+    "/api/admin/users/{user_id}/state": {
+      "put": {
+        "tags": [
+          "Admin User Management"
+        ],
+        "summary": "Update user state",
+        "description": "Update the state of a user (active, disabled, or expired)",
+        "operationId": "update_user_state",
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "path",
+            "description": "User ID",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateUserStateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "User state updated successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request data",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden - admin access required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "User not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "jwt_auth": []
+          }
+        ]
+      }
+    },
+    "/api/keys": {
+      "get": {
+        "tags": [
+          "API Keys"
+        ],
+        "summary": "List API Keys",
+        "description": "Get all API keys for the authenticated user",
+        "operationId": "list_api_keys",
+        "responses": {
+          "200": {
+            "description": "List of API keys",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ApiKey"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "jwt_auth": []
+          }
+        ]
+      },
+      "post": {
+        "tags": [
+          "API Keys"
+        ],
+        "summary": "Create API Key",
+        "description": "Create a new API key for programmatic access to the proxy",
+        "operationId": "create_api_key",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateApiKeyRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "API key created successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreateApiKeyResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "jwt_auth": []
+          }
+        ]
+      }
+    },
+    "/api/keys/{key_hash}": {
+      "delete": {
+        "tags": [
+          "API Keys"
+        ],
+        "summary": "Revoke API Key",
+        "description": "Revoke an API key, making it invalid for future requests",
+        "operationId": "revoke_api_key",
+        "parameters": [
+          {
+            "name": "key_hash",
+            "in": "path",
+            "description": "Hash of the API key to revoke",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "API key revoked successfully",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden - not the owner",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "API key not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "jwt_auth": []
+          }
+        ]
+      }
+    },
+    "/api/usage/records": {
+      "get": {
+        "tags": [
+          "Usage Tracking"
+        ],
+        "summary": "Get User Usage Records",
+        "description": "Retrieve usage records for the authenticated user",
+        "operationId": "get_user_usage_records",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "description": "Maximum number of records to return (default: 50, max: 500)",
+            "required": false,
+            "schema": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "int32",
+              "minimum": 0
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "description": "Number of records to skip for pagination",
+            "required": false,
+            "schema": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "int32",
+              "minimum": 0
+            }
+          },
+          {
+            "name": "model",
+            "in": "query",
+            "description": "Filter by specific model ID",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          {
+            "name": "start_date",
+            "in": "query",
+            "description": "Filter records from this date onwards",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "format": "date-time"
+            }
+          },
+          {
+            "name": "end_date",
+            "in": "query",
+            "description": "Filter records up to this date",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "format": "date-time"
+            }
+          },
+          {
+            "name": "success_only",
+            "in": "query",
+            "description": "If true, only return successful requests",
+            "required": false,
+            "schema": {
+              "type": [
+                "boolean",
+                "null"
+              ]
+            }
+          },
+          {
+            "name": "format",
+            "in": "query",
+            "description": "Response format (json or csv)",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          {
+            "name": "user_id",
+            "in": "query",
+            "description": "Filter by specific user ID (admin only)",
+            "required": false,
+            "schema": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "List of usage records",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UsageRecordsResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "jwt_auth": []
+          },
+          {
+            "api_key_auth": []
+          }
+        ]
+      }
+    },
+    "/api/usage/summaries": {
+      "get": {
+        "tags": [
+          "Usage Tracking"
+        ],
+        "summary": "Get User Usage Summaries",
+        "description": "Retrieve pre-computed usage summaries for the authenticated user",
+        "operationId": "get_user_usage_summaries",
+        "parameters": [
+          {
+            "name": "start_date",
+            "in": "query",
+            "description": "Filter summaries from this date onwards",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "format": "date-time"
+            }
+          },
+          {
+            "name": "end_date",
+            "in": "query",
+            "description": "Filter summaries up to this date",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "format": "date-time"
+            }
+          },
+          {
+            "name": "period_type",
+            "in": "query",
+            "description": "Period type for aggregation (hourly, daily, weekly, monthly)",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          {
+            "name": "model_id",
+            "in": "query",
+            "description": "Filter by specific model ID",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "description": "Maximum number of summaries to return (default: 1000)",
+            "required": false,
+            "schema": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "int32",
+              "minimum": 0
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "description": "Number of summaries to skip for pagination",
+            "required": false,
+            "schema": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "int32",
+              "minimum": 0
+            }
+          },
+          {
+            "name": "user_id",
+            "in": "query",
+            "description": "Filter by specific user ID (admin only)",
+            "required": false,
+            "schema": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Usage summaries",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UsageSummariesResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "jwt_auth": []
+          },
+          {
+            "api_key_auth": []
+          }
+        ]
+      }
+    },
+    "/auth/authorize/{provider}": {
+      "get": {
+        "tags": [
+          "Authentication"
+        ],
+        "summary": "Initiate OAuth authorization flow",
+        "description": "Generates an authorization URL for the specified OAuth provider",
+        "operationId": "authorize_handler",
+        "parameters": [
+          {
+            "name": "provider",
+            "in": "path",
+            "description": "OAuth provider name (google, github, microsoft, etc.)",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Authorization URL generated successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthorizeResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid provider or request parameters",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/auth/me": {
+      "get": {
+        "tags": [
+          "Authentication"
+        ],
+        "summary": "Get current user information",
+        "description": "Returns information about the currently authenticated user",
+        "operationId": "me_handler",
+        "responses": {
+          "200": {
+            "description": "User information retrieved successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Model"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "jwt_auth": []
+          }
+        ]
+      }
+    },
+    "/auth/providers": {
+      "get": {
+        "tags": [
+          "Authentication"
+        ],
+        "summary": "List available OAuth providers",
+        "description": "Returns a list of configured OAuth providers with their display names and scopes",
+        "operationId": "providers_handler",
+        "responses": {
+          "200": {
+            "description": "OAuth providers retrieved successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProvidersResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/auth/refresh": {
+      "post": {
+        "tags": [
+          "Authentication"
+        ],
+        "summary": "Refresh access token",
+        "description": "Refreshes an expired access token using a refresh token",
+        "operationId": "refresh_handler",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RefreshRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Token refreshed successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TokenResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid refresh token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Refresh token expired or revoked",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/auth/token": {
+      "post": {
+        "tags": [
+          "Authentication"
+        ],
+        "summary": "Exchange authorization code for access token",
+        "description": "Exchanges an OAuth authorization code for an access token and refresh token",
+        "operationId": "token_handler",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TokenRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Token exchange successful",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TokenResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid authorization code or request parameters",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/bedrock/model/{model_id}/invoke": {
+      "post": {
+        "tags": [
+          "Bedrock Models"
+        ],
+        "summary": "Invoke Bedrock Model",
+        "description": "Invoke an AWS Bedrock model with a request payload",
+        "operationId": "invoke_model",
+        "parameters": [
+          {
+            "name": "model_id",
+            "in": "path",
+            "description": "AWS Bedrock model identifier (e.g., anthropic.claude-sonnet-4-20250514-v1:0)",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "description": "Model invocation payload (varies by model)",
+          "content": {
+            "application/json": {
+              "schema": {}
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Model response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Bad gateway - AWS service error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "jwt_auth": []
+          },
+          {
+            "api_key_auth": []
+          }
+        ]
+      }
+    },
+    "/bedrock/model/{model_id}/invoke-with-response-stream": {
+      "post": {
+        "tags": [
+          "Bedrock Models"
+        ],
+        "summary": "Invoke Bedrock Model with Streaming",
+        "description": "Invoke an AWS Bedrock model with streaming response (AWS EventStream format)",
+        "operationId": "invoke_model_with_response_stream",
+        "parameters": [
+          {
+            "name": "model_id",
+            "in": "path",
+            "description": "AWS Bedrock model identifier (e.g., anthropic.claude-sonnet-4-20250514-v1:0)",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "description": "Model invocation payload (varies by model)",
+          "content": {
+            "application/json": {
+              "schema": {}
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Streaming model response",
+            "content": {
+              "application/vnd.amazon.eventstream": {}
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Bad gateway - AWS service error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "jwt_auth": []
+          },
+          {
+            "api_key_auth": []
+          }
+        ]
+      }
+    },
+    "/health": {
+      "get": {
+        "tags": [
+          "Health"
+        ],
+        "summary": "Health Check",
+        "description": "Check the health status of the proxy server and its dependencies",
+        "operationId": "health_check",
+        "parameters": [
+          {
+            "name": "check",
+            "in": "query",
+            "description": "Filter health checks by component name",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Health check results",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Service unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "AnthropicRequest": {
+        "type": "object",
+        "description": "Anthropic API request format",
+        "required": [
+          "model",
+          "messages",
+          "max_tokens"
+        ],
+        "properties": {
+          "max_tokens": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Maximum number of tokens to generate",
+            "minimum": 0
+          },
+          "messages": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Message"
+            },
+            "description": "Array of message objects"
+          },
+          "model": {
+            "type": "string",
+            "description": "The model ID in Anthropic format (e.g., \"claude-sonnet-4-20250514\")"
+          },
+          "stop_sequences": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "type": "string"
+            },
+            "description": "Sequences where the API will stop generating"
+          },
+          "stream": {
+            "type": [
+              "boolean",
+              "null"
+            ],
+            "description": "Whether to stream the response"
+          },
+          "system": {
+            "description": "System prompt to provide context (can be string or array of content blocks)"
+          },
+          "temperature": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "float",
+            "description": "Controls randomness: 0.0 is deterministic, 1.0 is maximum randomness"
+          },
+          "tool_choice": {
+            "description": "How the model should use tools. Can be \"auto\", \"any\", or specific tool choice"
+          },
+          "tools": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/Tool"
+            },
+            "description": "Tools available for the model to use"
+          },
+          "top_k": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "description": "Only sample from top K options",
+            "minimum": 0
+          },
+          "top_p": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "float",
+            "description": "Alternative to temperature for nucleus sampling"
+          }
+        },
+        "additionalProperties": {
+          "description": "Passthrough for any additional fields not explicitly handled"
+        }
+      },
+      "ApiErrorResponse": {
+        "type": "object",
+        "description": "API Error response for documentation",
+        "required": [
+          "error",
+          "code"
+        ],
+        "properties": {
+          "code": {
+            "type": "string",
+            "description": "Error code"
+          },
+          "error": {
+            "type": "string",
+            "description": "Error message"
+          }
+        }
+      },
+      "ApiKey": {
+        "type": "object",
+        "required": [
+          "id",
+          "key_hash",
+          "user_id",
+          "name",
+          "hint",
+          "created_at"
+        ],
+        "properties": {
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "expires_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "hint": {
+            "type": "string"
+          },
+          "id": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "key_hash": {
+            "type": "string"
+          },
+          "last_used": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "name": {
+            "type": "string"
+          },
+          "revoked_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "user_id": {
+            "type": "integer",
+            "format": "int32"
+          }
+        }
+      },
+      "AuditEventType": {
+        "type": "string",
+        "description": "Audit event types for tracking user and system activities",
+        "enum": [
+          "Login",
+          "Logout",
+          "OAuthStart",
+          "OAuthComplete",
+          "TokenRefresh",
+          "ApiKeyCreate",
+          "ApiKeyDelete",
+          "ApiCall",
+          "ModelInvoke",
+          "AuthFailure",
+          "OAuthLogin",
+          "OAuthLoginFailed"
+        ]
+      },
+      "AuditLogEntry": {
+        "type": "object",
+        "description": "Audit log entry for API response",
+        "required": [
+          "id",
+          "event_type",
+          "success",
+          "created_at"
+        ],
+        "properties": {
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Event timestamp"
+          },
+          "error_message": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Error message if not successful (nullable)"
+          },
+          "event_type": {
+            "$ref": "#/components/schemas/AuditEventType",
+            "description": "Event type"
+          },
+          "id": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Unique identifier"
+          },
+          "ip_address": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Client IP address (nullable)"
+          },
+          "metadata": {
+            "description": "Additional metadata as JSON (nullable)"
+          },
+          "provider": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "OAuth provider (nullable)"
+          },
+          "success": {
+            "type": "boolean",
+            "description": "Whether the event was successful"
+          },
+          "user_agent": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "User agent string (nullable)"
+          },
+          "user_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "description": "User ID (nullable for system events)"
+          }
+        }
+      },
+      "AuditLogQueryParams": {
+        "type": "object",
+        "description": "Query parameters for audit log filtering",
+        "properties": {
+          "end_date": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time",
+            "description": "Filter by end date (ISO 8601)"
+          },
+          "event_type": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/AuditEventType",
+                "description": "Filter by event type"
+              }
+            ]
+          },
+          "limit": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "Number of records per page (default: 50, max: 1000)",
+            "minimum": 0
+          },
+          "offset": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "Page offset (default: 0)",
+            "minimum": 0
+          },
+          "provider": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Filter by provider"
+          },
+          "start_date": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time",
+            "description": "Filter by start date (ISO 8601)"
+          },
+          "success": {
+            "type": [
+              "boolean",
+              "null"
+            ],
+            "description": "Filter by success status"
+          },
+          "user_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "description": "Filter by user ID"
+          }
+        }
+      },
+      "AuditLogsResponse": {
+        "type": "object",
+        "description": "Response for audit logs query",
+        "required": [
+          "logs",
+          "total",
+          "offset",
+          "limit"
+        ],
+        "properties": {
+          "limit": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Records per page",
+            "minimum": 0
+          },
+          "logs": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AuditLogEntry"
+            },
+            "description": "List of audit log entries"
+          },
+          "offset": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Current page offset",
+            "minimum": 0
+          },
+          "total": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Total number of matching records",
+            "minimum": 0
+          }
+        }
+      },
+      "AuthorizeQuery": {
+        "type": "object",
+        "properties": {
+          "redirect_uri": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "state": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "AuthorizeResponse": {
+        "type": "object",
+        "required": [
+          "authorization_url",
+          "state",
+          "provider"
+        ],
+        "properties": {
+          "authorization_url": {
+            "type": "string"
+          },
+          "provider": {
+            "type": "string"
+          },
+          "state": {
+            "type": "string"
+          }
+        }
+      },
+      "CallbackQuery": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "error": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "error_description": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "state": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "CreateApiKeyRequest": {
+        "type": "object",
+        "description": "Request to create a new API key",
+        "required": [
+          "name"
+        ],
+        "properties": {
+          "expires_in_days": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "description": "Number of days until key expires (optional)",
+            "minimum": 0
+          },
+          "name": {
+            "type": "string",
+            "description": "Human-readable name for the API key"
+          }
+        }
+      },
+      "CreateApiKeyResponse": {
+        "type": "object",
+        "description": "Response containing the new API key",
+        "required": [
+          "id",
+          "name",
+          "key",
+          "created_at"
+        ],
+        "properties": {
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "When the key was created"
+          },
+          "expires_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time",
+            "description": "When the key expires (if applicable)"
+          },
+          "id": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Unique key identifier"
+          },
+          "key": {
+            "type": "string",
+            "description": "The actual API key (only returned once)"
+          },
+          "name": {
+            "type": "string",
+            "description": "Human-readable name"
+          }
+        }
+      },
+      "HealthCheckQuery": {
+        "type": "object",
+        "properties": {
+          "check": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Filter health checks by component name"
+          }
+        }
+      },
+      "HealthCheckResult": {
+        "type": "object",
+        "required": [
+          "status"
+        ],
+        "properties": {
+          "details": {},
+          "duration_ms": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "minimum": 0
+          },
+          "message": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "status": {
+            "$ref": "#/components/schemas/HealthStatus"
+          }
+        }
+      },
+      "HealthResponse": {
+        "type": "object",
+        "required": [
+          "status",
+          "service",
+          "version",
+          "timestamp",
+          "checks",
+          "summary"
+        ],
+        "properties": {
+          "checks": {
+            "type": "object",
+            "additionalProperties": {
+              "$ref": "#/components/schemas/HealthCheckResult"
+            },
+            "propertyNames": {
+              "type": "string"
+            }
+          },
+          "service": {
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/components/schemas/HealthStatus"
+          },
+          "summary": {
+            "$ref": "#/components/schemas/HealthSummary"
+          },
+          "timestamp": {
+            "type": "string"
+          },
+          "version": {
+            "type": "string"
+          }
+        }
+      },
+      "HealthStatus": {
+        "type": "string",
+        "enum": [
+          "Healthy",
+          "Degraded",
+          "Unhealthy"
+        ]
+      },
+      "HealthSummary": {
+        "type": "object",
+        "required": [
+          "total_checks",
+          "healthy_count",
+          "degraded_count",
+          "unhealthy_count",
+          "total_duration_ms"
+        ],
+        "properties": {
+          "degraded_count": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "healthy_count": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "total_checks": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "total_duration_ms": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          },
+          "unhealthy_count": {
+            "type": "integer",
+            "minimum": 0
+          }
+        }
+      },
+      "Message": {
+        "type": "object",
+        "description": "Message object in the conversation",
+        "required": [
+          "role",
+          "content"
+        ],
+        "properties": {
+          "content": {
+            "description": "Content of the message (can be string or array of content blocks)"
+          },
+          "role": {
+            "type": "string",
+            "description": "Role of the message sender (\"user\", \"assistant\", or \"system\")"
+          }
+        }
+      },
+      "Model": {
+        "type": "object",
+        "required": [
+          "id",
+          "provider_user_id",
+          "provider",
+          "email",
+          "created_at",
+          "updated_at",
+          "state"
+        ],
+        "properties": {
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "display_name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "email": {
+            "type": "string"
+          },
+          "id": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "last_login": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "provider": {
+            "type": "string"
+          },
+          "provider_user_id": {
+            "type": "string"
+          },
+          "state": {
+            "$ref": "#/components/schemas/UserRecord"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "ModelCost": {
+        "type": "object",
+        "required": [
+          "id",
+          "region",
+          "model_id",
+          "input_cost_per_1k_tokens",
+          "output_cost_per_1k_tokens",
+          "updated_at"
+        ],
+        "properties": {
+          "cache_read_cost_per_1k_tokens": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "cache_write_cost_per_1k_tokens": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "id": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "input_cost_per_1k_tokens": {
+            "type": "string"
+          },
+          "model_id": {
+            "type": "string"
+          },
+          "output_cost_per_1k_tokens": {
+            "type": "string"
+          },
+          "region": {
+            "type": "string"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "ModelCostRequest": {
+        "type": "object",
+        "description": "Request/Response for model cost management",
+        "required": [
+          "region",
+          "model_id",
+          "input_cost_per_1k_tokens",
+          "output_cost_per_1k_tokens"
+        ],
+        "properties": {
+          "cache_read_cost_per_1k_tokens": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "double",
+            "description": "Optional cost per 1000 cache read tokens in USD"
+          },
+          "cache_write_cost_per_1k_tokens": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "double",
+            "description": "Optional cost per 1000 cache write tokens in USD"
+          },
+          "input_cost_per_1k_tokens": {
+            "type": "number",
+            "format": "double",
+            "description": "Cost per 1000 input tokens in USD"
+          },
+          "model_id": {
+            "type": "string",
+            "description": "Model identifier (e.g., \"anthropic.claude-sonnet-4-20250514-v1:0\")"
+          },
+          "output_cost_per_1k_tokens": {
+            "type": "number",
+            "format": "double",
+            "description": "Cost per 1000 output tokens in USD"
+          },
+          "region": {
+            "type": "string",
+            "description": "AWS region (e.g., \"us-east-1\")"
+          }
+        }
+      },
+      "PeriodType": {
+        "type": "string",
+        "description": "Period types for usage aggregation",
+        "enum": [
+          "hourly",
+          "daily",
+          "weekly",
+          "monthly"
+        ]
+      },
+      "ProviderInfo": {
+        "type": "object",
+        "required": [
+          "name",
+          "display_name",
+          "scopes"
+        ],
+        "properties": {
+          "display_name": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "scopes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "ProvidersResponse": {
+        "type": "object",
+        "required": [
+          "providers"
+        ],
+        "properties": {
+          "providers": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ProviderInfo"
+            }
+          }
+        }
+      },
+      "RefreshRequest": {
+        "type": "object",
+        "required": [
+          "refresh_token"
+        ],
+        "properties": {
+          "refresh_token": {
+            "type": "string"
+          }
+        }
+      },
+      "TokenRequest": {
+        "type": "object",
+        "required": [
+          "provider",
+          "authorization_code",
+          "redirect_uri",
+          "state"
+        ],
+        "properties": {
+          "authorization_code": {
+            "type": "string"
+          },
+          "provider": {
+            "type": "string"
+          },
+          "redirect_uri": {
+            "type": "string"
+          },
+          "state": {
+            "type": "string"
+          }
+        }
+      },
+      "TokenResponse": {
+        "type": "object",
+        "required": [
+          "access_token",
+          "token_type",
+          "expires_in",
+          "refresh_token",
+          "scope"
+        ],
+        "properties": {
+          "access_token": {
+            "type": "string"
+          },
+          "expires_in": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          },
+          "refresh_token": {
+            "type": "string"
+          },
+          "scope": {
+            "type": "string"
+          },
+          "token_type": {
+            "type": "string"
+          }
+        }
+      },
+      "Tool": {
+        "type": "object",
+        "description": "Tool definition for function calling",
+        "required": [
+          "name",
+          "description",
+          "input_schema"
+        ],
+        "properties": {
+          "description": {
+            "type": "string",
+            "description": "Description of what the tool does and when to use it"
+          },
+          "input_schema": {
+            "$ref": "#/components/schemas/ToolInputSchema",
+            "description": "JSON Schema defining the tool's input parameters"
+          },
+          "name": {
+            "type": "string",
+            "description": "Name of the tool (must be unique within the request)"
+          }
+        }
+      },
+      "ToolInputSchema": {
+        "type": "object",
+        "description": "JSON Schema for tool input parameters",
+        "required": [
+          "type"
+        ],
+        "properties": {
+          "properties": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "description": "Properties of the input object",
+            "additionalProperties": {},
+            "propertyNames": {
+              "type": "string"
+            }
+          },
+          "required": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "type": "string"
+            },
+            "description": "List of required property names"
+          },
+          "type": {
+            "type": "string",
+            "description": "Schema type (typically \"object\")"
+          }
+        },
+        "additionalProperties": {
+          "description": "Additional schema properties"
+        }
+      },
+      "UpdateCostsResult": {
+        "type": "object",
+        "description": "Result of updating model costs",
+        "required": [
+          "total_processed"
+        ],
+        "properties": {
+          "total_processed": {
+            "type": "integer",
+            "description": "Number of model costs processed",
+            "minimum": 0
+          }
+        }
+      },
+      "UpdateUserStateRequest": {
+        "type": "object",
+        "description": "Request model for updating user state",
+        "required": [
+          "state"
+        ],
+        "properties": {
+          "state": {
+            "$ref": "#/components/schemas/UserRecord",
+            "description": "New user state"
+          }
+        }
+      },
+      "UsageRecord": {
+        "type": "object",
+        "required": [
+          "id",
+          "user_id",
+          "model_id",
+          "endpoint_type",
+          "region",
+          "request_time",
+          "input_tokens",
+          "output_tokens",
+          "total_tokens",
+          "response_time_ms",
+          "success"
+        ],
+        "properties": {
+          "cache_read_tokens": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32"
+          },
+          "cache_write_tokens": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32"
+          },
+          "cost_usd": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "endpoint_type": {
+            "type": "string"
+          },
+          "error_message": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "id": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "input_tokens": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "model_id": {
+            "type": "string"
+          },
+          "output_tokens": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "region": {
+            "type": "string"
+          },
+          "request_time": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "response_time_ms": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "stop_reason": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "success": {
+            "type": "boolean"
+          },
+          "total_tokens": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "user_id": {
+            "type": "integer",
+            "format": "int32"
+          }
+        }
+      },
+      "UsageRecordsQuery": {
+        "type": "object",
+        "description": "Query parameters for usage records",
+        "properties": {
+          "end_date": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time",
+            "description": "Filter records up to this date"
+          },
+          "format": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Response format (json or csv)"
+          },
+          "limit": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "description": "Maximum number of records to return (default: 50, max: 500)",
+            "minimum": 0
+          },
+          "model": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Filter by specific model ID"
+          },
+          "offset": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "description": "Number of records to skip for pagination",
+            "minimum": 0
+          },
+          "start_date": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time",
+            "description": "Filter records from this date onwards"
+          },
+          "success_only": {
+            "type": [
+              "boolean",
+              "null"
+            ],
+            "description": "If true, only return successful requests"
+          },
+          "user_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "description": "Filter by specific user ID (admin only)"
+          }
+        }
+      },
+      "UsageRecordsResponse": {
+        "type": "object",
+        "description": "Response for usage records endpoint",
+        "required": [
+          "records",
+          "total",
+          "limit",
+          "offset"
+        ],
+        "properties": {
+          "limit": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Number of records returned in this page",
+            "minimum": 0
+          },
+          "offset": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Number of records skipped",
+            "minimum": 0
+          },
+          "records": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/UsageRecord"
+            },
+            "description": "List of usage records"
+          },
+          "total": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Total number of matching records (for pagination)",
+            "minimum": 0
+          }
+        }
+      },
+      "UsageSummariesQuery": {
+        "type": "object",
+        "description": "Query parameters for usage summaries",
+        "properties": {
+          "end_date": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time",
+            "description": "Filter summaries up to this date"
+          },
+          "limit": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "description": "Maximum number of summaries to return (default: 1000)",
+            "minimum": 0
+          },
+          "model_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Filter by specific model ID"
+          },
+          "offset": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "description": "Number of summaries to skip for pagination",
+            "minimum": 0
+          },
+          "period_type": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Period type for aggregation (hourly, daily, weekly, monthly)"
+          },
+          "start_date": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time",
+            "description": "Filter summaries from this date onwards"
+          },
+          "user_id": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "description": "Filter by specific user ID (admin only)"
+          }
+        }
+      },
+      "UsageSummariesResponse": {
+        "type": "object",
+        "description": "Response for usage summaries endpoint",
+        "required": [
+          "summaries",
+          "total",
+          "limit",
+          "offset"
+        ],
+        "properties": {
+          "limit": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Number of summaries returned in this page",
+            "minimum": 0
+          },
+          "offset": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Number of summaries skipped",
+            "minimum": 0
+          },
+          "summaries": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/UsageSummary"
+            },
+            "description": "List of usage summaries"
+          },
+          "total": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Total number of matching summaries (for pagination)",
+            "minimum": 0
+          }
+        }
+      },
+      "UsageSummary": {
+        "type": "object",
+        "required": [
+          "id",
+          "user_id",
+          "model_id",
+          "period_type",
+          "period_start",
+          "period_end",
+          "total_requests",
+          "successful_requests",
+          "total_input_tokens",
+          "total_output_tokens",
+          "total_cache_write_tokens",
+          "total_cache_read_tokens",
+          "total_tokens",
+          "avg_response_time_ms",
+          "created_at",
+          "updated_at"
+        ],
+        "properties": {
+          "avg_response_time_ms": {
+            "type": "number",
+            "format": "float"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "estimated_cost": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "id": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "model_id": {
+            "type": "string"
+          },
+          "period_end": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "period_start": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "period_type": {
+            "$ref": "#/components/schemas/PeriodType"
+          },
+          "successful_requests": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "total_cache_read_tokens": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "total_cache_write_tokens": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "total_input_tokens": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "total_output_tokens": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "total_requests": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "total_tokens": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "user_id": {
+            "type": "integer",
+            "format": "int32"
+          }
+        }
+      },
+      "UserListQuery": {
+        "type": "object",
+        "description": "Query parameters for user list",
+        "properties": {
+          "limit": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Maximum number of users to return (default: 50, max: 500)",
+            "minimum": 0
+          },
+          "offset": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Number of users to skip for pagination (default: 0)",
+            "minimum": 0
+          },
+          "order": {
+            "type": "string",
+            "description": "Sort direction: asc or desc (default: desc)"
+          },
+          "sort": {
+            "type": "string",
+            "description": "Sort order: created_at, updated_at, last_login, email (default: created_at)"
+          }
+        }
+      },
+      "UserListResponse": {
+        "type": "object",
+        "description": "Response model for user list",
+        "required": [
+          "users",
+          "total",
+          "count",
+          "offset",
+          "limit"
+        ],
+        "properties": {
+          "count": {
+            "type": "integer",
+            "description": "Number of users returned in this response",
+            "minimum": 0
+          },
+          "limit": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Limit used for pagination",
+            "minimum": 0
+          },
+          "offset": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Offset used for pagination",
+            "minimum": 0
+          },
+          "total": {
+            "type": "integer",
+            "description": "Total number of users matching the query",
+            "minimum": 0
+          },
+          "users": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/UserResponse"
+            },
+            "description": "List of users"
+          }
+        }
+      },
+      "UserRecord": {
+        "type": "string",
+        "description": "User state enum for tracking account status",
+        "enum": [
+          "active",
+          "disabled",
+          "expired"
+        ]
+      },
+      "UserResponse": {
+        "type": "object",
+        "description": "User response model for API",
+        "required": [
+          "id",
+          "provider_user_id",
+          "provider",
+          "email",
+          "created_at",
+          "updated_at",
+          "state"
+        ],
+        "properties": {
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Account creation timestamp"
+          },
+          "display_name": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Display name from OAuth provider"
+          },
+          "email": {
+            "type": "string",
+            "description": "User email address"
+          },
+          "id": {
+            "type": "integer",
+            "format": "int32",
+            "description": "User ID"
+          },
+          "last_login": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time",
+            "description": "Last login timestamp"
+          },
+          "provider": {
+            "type": "string",
+            "description": "OAuth provider name"
+          },
+          "provider_user_id": {
+            "type": "string",
+            "description": "Provider user ID (external ID from OAuth provider)"
+          },
+          "state": {
+            "$ref": "#/components/schemas/UserRecord",
+            "description": "User account state"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Last update timestamp"
+          }
+        }
+      },
+      "UserSearchQuery": {
+        "type": "object",
+        "description": "Query parameters for user search",
+        "required": [
+          "q"
+        ],
+        "properties": {
+          "limit": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Maximum number of users to return (default: 50, max: 500)",
+            "minimum": 0
+          },
+          "offset": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Number of users to skip for pagination (default: 0)",
+            "minimum": 0
+          },
+          "q": {
+            "type": "string",
+            "description": "Search term to match against email, display_name, or provider_user_id"
+          }
+        }
+      }
+    },
+    "securitySchemes": {
+      "api_key_auth": {
+        "type": "http",
+        "scheme": "bearer"
+      },
+      "jwt_auth": {
+        "type": "http",
+        "scheme": "bearer"
+      },
+      "x_api_key_auth": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "X-API-Key"
+      }
+    }
+  },
+  "tags": [
+    {
+      "name": "Health",
+      "description": "Health check endpoints"
+    },
+    {
+      "name": "Authentication",
+      "description": "OAuth authentication endpoints"
+    },
+    {
+      "name": "API Keys",
+      "description": "API key management endpoints"
+    },
+    {
+      "name": "Bedrock Models",
+      "description": "AWS Bedrock model invocation endpoints"
+    },
+    {
+      "name": "Anthropic API",
+      "description": "Standard Anthropic API format endpoints"
+    },
+    {
+      "name": "Cost Management",
+      "description": "Model cost tracking and management endpoints (admin only)"
+    },
+    {
+      "name": "Usage Tracking",
+      "description": "User usage tracking endpoints"
+    },
+    {
+      "name": "Admin Usage Management",
+      "description": "System-wide usage tracking endpoints (admin only)"
+    },
+    {
+      "name": "Admin Audit Logs",
+      "description": "Admin audit log operations (admin only)"
+    },
+    {
+      "name": "Admin User Management",
+      "description": "Admin user management endpoints (admin only)"
+    }
+  ]
+}

@@ -48,7 +48,7 @@ pub struct ModelCostRequest {
 /// Get all model costs (admin only)
 #[utoipa::path(
     get,
-    path = "/admin/costs",
+    path = "/api/admin/costs",
     summary = "Get All Model Costs",
     description = "Retrieve all model cost configurations (admin only)",
     tags = ["Cost Management"],
@@ -73,7 +73,7 @@ async fn get_all_model_costs(
 /// Get specific model cost (admin only)
 #[utoipa::path(
     get,
-    path = "/admin/costs/{region}/{model_id}",
+    path = "/api/admin/costs/{region}/{model_id}",
     summary = "Get Model Cost",
     description = "Retrieve cost configuration for a specific model in a region (admin only)",
     tags = ["Cost Management"],
@@ -115,7 +115,7 @@ async fn get_model_cost(
 /// Upsert model cost (create or update) (admin only)
 #[utoipa::path(
     put,
-    path = "/admin/costs/{region}/{model_id}",
+    path = "/api/admin/costs/{region}/{model_id}",
     summary = "Create or Update Model Cost",
     description = "Create or update cost configuration for a specific model (admin only)",
     tags = ["Cost Management"],
@@ -165,7 +165,7 @@ async fn upsert_model_cost(
 /// Delete model cost (admin only)
 #[utoipa::path(
     delete,
-    path = "/admin/costs/{region}/{model_id}",
+    path = "/api/admin/costs/{region}/{model_id}",
     summary = "Delete Model Cost",
     description = "Delete cost configuration for a specific model (admin only)",
     tags = ["Cost Management"],
@@ -201,7 +201,7 @@ async fn delete_model_cost(
 /// Requires CSV content in request body - does not use embedded data
 #[utoipa::path(
     post,
-    path = "/admin/costs",
+    path = "/api/admin/costs",
     summary = "Batch Update Model Costs",
     description = "Update multiple model costs from CSV data (admin only)",
     tags = ["Cost Management"],

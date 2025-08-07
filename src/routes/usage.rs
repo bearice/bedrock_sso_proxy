@@ -162,7 +162,7 @@ async fn handle_usage_records(
 /// Get user's usage records
 #[utoipa::path(
     get,
-    path = "/usage/records",
+    path = "/api/usage/records",
     summary = "Get User Usage Records",
     description = "Retrieve usage records for the authenticated user",
     tags = ["Usage Tracking"],
@@ -237,7 +237,7 @@ async fn handle_usage_summaries(
 /// Get user's usage summaries
 #[utoipa::path(
     get,
-    path = "/usage/summaries",
+    path = "/api/usage/summaries",
     summary = "Get User Usage Summaries",
     description = "Retrieve pre-computed usage summaries for the authenticated user",
     tags = ["Usage Tracking"],
@@ -264,7 +264,7 @@ async fn get_user_usage_summaries(
 /// Get system-wide usage records (admin only)
 #[utoipa::path(
     get,
-    path = "/admin/usage/records",
+    path = "/api/admin/usage/records",
     summary = "Get System Usage Records",
     description = "Retrieve usage records for all users (admin only)",
     tags = ["Admin Usage Management"],
@@ -290,7 +290,7 @@ async fn get_system_usage_records(
 /// Get system-wide usage summaries (admin only)
 #[utoipa::path(
     get,
-    path = "/admin/usage/summaries",
+    path = "/api/admin/usage/summaries",
     summary = "Get System Usage Summaries",
     description = "Retrieve pre-computed usage summaries for all users (admin only)",
     tags = ["Admin Usage Management"],
