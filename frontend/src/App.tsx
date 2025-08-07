@@ -4,16 +4,12 @@ import { DashboardPage } from './pages/DashboardPage';
 import { CallbackPage } from './pages/CallbackPage';
 import { AuthProvider } from './contexts/AuthContext';
 import { useAuth } from './hooks/useAuth';
-import { appLogger } from './utils/logger';
 import './App.css';
 
 function AppContent() {
   const { isAuthenticated, loading } = useAuth();
 
-  appLogger.debug('Render', { isAuthenticated, loading });
-
   if (loading) {
-    appLogger.debug('Showing loading screen');
     return (
       <div className="loading-container">
         <div className="loading-spinner"></div>
@@ -43,11 +39,9 @@ function AppContent() {
             element={
               isAuthenticated
                 ? (() => {
-                    appLogger.debug('Rendering DashboardPage');
                     return <Navigate to="/dashboard/overview" replace />;
                   })()
                 : (() => {
-                    appLogger.debug('Redirecting to login from dashboard route');
                     return <Navigate to="/login" replace />;
                   })()
             }
@@ -57,11 +51,9 @@ function AppContent() {
             element={
               isAuthenticated
                 ? (() => {
-                    appLogger.debug('Rendering DashboardPage - overview');
                     return <DashboardPage />;
                   })()
                 : (() => {
-                    appLogger.debug('Redirecting to login from dashboard route');
                     return <Navigate to="/login" replace />;
                   })()
             }
@@ -71,11 +63,9 @@ function AppContent() {
             element={
               isAuthenticated
                 ? (() => {
-                    appLogger.debug('Rendering DashboardPage - api-keys');
                     return <DashboardPage />;
                   })()
                 : (() => {
-                    appLogger.debug('Redirecting to login from dashboard route');
                     return <Navigate to="/login" replace />;
                   })()
             }
@@ -85,11 +75,9 @@ function AppContent() {
             element={
               isAuthenticated
                 ? (() => {
-                    appLogger.debug('Rendering DashboardPage - usage');
                     return <DashboardPage />;
                   })()
                 : (() => {
-                    appLogger.debug('Redirecting to login from dashboard route');
                     return <Navigate to="/login" replace />;
                   })()
             }

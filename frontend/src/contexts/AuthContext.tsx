@@ -1,7 +1,7 @@
-import React, { createContext, useState, useEffect, useCallback } from 'react';
+import React, { createContext, useState, useEffect, useLayoutEffect, useCallback } from 'react';
 import type { components } from '../generated/api';
 import { useRefreshToken } from '../hooks/api';
-import { authLogger } from '../utils/logger';
+import { setAuthToken, clearAuthToken } from '../lib/api-client';
 
 type TokenResponse = components['schemas']['TokenResponse'];
 
@@ -56,30 +56,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true);
   const refreshTokenMutation = useRefreshToken();
 
-  // Debug log only significant state changes
-  useEffect(() => {
-    if (authState.isAuthenticated || loading === false) {
-      authLogger.debug('State updated', {
-        isAuthenticated: authState.isAuthenticated,
-        provider: authState.provider,
-        loading: loading,
-      });
-    }
-  }, [authState.isAuthenticated, authState.provider, loading]);
-
   const saveAuthState = useCallback((state: AuthState) => {
-    authLogger.debug('saveAuthState called', {
-      isAuthenticated: state.isAuthenticated,
-      provider: state.provider,
-      user: state.user,
-    });
     setAuthState(state);
     if (state.isAuthenticated) {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-      authLogger.debug('Saved auth state to localStorage');
     } else {
       localStorage.removeItem(STORAGE_KEY);
-      authLogger.debug('Removed auth state from localStorage');
     }
   }, []);
 
@@ -210,13 +192,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     };
 
     loadAuthState();
-  }, [refreshTokenMutation]); // Include refreshTokenMutation in dependency array
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // Run only once on mount
 
   const setTokens = useCallback(
     (tokenResponse: TokenResponse, provider: string) => {
-      authLogger.debug('setTokens called', { provider });
       const payload = parseJwtPayload(tokenResponse.access_token);
-      authLogger.debug('JWT payload parsed', payload);
 
       const newAuthState: AuthState = {
         isAuthenticated: true,
@@ -228,16 +209,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         scopes: payload?.scopes || tokenResponse.scope.split(' '),
       };
 
-      authLogger.debug('New auth state created', {
-        isAuthenticated: newAuthState.isAuthenticated,
-        provider: newAuthState.provider,
-        user: newAuthState.user,
-        hasToken: !!newAuthState.token,
-        tokenLength: newAuthState.token?.length,
-      });
-
       saveAuthState(newAuthState);
-      authLogger.info('Authentication successful', { provider, user: newAuthState.user });
     },
     [saveAuthState]
   );
@@ -275,6 +247,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     return () => clearTimeout(refreshTimer);
   }, [authState, refreshTokens]);
+
+  // Set auth token on API client whenever auth state changes
+  // Use useLayoutEffect to ensure this runs before DOM updates and component renders
+  useLayoutEffect(() => {
+    if (authState.isAuthenticated && authState.token) {
+      setAuthToken(authState.token);
+    } else if (!loading) {
+      // Only clear token if we're not in the initial loading state
+      clearAuthToken();
+    }
+  }, [authState.isAuthenticated, authState.token, loading]);
 
   const contextValue: AuthContextType = {
     ...authState,

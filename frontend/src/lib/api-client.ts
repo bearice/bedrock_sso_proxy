@@ -1,31 +1,50 @@
 import createClient from 'openapi-fetch';
 import type { paths } from '../generated/api';
 
-// Create the API client with proper typing
+// Global variable to store current auth token
+let currentAuthToken: string | null = null;
+
+// Create the API client with proper typing and set up persistent middleware
 export const apiClient = createClient<paths>({
   baseUrl: '', // Proxied by Vite dev server or served from same origin in production
 });
 
-// Helper to set authentication token
-export function setAuthToken(token: string) {
-  apiClient.use({
-    onRequest(req) {
-      if (req instanceof Request) {
+// Set up persistent middleware that checks for the current token
+apiClient.use({
+  onRequest(req) {
+    if (req instanceof Request) {
+      // Always check for the latest token at request time
+      const authData = typeof window !== 'undefined' ? localStorage.getItem('bedrock_auth') : null;
+      let token = currentAuthToken;
+
+      // Fallback to localStorage if the global token isn't set yet
+      if (!token && authData) {
+        try {
+          const parsed = JSON.parse(authData);
+          if (parsed.isAuthenticated && parsed.token) {
+            token = parsed.token;
+          }
+        } catch (e) {
+          console.error('Failed to parse auth data from localStorage:', e);
+        }
+      }
+
+      if (token) {
         req.headers.set('Authorization', `Bearer ${token}`);
       }
-      return undefined;
-    },
-  });
+    }
+    return undefined;
+  },
+});
+
+// Helper to set authentication token
+export function setAuthToken(token: string) {
+  currentAuthToken = token;
 }
 
 // Helper to clear authentication token
 export function clearAuthToken() {
-  // Reset the client middleware by providing an empty middleware function
-  apiClient.use({
-    onRequest() {
-      return undefined;
-    },
-  });
+  currentAuthToken = null;
 }
 
 // Helper to handle errors consistently

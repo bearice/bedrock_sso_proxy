@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { apiClient, setAuthToken, ApiError } from '../../lib/api-client';
+import { apiClient, ApiError } from '../../lib/api-client';
 import type { components } from '../../generated/api';
 
 // Type aliases for better readability
@@ -16,8 +16,12 @@ export function useApiKeys(token?: string) {
         throw new Error('No token provided');
       }
 
-      setAuthToken(token);
-      const { data, error } = await apiClient.GET('/api/keys');
+      // Manually add the authorization header to ensure it's included
+      const { data, error } = await apiClient.GET('/api/keys', {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
 
       if (error) {
         throw new ApiError(500, error.error || 'Failed to fetch API keys');
@@ -38,7 +42,7 @@ export function useCreateApiKey(token?: string) {
         throw new Error('No token provided');
       }
 
-      setAuthToken(token);
+      // Token is now set globally in AuthContext, no need to set it here
       const { data, error } = await apiClient.POST('/api/keys', {
         body: request,
       });
@@ -67,7 +71,7 @@ export function useRevokeApiKey(token?: string) {
         throw new Error('No token provided');
       }
 
-      setAuthToken(token);
+      // Token is now set globally in AuthContext, no need to set it here
       const { error } = await apiClient.DELETE('/api/keys/{key_hash}', {
         params: {
           path: { key_hash: keyHash },

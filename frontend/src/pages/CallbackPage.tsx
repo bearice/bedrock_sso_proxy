@@ -1,26 +1,26 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 import { useExchangeToken } from '../hooks/api/auth';
 import { ApiError } from '../lib/api-client';
 import { CheckCircle, XCircle, Loader2 } from 'lucide-react';
-import { authLogger } from '../utils/logger';
 
 export function CallbackPage() {
   const { provider } = useParams<{ provider: string }>();
   const navigate = useNavigate();
-  const { setTokens, isAuthenticated } = useAuth();
+  const authContext = useAuth();
+  const { isAuthenticated } = authContext;
   const exchangeTokenMutation = useExchangeToken();
 
   const [status, setStatus] = useState<'loading' | 'success' | 'error'>('loading');
   const [error, setError] = useState<string | null>(null);
   const [actualProvider, setActualProvider] = useState<string | null>(provider || null);
   const [shouldNavigate, setShouldNavigate] = useState(false);
+  const hasProcessed = useRef(false);
 
   // Monitor authentication state and navigate when ready
   useEffect(() => {
     if (shouldNavigate && isAuthenticated && status === 'success') {
-      authLogger.debug('Auth state updated, navigating to dashboard');
       setTimeout(() => {
         navigate('/dashboard', { replace: true });
       }, 1000);
@@ -28,9 +28,13 @@ export function CallbackPage() {
   }, [shouldNavigate, isAuthenticated, status, navigate]);
 
   useEffect(() => {
+    if (hasProcessed.current) {
+      return; // Prevent multiple executions
+    }
+    hasProcessed.current = true;
+
     const handleCallback = async () => {
       try {
-        authLogger.debug('Starting handleCallback');
         // Extract query parameters from URL
         const urlParams = new URLSearchParams(window.location.search);
         const success = urlParams.get('success');
@@ -40,16 +44,6 @@ export function CallbackPage() {
         const urlProvider = urlParams.get('provider');
         const errorParam = urlParams.get('error');
         const errorDescription = urlParams.get('error_description');
-
-        authLogger.debug('URL params', {
-          success,
-          accessToken: accessToken ? `${accessToken.substring(0, 20)}...` : null,
-          expiresIn,
-          scope,
-          urlProvider,
-          errorParam,
-          errorDescription,
-        });
 
         // Check for OAuth errors first
         if (errorParam) {
@@ -61,7 +55,6 @@ export function CallbackPage() {
 
         // Handle direct success from backend redirect
         if (success === 'true' && accessToken && expiresIn && urlProvider) {
-          authLogger.debug('Direct success flow detected');
           // Update the actual provider for display
           setActualProvider(urlProvider);
 
@@ -74,22 +67,17 @@ export function CallbackPage() {
             scope: scope || '',
           };
 
-          authLogger.debug('Calling setTokens', {
-            provider: urlProvider,
-            tokenType: tokenResponse.token_type,
-            expiresIn: tokenResponse.expires_in,
-          });
-
           // Store tokens in auth state and set up navigation
-          setTokens(tokenResponse, urlProvider);
+          authContext.setTokens(tokenResponse, urlProvider);
           setStatus('success');
           setShouldNavigate(true);
-          authLogger.debug('Set up for navigation, waiting for auth state update');
           return;
         }
 
         // Fallback to old token exchange flow for backward compatibility
-        if (!provider) {
+        // Use either route param provider or query param provider
+        const fallbackProvider = provider || urlProvider;
+        if (!fallbackProvider) {
           setError('Missing provider parameter');
           setStatus('error');
           return;
@@ -112,21 +100,20 @@ export function CallbackPage() {
         }
 
         // Build redirect URI (should match what was sent to the OAuth provider)
-        const redirectUri = `${window.location.origin}/auth/callback/${provider}`;
+        const redirectUri = `${window.location.origin}/auth/callback/${fallbackProvider}`;
 
         // Exchange code for token
         const tokenResponse = await exchangeTokenMutation.mutateAsync({
-          provider,
+          provider: fallbackProvider,
           authorization_code: code,
           redirect_uri: redirectUri,
           state,
         });
 
         // Store tokens in auth state and set up navigation
-        setTokens(tokenResponse, provider);
+        authContext.setTokens(tokenResponse, fallbackProvider);
         setStatus('success');
         setShouldNavigate(true);
-        authLogger.debug('Set up for navigation, waiting for auth state update');
       } catch (err) {
         console.error('Token exchange failed:', err);
 
@@ -151,7 +138,8 @@ export function CallbackPage() {
     };
 
     handleCallback();
-  }, [provider, setTokens, navigate, exchangeTokenMutation]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const getProviderDisplayName = (provider: string) => {
     const names: { [key: string]: string } = {
