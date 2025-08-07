@@ -96,7 +96,7 @@ export function UsageTracking() {
       params.append('format', 'csv');
       params.append('limit', '10000');
 
-      const response = await fetch(`/usage/records?${params.toString()}`, {
+      const response = await fetch(`/api/usage/records?${params.toString()}`, {
         headers: {
           Authorization: `Bearer ${token}`,
         },

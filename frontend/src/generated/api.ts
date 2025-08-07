@@ -4,178 +4,6 @@
  */
 
 export interface paths {
-  '/admin/costs': {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    /**
-     * Get All Model Costs
-     * @description Retrieve all model cost configurations (admin only)
-     */
-    get: operations['get_all_model_costs'];
-    put?: never;
-    /**
-     * Batch Update Model Costs
-     * @description Update multiple model costs from CSV data (admin only)
-     */
-    post: operations['update_all_model_costs'];
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  '/admin/costs/{region}/{model_id}': {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    /**
-     * Get Model Cost
-     * @description Retrieve cost configuration for a specific model in a region (admin only)
-     */
-    get: operations['get_model_cost'];
-    /**
-     * Create or Update Model Cost
-     * @description Create or update cost configuration for a specific model (admin only)
-     */
-    put: operations['upsert_model_cost'];
-    post?: never;
-    /**
-     * Delete Model Cost
-     * @description Delete cost configuration for a specific model (admin only)
-     */
-    delete: operations['delete_model_cost'];
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  '/admin/usage/records': {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    /**
-     * Get System Usage Records
-     * @description Retrieve usage records for all users (admin only)
-     */
-    get: operations['get_system_usage_records'];
-    put?: never;
-    post?: never;
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  '/admin/usage/summaries': {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    /**
-     * Get System Usage Summaries
-     * @description Retrieve pre-computed usage summaries for all users (admin only)
-     */
-    get: operations['get_admin_usage_summaries'];
-    put?: never;
-    post?: never;
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  '/admin/users': {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    /**
-     * List users
-     * @description Get a paginated list of all users with optional sorting
-     */
-    get: operations['list_users'];
-    put?: never;
-    post?: never;
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  '/admin/users/search': {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    /**
-     * Search users
-     * @description Search for users by email, display name, or provider user ID
-     */
-    get: operations['search_users'];
-    put?: never;
-    post?: never;
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  '/admin/users/{user_id}': {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    /**
-     * Get user by ID
-     * @description Get detailed information about a specific user
-     */
-    get: operations['get_user_by_id'];
-    put?: never;
-    post?: never;
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  '/admin/users/{user_id}/state': {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    get?: never;
-    /**
-     * Update user state
-     * @description Update the state of a user (active, disabled, or expired)
-     */
-    put: operations['update_user_state'];
-    post?: never;
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
   '/anthropic/v1/messages': {
     parameters: {
       query?: never;
@@ -206,6 +34,178 @@ export interface paths {
     /** Get audit logs with optional filtering */
     get: operations['get_audit_logs'];
     put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/admin/costs': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Get All Model Costs
+     * @description Retrieve all model cost configurations (admin only)
+     */
+    get: operations['get_all_model_costs'];
+    put?: never;
+    /**
+     * Batch Update Model Costs
+     * @description Update multiple model costs from CSV data (admin only)
+     */
+    post: operations['update_all_model_costs'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/admin/costs/{region}/{model_id}': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Get Model Cost
+     * @description Retrieve cost configuration for a specific model in a region (admin only)
+     */
+    get: operations['get_model_cost'];
+    /**
+     * Create or Update Model Cost
+     * @description Create or update cost configuration for a specific model (admin only)
+     */
+    put: operations['upsert_model_cost'];
+    post?: never;
+    /**
+     * Delete Model Cost
+     * @description Delete cost configuration for a specific model (admin only)
+     */
+    delete: operations['delete_model_cost'];
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/admin/usage/records': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Get System Usage Records
+     * @description Retrieve usage records for all users (admin only)
+     */
+    get: operations['get_system_usage_records'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/admin/usage/summaries': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Get System Usage Summaries
+     * @description Retrieve pre-computed usage summaries for all users (admin only)
+     */
+    get: operations['get_admin_usage_summaries'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/admin/users': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * List users
+     * @description Get a paginated list of all users with optional sorting
+     */
+    get: operations['list_users'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/admin/users/search': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Search users
+     * @description Search for users by email, display name, or provider user ID
+     */
+    get: operations['search_users'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/admin/users/{user_id}': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Get user by ID
+     * @description Get detailed information about a specific user
+     */
+    get: operations['get_user_by_id'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/admin/users/{user_id}/state': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    /**
+     * Update user state
+     * @description Update the state of a user (active, disabled, or expired)
+     */
+    put: operations['update_user_state'];
     post?: never;
     delete?: never;
     options?: never;
@@ -252,6 +252,46 @@ export interface paths {
      * @description Revoke an API key, making it invalid for future requests
      */
     delete: operations['revoke_api_key'];
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/usage/records': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Get User Usage Records
+     * @description Retrieve usage records for the authenticated user
+     */
+    get: operations['get_user_usage_records'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/usage/summaries': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Get User Usage Summaries
+     * @description Retrieve pre-computed usage summaries for the authenticated user
+     */
+    get: operations['get_user_usage_summaries'];
+    put?: never;
+    post?: never;
+    delete?: never;
     options?: never;
     head?: never;
     patch?: never;
@@ -409,46 +449,6 @@ export interface paths {
      * @description Check the health status of the proxy server and its dependencies
      */
     get: operations['health_check'];
-    put?: never;
-    post?: never;
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  '/usage/records': {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    /**
-     * Get User Usage Records
-     * @description Retrieve usage records for the authenticated user
-     */
-    get: operations['get_user_usage_records'];
-    put?: never;
-    post?: never;
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  '/usage/summaries': {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    /**
-     * Get User Usage Summaries
-     * @description Retrieve pre-computed usage summaries for the authenticated user
-     */
-    get: operations['get_user_usage_summaries'];
     put?: never;
     post?: never;
     delete?: never;
@@ -1091,6 +1091,140 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+  create_message: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description Anthropic API message request */
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['AnthropicRequest'];
+      };
+    };
+    responses: {
+      /** @description Streaming message response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'text/event-stream': unknown;
+        };
+      };
+      /** @description Bad request */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['ApiErrorResponse'];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['ApiErrorResponse'];
+        };
+      };
+      /** @description Internal server error */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['ApiErrorResponse'];
+        };
+      };
+      /** @description Bad gateway - AWS service error */
+      502: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['ApiErrorResponse'];
+        };
+      };
+    };
+  };
+  get_audit_logs: {
+    parameters: {
+      query?: {
+        /** @description Filter by user ID */
+        user_id?: number | null;
+        /** @description Filter by event type */
+        event_type?: null | components['schemas']['AuditEventType'];
+        /** @description Filter by provider */
+        provider?: string | null;
+        /** @description Filter by success status */
+        success?: boolean | null;
+        /** @description Filter by start date (ISO 8601) */
+        start_date?: string | null;
+        /** @description Filter by end date (ISO 8601) */
+        end_date?: string | null;
+        /** @description Number of records per page (default: 50, max: 1000) */
+        limit?: number | null;
+        /** @description Page offset (default: 0) */
+        offset?: number | null;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Audit logs retrieved successfully */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['AuditLogsResponse'];
+        };
+      };
+      /** @description Invalid query parameters */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['ApiErrorResponse'];
+        };
+      };
+      /** @description Authentication required */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['ApiErrorResponse'];
+        };
+      };
+      /** @description Admin access required */
+      403: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['ApiErrorResponse'];
+        };
+      };
+      /** @description Internal server error */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['ApiErrorResponse'];
+        };
+      };
+    };
+  };
   get_all_model_costs: {
     parameters: {
       query?: never;
@@ -1749,140 +1883,6 @@ export interface operations {
       };
     };
   };
-  create_message: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    /** @description Anthropic API message request */
-    requestBody: {
-      content: {
-        'application/json': components['schemas']['AnthropicRequest'];
-      };
-    };
-    responses: {
-      /** @description Streaming message response */
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'text/event-stream': unknown;
-        };
-      };
-      /** @description Bad request */
-      400: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/json': components['schemas']['ApiErrorResponse'];
-        };
-      };
-      /** @description Unauthorized */
-      401: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/json': components['schemas']['ApiErrorResponse'];
-        };
-      };
-      /** @description Internal server error */
-      500: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/json': components['schemas']['ApiErrorResponse'];
-        };
-      };
-      /** @description Bad gateway - AWS service error */
-      502: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/json': components['schemas']['ApiErrorResponse'];
-        };
-      };
-    };
-  };
-  get_audit_logs: {
-    parameters: {
-      query?: {
-        /** @description Filter by user ID */
-        user_id?: number | null;
-        /** @description Filter by event type */
-        event_type?: null | components['schemas']['AuditEventType'];
-        /** @description Filter by provider */
-        provider?: string | null;
-        /** @description Filter by success status */
-        success?: boolean | null;
-        /** @description Filter by start date (ISO 8601) */
-        start_date?: string | null;
-        /** @description Filter by end date (ISO 8601) */
-        end_date?: string | null;
-        /** @description Number of records per page (default: 50, max: 1000) */
-        limit?: number | null;
-        /** @description Page offset (default: 0) */
-        offset?: number | null;
-      };
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    requestBody?: never;
-    responses: {
-      /** @description Audit logs retrieved successfully */
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/json': components['schemas']['AuditLogsResponse'];
-        };
-      };
-      /** @description Invalid query parameters */
-      400: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/json': components['schemas']['ApiErrorResponse'];
-        };
-      };
-      /** @description Authentication required */
-      401: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/json': components['schemas']['ApiErrorResponse'];
-        };
-      };
-      /** @description Admin access required */
-      403: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/json': components['schemas']['ApiErrorResponse'];
-        };
-      };
-      /** @description Internal server error */
-      500: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/json': components['schemas']['ApiErrorResponse'];
-        };
-      };
-    };
-  };
   list_api_keys: {
     parameters: {
       query?: never;
@@ -2013,6 +2013,114 @@ export interface operations {
       };
       /** @description API key not found */
       404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['ApiErrorResponse'];
+        };
+      };
+      /** @description Internal server error */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['ApiErrorResponse'];
+        };
+      };
+    };
+  };
+  get_user_usage_records: {
+    parameters: {
+      query?: {
+        /** @description Maximum number of records to return (default: 50, max: 500) */
+        limit?: number | null;
+        /** @description Number of records to skip for pagination */
+        offset?: number | null;
+        /** @description Filter by specific model ID */
+        model?: string | null;
+        /** @description Filter records from this date onwards */
+        start_date?: string | null;
+        /** @description Filter records up to this date */
+        end_date?: string | null;
+        /** @description If true, only return successful requests */
+        success_only?: boolean | null;
+        /** @description Response format (json or csv) */
+        format?: string | null;
+        /** @description Filter by specific user ID (admin only) */
+        user_id?: number | null;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description List of usage records */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['UsageRecordsResponse'];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['ApiErrorResponse'];
+        };
+      };
+      /** @description Internal server error */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['ApiErrorResponse'];
+        };
+      };
+    };
+  };
+  get_user_usage_summaries: {
+    parameters: {
+      query?: {
+        /** @description Filter summaries from this date onwards */
+        start_date?: string | null;
+        /** @description Filter summaries up to this date */
+        end_date?: string | null;
+        /** @description Period type for aggregation (hourly, daily, weekly, monthly) */
+        period_type?: string | null;
+        /** @description Filter by specific model ID */
+        model_id?: string | null;
+        /** @description Maximum number of summaries to return (default: 1000) */
+        limit?: number | null;
+        /** @description Number of summaries to skip for pagination */
+        offset?: number | null;
+        /** @description Filter by specific user ID (admin only) */
+        user_id?: number | null;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Usage summaries */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['UsageSummariesResponse'];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
         headers: {
           [name: string]: unknown;
         };
@@ -2383,114 +2491,6 @@ export interface operations {
       };
       /** @description Service unavailable */
       503: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/json': components['schemas']['ApiErrorResponse'];
-        };
-      };
-    };
-  };
-  get_user_usage_records: {
-    parameters: {
-      query?: {
-        /** @description Maximum number of records to return (default: 50, max: 500) */
-        limit?: number | null;
-        /** @description Number of records to skip for pagination */
-        offset?: number | null;
-        /** @description Filter by specific model ID */
-        model?: string | null;
-        /** @description Filter records from this date onwards */
-        start_date?: string | null;
-        /** @description Filter records up to this date */
-        end_date?: string | null;
-        /** @description If true, only return successful requests */
-        success_only?: boolean | null;
-        /** @description Response format (json or csv) */
-        format?: string | null;
-        /** @description Filter by specific user ID (admin only) */
-        user_id?: number | null;
-      };
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    requestBody?: never;
-    responses: {
-      /** @description List of usage records */
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/json': components['schemas']['UsageRecordsResponse'];
-        };
-      };
-      /** @description Unauthorized */
-      401: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/json': components['schemas']['ApiErrorResponse'];
-        };
-      };
-      /** @description Internal server error */
-      500: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/json': components['schemas']['ApiErrorResponse'];
-        };
-      };
-    };
-  };
-  get_user_usage_summaries: {
-    parameters: {
-      query?: {
-        /** @description Filter summaries from this date onwards */
-        start_date?: string | null;
-        /** @description Filter summaries up to this date */
-        end_date?: string | null;
-        /** @description Period type for aggregation (hourly, daily, weekly, monthly) */
-        period_type?: string | null;
-        /** @description Filter by specific model ID */
-        model_id?: string | null;
-        /** @description Maximum number of summaries to return (default: 1000) */
-        limit?: number | null;
-        /** @description Number of summaries to skip for pagination */
-        offset?: number | null;
-        /** @description Filter by specific user ID (admin only) */
-        user_id?: number | null;
-      };
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    requestBody?: never;
-    responses: {
-      /** @description Usage summaries */
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/json': components['schemas']['UsageSummariesResponse'];
-        };
-      };
-      /** @description Unauthorized */
-      401: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/json': components['schemas']['ApiErrorResponse'];
-        };
-      };
-      /** @description Internal server error */
-      500: {
         headers: {
           [name: string]: unknown;
         };

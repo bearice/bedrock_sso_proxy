@@ -18,7 +18,7 @@ export function useUserUsageRecords(token?: string, query?: Partial<UsageRecords
       }
 
       setAuthToken(token);
-      const { data, error } = await apiClient.GET('/usage/records', {
+      const { data, error } = await apiClient.GET('/api/usage/records', {
         params: {
           query: query || {},
         },
@@ -43,7 +43,7 @@ export function useUserUsageSummaries(token?: string, query?: Partial<UsageSumma
       }
 
       setAuthToken(token);
-      const { data, error } = await apiClient.GET('/usage/summaries', {
+      const { data, error } = await apiClient.GET('/api/usage/summaries', {
         params: {
           query: query || {},
         },
@@ -68,7 +68,7 @@ export function useSystemUsageRecords(token?: string, query?: Partial<UsageRecor
       }
 
       setAuthToken(token);
-      const { data, error } = await apiClient.GET('/admin/usage/records', {
+      const { data, error } = await apiClient.GET('/api/admin/usage/records', {
         params: {
           query: query || {},
         },
@@ -92,7 +92,7 @@ export function useAdminUsageSummaries(token?: string, query?: Partial<UsageSumm
       }
 
       setAuthToken(token);
-      const { data, error } = await apiClient.GET('/admin/usage/summaries', {
+      const { data, error } = await apiClient.GET('/api/admin/usage/summaries', {
         params: {
           query: query || {},
         },
@@ -135,7 +135,7 @@ export function useExportUsageData(
       if (query?.success !== undefined) params.append('success_only', query.success.toString());
       params.append('format', 'csv');
 
-      const response = await fetch('/usage/records?' + params.toString(), {
+      const response = await fetch('/api/usage/records?' + params.toString(), {
         headers: {
           Authorization: `Bearer ${token}`,
         },
