@@ -30,6 +30,8 @@ impl UsersDao {
             updated_at: Set(user.updated_at),
             last_login: Set(user.last_login),
             state: Set(user.state),
+            last_oauth_check: Set(user.last_oauth_check),
+            provider_refresh_token: Set(user.provider_refresh_token.clone()),
         };
 
         let on_conflict =

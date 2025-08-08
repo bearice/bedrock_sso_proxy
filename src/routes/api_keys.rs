@@ -188,7 +188,7 @@ pub async fn revoke_api_key(
 mod tests {
     use super::*;
     use crate::{
-        auth::{jwt::JwtService, middleware::jwt_auth_middleware},
+        auth::{jwt::JwtService, middleware::jwt_only_auth_middleware},
         database::{DatabaseManager, entities::UserRecord},
     };
     use axum::{
@@ -231,7 +231,7 @@ mod tests {
         let user_id = create_test_user(&server.database).await;
 
         let app = create_api_key_routes().with_state(server.clone()).layer(
-            middleware::from_fn_with_state(server.clone(), jwt_auth_middleware),
+            middleware::from_fn_with_state(server.clone(), jwt_only_auth_middleware),
         );
 
         let token = create_test_jwt(server.jwt_service.as_ref(), user_id);
@@ -271,7 +271,7 @@ mod tests {
         server.database.api_keys().store(&api_key).await.unwrap();
 
         let app = create_api_key_routes().with_state(server.clone()).layer(
-            middleware::from_fn_with_state(server.clone(), jwt_auth_middleware),
+            middleware::from_fn_with_state(server.clone(), jwt_only_auth_middleware),
         );
 
         let token = create_test_jwt(server.jwt_service.as_ref(), user_id);
@@ -301,7 +301,7 @@ mod tests {
         let user_id = create_test_user(&server.database).await;
 
         let app = create_api_key_routes().with_state(server.clone()).layer(
-            middleware::from_fn_with_state(server.clone(), jwt_auth_middleware),
+            middleware::from_fn_with_state(server.clone(), jwt_only_auth_middleware),
         );
 
         let token = create_test_jwt(server.jwt_service.as_ref(), user_id);

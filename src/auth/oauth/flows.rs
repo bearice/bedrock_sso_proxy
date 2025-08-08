@@ -233,7 +233,7 @@ impl OAuthFlows {
             .await?;
 
         // Extract user ID and email based on provider configuration
-        let user_id = user_info
+        let provider_user_id = user_info
             .get(&provider.user_id_field)
             .and_then(|v| v.as_str())
             .ok_or_else(|| {
@@ -255,10 +255,34 @@ impl OAuthFlows {
             .or_else(|| user_info.get("full_name").and_then(|v| v.as_str()))
             .map(|s| s.to_string());
 
+        // Check if user exists and verify they are not disabled before proceeding
+        if let Some(existing_user) = self
+            .database
+            .users()
+            .find_by_provider(&request.provider, provider_user_id)
+            .await
+            .map_err(|e| AppError::Internal(format!("Failed to query user: {e}")))?
+        {
+            if existing_user.state.is_disabled() {
+                return Err(AppError::Unauthorized(format!(
+                    "Account is {}: {}",
+                    existing_user.state.as_str(),
+                    existing_user.state.description()
+                )));
+            }
+        }
+
         // Store user information persistently if storage is available
         let (db_user_id, is_admin) = {
-            let user_record =
-                UserRecord::new(&request.provider, user_id, email).with_display_name(display_name);
+            let user_record = UserRecord::new(
+                &request.provider,
+                provider_user_id,
+                email,
+            )
+            .with_display_name(display_name)
+            .with_provider_refresh_token(
+                token_result.refresh_token().map(|rt| rt.secret().to_string())
+            );
 
             let db_user_id = self
                 .database
@@ -288,7 +312,7 @@ impl OAuthFlows {
                     );
                     metadata.insert(
                         "user_id".to_string(),
-                        serde_json::Value::String(user_id.to_string()),
+                        serde_json::Value::String(provider_user_id.to_string()),
                     );
                     metadata.insert(
                         "email".to_string(),
@@ -323,7 +347,7 @@ impl OAuthFlows {
         let refresh_token_data = RefreshTokenData {
             id: 0, // Will be set by database
             token_hash: refresh_token_hash,
-            user_id: format!("{}:{}", request.provider, user_id), // Composite user ID
+            user_id: format!("{}:{}", request.provider, provider_user_id), // Composite user ID
             provider: request.provider.clone(),
             email: email.to_string(),
             created_at: Utc::now(),
@@ -667,5 +691,60 @@ impl OAuthFlows {
                 .map_err(|e| AppError::Internal(format!("Failed to delete state: {e}")))?;
         }
         Ok(state_data)
+    }
+
+    /// Verify if user's account is still active with OAuth provider using stored refresh token
+    pub async fn verify_user_with_provider(
+        &self,
+        user: &UserRecord,
+    ) -> Result<(), AppError> {
+        let provider_refresh_token = match &user.provider_refresh_token {
+            Some(token) => token,
+            None => {
+                tracing::debug!(
+                    user_id = %user.id,
+                    provider = %user.provider,
+                    "No provider refresh token stored for user"
+                );
+                return Err(AppError::Unauthorized("No provider refresh token available".to_string()));
+            }
+        };
+
+        let client = self.get_oauth_client(&user.provider)?;
+        
+        // Try to refresh the access token using the stored provider refresh token
+        // If this fails, the user's account has been revoked by the provider
+        let refresh_token = oauth2::RefreshToken::new(provider_refresh_token.clone());
+        
+        // Create HTTP client for token refresh
+        let http_client = reqwest::ClientBuilder::new()
+            .redirect(reqwest::redirect::Policy::none())
+            .build()
+            .map_err(|e| AppError::Internal(format!("HTTP client error: {e}")))?;
+
+        match client.exchange_refresh_token(&refresh_token)
+            .request_async(&http_client)
+            .await
+        {
+            Ok(_token_response) => {
+                tracing::debug!(
+                    user_id = %user.id,
+                    provider = %user.provider,
+                    "OAuth provider verification successful"
+                );
+                Ok(())
+            },
+            Err(e) => {
+                tracing::warn!(
+                    user_id = %user.id,
+                    provider = %user.provider,
+                    error = %e,
+                    "OAuth provider verification failed - refresh token invalid"
+                );
+                Err(AppError::Unauthorized(format!(
+                    "Account no longer valid with OAuth provider: {e}"
+                )))
+            }
+        }
     }
 }

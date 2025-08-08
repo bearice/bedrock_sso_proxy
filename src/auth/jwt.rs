@@ -110,9 +110,6 @@ pub trait JwtService: Send + Sync {
     /// Validate OAuth token and return claims
     fn validate_oauth_token(&self, token: &str) -> Result<OAuthClaims, AppError>;
 
-    /// Validate token (alias for validate_oauth_token)
-    fn validate_token(&self, token: &str) -> Result<OAuthClaims, AppError>;
-
     /// Get algorithm used by this service
     fn algorithm(&self) -> Algorithm;
 
@@ -166,10 +163,6 @@ impl JwtService for JwtServiceImpl {
             .map_err(|_| AppError::Unauthorized("Invalid or expired token".to_string()))?;
 
         Ok(token_data.claims)
-    }
-
-    fn validate_token(&self, token: &str) -> Result<OAuthClaims, AppError> {
-        self.validate_oauth_token(token)
     }
 
     fn algorithm(&self) -> Algorithm {

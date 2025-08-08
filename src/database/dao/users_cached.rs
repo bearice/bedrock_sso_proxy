@@ -178,6 +178,7 @@ mod tests {
             updated_at: Utc::now(),
             last_login: None,
             state: UserState::Active,
+            ..Default::default()
         }
     }
 

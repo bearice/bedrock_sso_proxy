@@ -48,6 +48,11 @@ impl OAuthService {
         })
     }
 
+    /// Verify if user's account is still active with OAuth provider
+    pub async fn verify_user_with_provider(&self, user: &UserRecord) -> Result<(), AppError> {
+        self.flows.verify_user_with_provider(user).await
+    }
+
     /// Get user by database ID
     pub async fn get_user_by_id(
         &self,

@@ -315,7 +315,7 @@ async fn get_admin_usage_summaries(
 
 // Note: user_id is now extracted from JWT sub field (database user ID)
 // This eliminates the need for database lookups for regular user operations
-// Admin permissions are checked by the admin_middleware in auth module
+// Admin permissions are checked by the admin_auth_middleware in auth module
 
 #[cfg(test)]
 mod tests {

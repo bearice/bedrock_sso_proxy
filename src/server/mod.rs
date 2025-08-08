@@ -4,7 +4,7 @@ pub mod route_builder;
 use crate::{
     auth::{
         jwt::{JwtService, JwtServiceImpl, parse_algorithm},
-        middleware::{admin_middleware, auth_middleware, jwt_auth_middleware},
+        middleware::{admin_auth_middleware, universal_auth_middleware, jwt_only_auth_middleware},
         oauth::OAuthService,
     },
     aws::bedrock::BedrockRuntimeImpl,
@@ -299,7 +299,7 @@ impl Server {
     fn protected_auth_routes(&self) -> Router<Server> {
         create_protected_auth_routes().layer(middleware::from_fn_with_state(
             self.clone(),
-            jwt_auth_middleware,
+            jwt_only_auth_middleware,
         ))
     }
 
@@ -307,7 +307,7 @@ impl Server {
     fn user_api_routes(&self) -> Router<Server> {
         create_user_api_routes().layer(middleware::from_fn_with_state(
             self.clone(),
-            jwt_auth_middleware,
+            jwt_only_auth_middleware,
         ))
     }
 
@@ -316,11 +316,11 @@ impl Server {
         create_admin_api_routes()
             .layer(middleware::from_fn_with_state(
                 self.clone(),
-                jwt_auth_middleware,
+                jwt_only_auth_middleware,
             ))
             .layer(middleware::from_fn_with_state(
                 self.clone(),
-                admin_middleware,
+                admin_auth_middleware,
             ))
     }
 
@@ -330,7 +330,7 @@ impl Server {
             .layer(DefaultBodyLimit::max(MAX_BODY_SIZE))
             .layer(middleware::from_fn_with_state(
                 self.clone(),
-                auth_middleware,
+                universal_auth_middleware,
             ))
     }
 
@@ -340,7 +340,7 @@ impl Server {
             .layer(DefaultBodyLimit::max(MAX_BODY_SIZE))
             .layer(middleware::from_fn_with_state(
                 self.clone(),
-                auth_middleware,
+                universal_auth_middleware,
             ))
     }
 

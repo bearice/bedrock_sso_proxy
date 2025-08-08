@@ -1,10 +1,10 @@
-use crate::auth::jwt::JwtService;
 use crate::database::DatabaseManager;
-use crate::database::entities::UserRecord;
+use crate::database::entities::{UserRecord, UserState};
 use crate::database::entities::api_keys::{API_KEY_PREFIX, hash_api_key, validate_api_key_format};
 use crate::error::AppError;
 use crate::server::Server;
 use crate::utils::RequestIdExt;
+use chrono::{Duration, Utc};
 use axum::{
     extract::{FromRequestParts, Request, State},
     http::{HeaderName, header::AUTHORIZATION, request::Parts},
@@ -17,9 +17,31 @@ use tracing::{trace, warn};
 /// Static header name for API key
 static X_API_KEY: HeaderName = HeaderName::from_static("x-api-key");
 
-/// Unified authentication middleware that handles both JWT and API key authentication
-/// Returns a UserRecord for both authentication methods
-pub async fn auth_middleware(
+/// Extracts bearer token from Authorization header string.
+/// 
+/// **Expected format:** `"Bearer <token>"`
+/// **Returns:** The token portion (everything after "Bearer ")
+fn extract_bearer_token(auth_header: &str) -> Result<&str, AppError> {
+    if !auth_header.starts_with("Bearer ") {
+        return Err(AppError::Unauthorized(
+            "Invalid Authorization format".to_string(),
+        ));
+    }
+    Ok(&auth_header[7..])
+}
+
+/// Universal authentication middleware supporting multiple authentication methods:
+/// 
+/// **JWT Authentication:**
+/// - `Authorization: Bearer <jwt_token>`
+/// 
+/// **API Key Authentication:**
+/// - `Authorization: Bearer SSOK_<api_key>` (API key with Bearer prefix)
+/// - `X-API-Key: SSOK_<api_key>` (API key in dedicated header)
+/// 
+/// Returns authenticated UserRecord in request extensions for downstream handlers.
+/// Validates user account state and performs background OAuth provider verification.
+pub async fn universal_auth_middleware(
     State(server): State<Server>,
     mut request: Request,
     next: Next,
@@ -27,33 +49,25 @@ pub async fn auth_middleware(
     let request_id = request.extensions().request_id().as_str();
     // Try JWT authentication first
     let user = if let Some(auth_header) = request.headers().get(AUTHORIZATION) {
-        if let Ok(auth_str) = auth_header.to_str() {
-            if let Some(token) = auth_str.strip_prefix("Bearer ") {
-                // Check if it's an API key (has the SSOK_ prefix)
-                if token.starts_with(API_KEY_PREFIX) {
-                    if !server.config.api_keys.enabled {
-                        warn!(request_id = %request_id, "API key authentication disabled");
-                        return Err(AppError::Unauthorized(
-                            "API key authentication is disabled".to_string(),
-                        ));
-                    }
-                    trace!(request_id = %request_id, auth_method = "api_key", "Authenticating request");
-                    authenticate_with_api_key(token, &server.database, &request_id).await?
-                } else {
-                    // Try JWT authentication
-                    trace!(request_id = %request_id, auth_method = "jwt", "Authenticating request");
-                    authenticate_with_jwt(token, &server.database, &server.jwt_service, &request_id)
-                        .await?
-                }
-            } else {
+        let auth_str = auth_header.to_str()
+            .map_err(|_| AppError::Unauthorized("Invalid Authorization header".to_string()))?;
+        
+        let token = extract_bearer_token(auth_str)?;
+        
+        // Check if it's an API key (has the SSOK_ prefix)
+        if token.starts_with(API_KEY_PREFIX) {
+            if !server.config.api_keys.enabled {
+                warn!(request_id = %request_id, "API key authentication disabled");
                 return Err(AppError::Unauthorized(
-                    "Invalid Authorization format".to_string(),
+                    "API key authentication is disabled".to_string(),
                 ));
             }
+            trace!(request_id = %request_id, auth_method = "api_key", "Authenticating request");
+            authenticate_with_api_key(token, &server, &request_id).await?
         } else {
-            return Err(AppError::Unauthorized(
-                "Invalid Authorization header".to_string(),
-            ));
+            // Try JWT authentication
+            trace!(request_id = %request_id, auth_method = "jwt", "Authenticating request");
+            authenticate_with_jwt(token, &server, &request_id).await?
         }
     } else if let Some(api_key_header) = request.headers().get(&X_API_KEY) {
         // Try X-API-Key header
@@ -62,12 +76,11 @@ pub async fn auth_middleware(
                 "API key authentication is disabled".to_string(),
             ));
         }
-        if let Ok(api_key) = api_key_header.to_str() {
-            trace!(request_id = %request_id, auth_method = "x_api_key", "Authenticating request");
-            authenticate_with_api_key(api_key, &server.database, &request_id).await?
-        } else {
-            return Err(AppError::Unauthorized("Invalid API key header".to_string()));
-        }
+        let api_key = api_key_header.to_str()
+            .map_err(|_| AppError::Unauthorized("Invalid API key header".to_string()))?;
+        
+        trace!(request_id = %request_id, auth_method = "x_api_key", "Authenticating request");
+        authenticate_with_api_key(api_key, &server, &request_id).await?
     } else {
         return Err(AppError::Unauthorized(
             "Missing authentication credentials".to_string(),
@@ -80,27 +93,41 @@ pub async fn auth_middleware(
     Ok(next.run(request).await)
 }
 
-/// Authenticate with JWT token and return UserRecord
+/// Authenticates JWT token and returns associated UserRecord.
+/// 
+/// **Process:**
+/// 1. Validates JWT signature and expiration
+/// 2. Extracts user ID from token claims
+/// 3. Looks up user in database
+/// 4. Validates user account state (active, not disabled/expired)
+/// 5. Triggers background OAuth provider verification if needed
 async fn authenticate_with_jwt(
     token: &str,
-    database: &Arc<dyn DatabaseManager>,
-    jwt_service: &Arc<dyn JwtService>,
+    server: &Server,
     request_id: &str,
 ) -> Result<UserRecord, AppError> {
     // Validate JWT token and get claims
-    let claims = jwt_service.validate_oauth_token(token)?;
+    let claims = server.jwt_service.validate_oauth_token(token)?;
     let user_id = claims.sub;
 
     // lookup UserRecord
-    get_user_record(user_id, database, request_id).await
+    get_user_record(user_id, server, request_id).await
 }
 
-/// Authenticate with API key and return UserRecord
+/// Authenticates API key and returns associated UserRecord.
+/// 
+/// **Process:**
+/// 1. Validates API key format (SSOK_ prefix)
+/// 2. Hashes API key for secure database lookup
+/// 3. Verifies API key exists and is not expired/revoked
+/// 4. Looks up associated user in database
+/// 5. Validates user account state (active, not disabled/expired)
 async fn authenticate_with_api_key(
     api_key: &str,
-    database: &Arc<dyn DatabaseManager>,
+    server: &Server,
     request_id: &str,
 ) -> Result<UserRecord, AppError> {
+    let database = &server.database;
     // Validate API key format
     validate_api_key_format(api_key, API_KEY_PREFIX)?;
 
@@ -124,14 +151,15 @@ async fn authenticate_with_api_key(
     }
 
     trace!(user_id = %stored_key.user_id, request_id = %request_id, "API key authentication successful");
-    get_user_record(stored_key.user_id, database, request_id).await
+    get_user_record(stored_key.user_id, server, request_id).await
 }
 
 async fn get_user_record(
     user_id: i32,
-    database: &Arc<dyn DatabaseManager>,
+    server: &Server,
     request_id: &str,
 ) -> Result<UserRecord, AppError> {
+    let database = &server.database;
     let user = database
         .users()
         .find_by_id(user_id)
@@ -142,35 +170,79 @@ async fn get_user_record(
             AppError::Unauthorized("User not found".to_string())
         })?;
 
+    // Check if user account is active
+    if !user.state.is_active() {
+        warn!(
+            user_id = %user.id, 
+            email = %user.email, 
+            state = ?user.state,
+            request_id = %request_id, 
+            "User account is not active"
+        );
+        return Err(AppError::Unauthorized(format!(
+            "Account is {}: {}",
+            user.state.as_str(),
+            user.state.description()
+        )));
+    }
+
+    // Check if we need to verify OAuth provider status (every 24 hours)
+    let needs_oauth_check = user.last_oauth_check
+        .map(|last_check| Utc::now() - last_check > Duration::hours(24))
+        .unwrap_or(true); // Check if never verified
+
+    if needs_oauth_check {
+        // Perform OAuth provider verification in background (non-blocking)
+        let oauth_service_clone = server.oauth_service.clone();
+        let database_clone = server.database.clone();
+        let user_clone = user.clone();
+        let request_id_clone = request_id.to_string();
+        
+        tokio::spawn(async move {
+            if let Err(e) = perform_oauth_verification(&user_clone, &oauth_service_clone, &database_clone, &request_id_clone).await {
+                warn!(
+                    user_id = %user_clone.id,
+                    error = %e,
+                    request_id = %request_id_clone,
+                    "Background OAuth verification failed"
+                );
+            }
+        });
+    }
+
     // Only log user authentication success at trace level to reduce noise
     trace!(user_id = %user.id, email = %user.email, request_id = %request_id, "User authentication successful");
     Ok(user)
 }
 
-/// JWT-only authentication middleware (for web UI routes that don't support API keys)
-pub async fn jwt_only_middleware(
-    State(jwt_service): State<Arc<dyn JwtService>>,
-    State(database): State<Arc<dyn DatabaseManager>>,
+/// JWT-only authentication middleware for web UI routes.
+/// 
+/// **Accepts only:**
+/// - `Authorization: Bearer <jwt_token>`
+/// 
+/// **Rejects:**
+/// - API keys (SSOK_ prefixed tokens)
+/// - X-API-Key headers
+/// 
+/// Returns authenticated UserRecord in request extensions for downstream handlers.
+pub async fn jwt_only_auth_middleware(
+    State(server): State<Server>,
     mut request: Request,
     next: Next,
 ) -> Result<Response, AppError> {
     let request_id = request.extensions().request_id().as_str();
+    
+    // Extract and validate Authorization header
     let auth_header = request
         .headers()
         .get(AUTHORIZATION)
         .and_then(|header| header.to_str().ok())
         .ok_or_else(|| AppError::Unauthorized("Missing Authorization header".to_string()))?;
 
-    if !auth_header.starts_with("Bearer ") {
-        return Err(AppError::Unauthorized(
-            "Invalid Authorization format".to_string(),
-        ));
-    }
-
-    let token = &auth_header[7..];
+    let token = extract_bearer_token(auth_header)?;
 
     // Authenticate with JWT and get UserRecord
-    let user = authenticate_with_jwt(token, &database, &jwt_service, &request_id).await?;
+    let user = authenticate_with_jwt(token, &server, &request_id).await?;
 
     // Add UserRecord to request extensions for downstream handlers
     request.extensions_mut().insert(user);
@@ -178,44 +250,19 @@ pub async fn jwt_only_middleware(
     Ok(next.run(request).await)
 }
 
-/// Legacy JWT authentication middleware (for backward compatibility)
-/// Consider using jwt_only_middleware or auth_middleware instead
-pub async fn jwt_auth_middleware(
-    State(server): State<Server>,
-    mut request: Request,
-    next: Next,
-) -> Result<Response, AppError> {
-    let request_id = request.extensions().request_id().as_str();
-    let auth_header = request
-        .headers()
-        .get(AUTHORIZATION)
-        .and_then(|header| header.to_str().ok())
-        .ok_or_else(|| AppError::Unauthorized("Missing Authorization header".to_string()))?;
 
-    if !auth_header.starts_with("Bearer ") {
-        return Err(AppError::Unauthorized(
-            "Invalid Authorization format".to_string(),
-        ));
-    }
-
-    let token = &auth_header[7..];
-
-    // Validate token and get claims
-    let claims = server.jwt_service.validate_oauth_token(token)?;
-
-    // Get UserRecord for the user
-    let user = get_user_record(claims.sub, &server.database, &request_id).await?;
-
-    // Add both claims and UserRecord to request extensions for downstream handlers
-    request.extensions_mut().insert(claims.clone());
-    request.extensions_mut().insert(user);
-
-    Ok(next.run(request).await)
-}
-
-/// Admin middleware that checks if the authenticated user has admin permissions
-/// Can be used after any authentication middleware that provides UserRecord in extensions
-pub async fn admin_middleware(
+/// Admin authorization middleware that verifies user has admin permissions.
+/// 
+/// **Requirements:**
+/// - Must be used after an authentication middleware (universal_auth_middleware or jwt_only_auth_middleware)
+/// - User's email must be in the configured admin.emails list
+/// - Email comparison is case-insensitive
+/// 
+/// **Returns:**
+/// - 200: User is authenticated admin
+/// - 401: No UserRecord found in extensions (authentication middleware missing)
+/// - 403: User is authenticated but not an admin
+pub async fn admin_auth_middleware(
     State(server): State<Server>,
     request: Request,
     next: Next,
@@ -238,8 +285,18 @@ pub async fn admin_middleware(
     Ok(next.run(request).await)
 }
 
-/// Custom extractor for UserRecord from request extensions
-/// Use this in route handlers that need access to authenticated user information
+/// Axum extractor for authenticated UserRecord from request extensions.
+/// 
+/// **Usage in route handlers:**
+/// ```rust
+/// async fn my_handler(UserExtractor(user): UserExtractor) -> impl IntoResponse {
+///     format!("Hello, {}!", user.email)
+/// }
+/// ```
+/// 
+/// **Requirements:**
+/// - Route must use an authentication middleware that sets UserRecord in extensions
+/// - Returns 401 Unauthorized if no UserRecord is found
 pub struct UserExtractor(pub UserRecord);
 
 impl<S> FromRequestParts<S> for UserExtractor
@@ -258,14 +315,89 @@ where
     }
 }
 
+/// Background task: Verifies user account with OAuth provider and updates state.
+/// 
+/// **Process:**
+/// 1. Contacts OAuth provider to verify user account status
+/// 2. Updates user.last_oauth_check timestamp
+/// 3. If verification succeeds: Sets user state to Active
+/// 4. If verification fails: Sets user state to Expired
+/// 
+/// **Frequency:** Runs every 24 hours per user (non-blocking background task)
+async fn perform_oauth_verification(
+    user: &UserRecord,
+    oauth_service: &Arc<crate::auth::oauth::OAuthService>,
+    database: &Arc<dyn DatabaseManager>,
+    request_id: &str,
+) -> Result<(), AppError> {
+    let now = Utc::now();
+    
+    // Try to verify with OAuth provider
+    match oauth_service.verify_user_with_provider(user).await {
+        Ok(()) => {
+            // Verification successful - update last check time
+            let updated_user = UserRecord {
+                last_oauth_check: Some(now),
+                state: UserState::Active,
+                updated_at: now,
+                ..user.clone()
+            };
+            
+            if let Err(e) = database.users().upsert(&updated_user).await {
+                warn!(
+                    user_id = %user.id,
+                    error = %e,
+                    request_id = %request_id,
+                    "Failed to update OAuth verification success timestamp"
+                );
+            } else {
+                trace!(
+                    user_id = %user.id,
+                    provider = %user.provider,
+                    request_id = %request_id,
+                    "OAuth provider verification successful"
+                );
+            }
+        },
+        Err(_) => {
+            // Verification failed - mark user as expired
+            let updated_user = UserRecord {
+                last_oauth_check: Some(now),
+                state: UserState::Expired,
+                updated_at: now,
+                ..user.clone()
+            };
+            
+            if let Err(e) = database.users().upsert(&updated_user).await {
+                warn!(
+                    user_id = %user.id,
+                    error = %e,
+                    request_id = %request_id,
+                    "Failed to update OAuth verification failure timestamp"
+                );
+            } else {
+                warn!(
+                    user_id = %user.id,
+                    provider = %user.provider,
+                    request_id = %request_id,
+                    "OAuth provider verification failed - user marked as expired"
+                );
+            }
+            
+            return Err(AppError::Unauthorized("Account no longer valid with OAuth provider".to_string()));
+        }
+    }
+    
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::auth::jwt::{JwtService, OAuthClaims};
+    use crate::auth::jwt::JwtService;
     use axum::{
         Router,
         body::Body,
-        extract::Request as ExtractRequest,
         http::{Request, StatusCode},
         middleware,
         routing::get,
@@ -276,22 +408,12 @@ mod tests {
         "success"
     }
 
-    async fn test_claims_handler(request: ExtractRequest) -> &'static str {
-        let claims = request.extensions().get::<OAuthClaims>();
-        match claims {
-            Some(_) => "oauth_success",
-            None => "no_claims",
-        }
-    }
 
     fn create_test_token(jwt_service: &dyn JwtService, user_id: i32) -> String {
-        let claims = OAuthClaims::new(user_id, 3600);
+        let claims = crate::auth::jwt::OAuthClaims::new(user_id, 3600);
         jwt_service.create_oauth_token(&claims).unwrap()
     }
 
-    async fn create_test_server() -> crate::server::Server {
-        crate::test_utils::TestServerBuilder::new().build().await
-    }
 
     async fn create_test_user(
         server: &crate::server::Server,
@@ -312,217 +434,13 @@ mod tests {
         server.database.users().upsert(&user).await.unwrap()
     }
 
-    #[tokio::test]
-    async fn test_jwt_auth_middleware_oauth_token() {
-        let server = create_test_server().await;
 
-        // Create test user first
-        let user_id = create_test_user(&server, 123, "test@example.com").await;
 
-        let app =
-            Router::new()
-                .route("/test", get(test_handler))
-                .layer(middleware::from_fn_with_state(
-                    server.clone(),
-                    jwt_auth_middleware,
-                ));
 
-        let token = create_test_token(server.jwt_service.as_ref(), user_id);
-        let request = Request::builder()
-            .uri("/test")
-            .header("Authorization", format!("Bearer {token}"))
-            .body(Body::empty())
-            .unwrap();
 
-        let response = app.oneshot(request).await.unwrap();
-        assert_eq!(response.status(), StatusCode::OK);
-    }
 
-    #[tokio::test]
-    async fn test_jwt_auth_middleware_with_claims() {
-        let server = create_test_server().await;
 
-        // Create test user first
-        let user_id = create_test_user(&server, 123, "test@example.com").await;
-        let oauth_token = create_test_token(server.jwt_service.as_ref(), user_id);
 
-        let app =
-            Router::new()
-                .route("/test", get(test_handler))
-                .layer(middleware::from_fn_with_state(
-                    server.clone(),
-                    jwt_auth_middleware,
-                ));
-
-        let request = Request::builder()
-            .uri("/test")
-            .header("Authorization", format!("Bearer {oauth_token}"))
-            .body(Body::empty())
-            .unwrap();
-
-        let response = app.oneshot(request).await.unwrap();
-        assert_eq!(response.status(), StatusCode::OK);
-    }
-
-    #[tokio::test]
-    async fn test_jwt_auth_middleware_with_claims_extraction() {
-        let server = create_test_server().await;
-
-        // Create test user first
-        let user_id = create_test_user(&server, 123, "test@example.com").await;
-        let oauth_token = create_test_token(server.jwt_service.as_ref(), user_id);
-
-        let app = Router::new()
-            .route("/test", get(test_claims_handler))
-            .layer(middleware::from_fn_with_state(
-                server.clone(),
-                jwt_auth_middleware,
-            ));
-
-        let request = Request::builder()
-            .uri("/test")
-            .header("Authorization", format!("Bearer {oauth_token}"))
-            .body(Body::empty())
-            .unwrap();
-
-        let response = app.oneshot(request).await.unwrap();
-        assert_eq!(response.status(), StatusCode::OK);
-
-        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
-            .await
-            .unwrap();
-        let body_str = String::from_utf8(body.to_vec()).unwrap();
-        assert_eq!(body_str, "oauth_success");
-    }
-
-    #[tokio::test]
-    async fn test_jwt_auth_middleware_missing_header() {
-        let server = create_test_server().await;
-
-        let app =
-            Router::new()
-                .route("/test", get(test_handler))
-                .layer(middleware::from_fn_with_state(
-                    server.clone(),
-                    jwt_auth_middleware,
-                ));
-
-        let request = Request::builder().uri("/test").body(Body::empty()).unwrap();
-
-        let response = app.oneshot(request).await.unwrap();
-        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
-    }
-
-    #[tokio::test]
-    async fn test_jwt_auth_middleware_invalid_format() {
-        let server = create_test_server().await;
-
-        let app =
-            Router::new()
-                .route("/test", get(test_handler))
-                .layer(middleware::from_fn_with_state(
-                    server.clone(),
-                    jwt_auth_middleware,
-                ));
-
-        let request = Request::builder()
-            .uri("/test")
-            .header("Authorization", "Invalid token")
-            .body(Body::empty())
-            .unwrap();
-
-        let response = app.oneshot(request).await.unwrap();
-        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
-    }
-
-    #[tokio::test]
-    async fn test_jwt_auth_middleware_invalid_token() {
-        let server = create_test_server().await;
-
-        let app =
-            Router::new()
-                .route("/test", get(test_handler))
-                .layer(middleware::from_fn_with_state(
-                    server.clone(),
-                    jwt_auth_middleware,
-                ));
-
-        let request = Request::builder()
-            .uri("/test")
-            .header("Authorization", "Bearer invalid.jwt.token")
-            .body(Body::empty())
-            .unwrap();
-
-        let response = app.oneshot(request).await.unwrap();
-        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
-    }
-
-    #[tokio::test]
-    async fn test_jwt_auth_middleware_expired_token() {
-        let server = create_test_server().await;
-
-        // Create test user first
-        let user_id = create_test_user(&server, 123, "test@example.com").await;
-
-        let app =
-            Router::new()
-                .route("/test", get(test_handler))
-                .layer(middleware::from_fn_with_state(
-                    server.clone(),
-                    jwt_auth_middleware,
-                ));
-
-        // Create expired token by manually crafting claims
-        let mut claims = OAuthClaims::new(user_id, 3600);
-        claims.exp = (claims.iat as i64 - 3600) as usize; // Set to past
-        let token = server.jwt_service.create_oauth_token(&claims).unwrap();
-        let request = Request::builder()
-            .uri("/test")
-            .header("Authorization", format!("Bearer {token}"))
-            .body(Body::empty())
-            .unwrap();
-
-        let response = app.oneshot(request).await.unwrap();
-        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
-    }
-
-    #[tokio::test]
-    async fn test_authorization_header_preserved() {
-        let server = create_test_server().await;
-
-        // Create test user first
-        let user_id = create_test_user(&server, 123, "test@example.com").await;
-
-        async fn header_check_handler(request: ExtractRequest) -> String {
-            match request.headers().get(AUTHORIZATION) {
-                Some(_) => "header_present".to_string(),
-                None => "header_removed".to_string(),
-            }
-        }
-
-        let app = Router::new()
-            .route("/test", get(header_check_handler))
-            .layer(middleware::from_fn_with_state(
-                server.clone(),
-                jwt_auth_middleware,
-            ));
-
-        let token = create_test_token(server.jwt_service.as_ref(), user_id);
-        let request = Request::builder()
-            .uri("/test")
-            .header("Authorization", format!("Bearer {token}"))
-            .body(Body::empty())
-            .unwrap();
-
-        let response = app.oneshot(request).await.unwrap();
-        assert_eq!(response.status(), StatusCode::OK);
-
-        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
-            .await
-            .unwrap();
-        let body_str = String::from_utf8(body.to_vec()).unwrap();
-        assert_eq!(body_str, "header_present");
-    }
 
     // Admin middleware tests
     mod admin_middleware_tests {
@@ -568,11 +486,11 @@ mod tests {
                 .route("/admin", get(test_handler))
                 .layer(middleware::from_fn_with_state(
                     server.clone(),
-                    admin_middleware,
+                    admin_auth_middleware,
                 ))
                 .layer(middleware::from_fn_with_state(
                     server.clone(),
-                    jwt_auth_middleware,
+                    jwt_only_auth_middleware,
                 ))
         }
 
@@ -645,7 +563,7 @@ mod tests {
                 create_test_server_with_admins(vec!["admin@example.com".to_string()]).await;
 
             let app = Router::new().route("/admin", get(test_handler)).layer(
-                middleware::from_fn_with_state(server.clone(), admin_middleware),
+                middleware::from_fn_with_state(server.clone(), admin_auth_middleware),
             );
 
             let request = Request::builder()
