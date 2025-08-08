@@ -2943,8 +2943,23 @@
             ],
             "format": "date-time"
           },
+          "last_oauth_check": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time",
+            "description": "Last time OAuth provider verification was performed"
+          },
           "provider": {
             "type": "string"
+          },
+          "provider_refresh_token": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "OAuth provider refresh token for account verification"
           },
           "provider_user_id": {
             "type": "string"

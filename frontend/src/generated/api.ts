@@ -153,26 +153,6 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
-  '/api/admin/users/search': {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    /**
-     * Search users
-     * @description Search for users by email, display name, or provider user ID
-     */
-    get: operations['search_users'];
-    put?: never;
-    post?: never;
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
   '/api/admin/users/{user_id}': {
     parameters: {
       query?: never;
@@ -206,6 +186,26 @@ export interface paths {
      * @description Update the state of a user (active, disabled, or expired)
      */
     put: operations['update_user_state'];
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/admin/users/search': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Search users
+     * @description Search for users by email, display name, or provider user ID
+     */
+    get: operations['search_users'];
+    put?: never;
     post?: never;
     delete?: never;
     options?: never;
@@ -720,7 +720,14 @@ export interface components {
       id: number;
       /** Format: date-time */
       last_login?: string | null;
+      /**
+       * Format: date-time
+       * @description Last time OAuth provider verification was performed
+       */
+      last_oauth_check?: string | null;
       provider: string;
+      /** @description OAuth provider refresh token for account verification */
+      provider_refresh_token?: string | null;
       provider_user_id: string;
       state: components['schemas']['UserRecord'];
       /** Format: date-time */
@@ -1155,22 +1162,22 @@ export interface operations {
   get_audit_logs: {
     parameters: {
       query?: {
-        /** @description Filter by user ID */
-        user_id?: number | null;
-        /** @description Filter by event type */
-        event_type?: null | components['schemas']['AuditEventType'];
-        /** @description Filter by provider */
-        provider?: string | null;
-        /** @description Filter by success status */
-        success?: boolean | null;
-        /** @description Filter by start date (ISO 8601) */
-        start_date?: string | null;
         /** @description Filter by end date (ISO 8601) */
         end_date?: string | null;
+        /** @description Filter by event type */
+        event_type?: null | components['schemas']['AuditEventType'];
         /** @description Number of records per page (default: 50, max: 1000) */
         limit?: number | null;
         /** @description Page offset (default: 0) */
         offset?: number | null;
+        /** @description Filter by provider */
+        provider?: string | null;
+        /** @description Filter by start date (ISO 8601) */
+        start_date?: string | null;
+        /** @description Filter by success status */
+        success?: boolean | null;
+        /** @description Filter by user ID */
+        user_id?: number | null;
       };
       header?: never;
       path?: never;
@@ -1338,10 +1345,10 @@ export interface operations {
       query?: never;
       header?: never;
       path: {
-        /** @description AWS region (e.g., us-east-1) */
-        region: string;
         /** @description Model identifier */
         model_id: string;
+        /** @description AWS region (e.g., us-east-1) */
+        region: string;
       };
       cookie?: never;
     };
@@ -1399,10 +1406,10 @@ export interface operations {
       query?: never;
       header?: never;
       path: {
-        /** @description AWS region (e.g., us-east-1) */
-        region: string;
         /** @description Model identifier */
         model_id: string;
+        /** @description AWS region (e.g., us-east-1) */
+        region: string;
       };
       cookie?: never;
     };
@@ -1453,10 +1460,10 @@ export interface operations {
       query?: never;
       header?: never;
       path: {
-        /** @description AWS region (e.g., us-east-1) */
-        region: string;
         /** @description Model identifier */
         model_id: string;
+        /** @description AWS region (e.g., us-east-1) */
+        region: string;
       };
       cookie?: never;
     };
@@ -1501,20 +1508,20 @@ export interface operations {
   get_system_usage_records: {
     parameters: {
       query?: {
-        /** @description Maximum number of records to return (default: 50, max: 500) */
-        limit?: number | null;
-        /** @description Number of records to skip for pagination */
-        offset?: number | null;
-        /** @description Filter by specific model ID */
-        model?: string | null;
-        /** @description Filter records from this date onwards */
-        start_date?: string | null;
         /** @description Filter records up to this date */
         end_date?: string | null;
-        /** @description If true, only return successful requests */
-        success_only?: boolean | null;
         /** @description Response format (json or csv) */
         format?: string | null;
+        /** @description Maximum number of records to return (default: 50, max: 500) */
+        limit?: number | null;
+        /** @description Filter by specific model ID */
+        model?: string | null;
+        /** @description Number of records to skip for pagination */
+        offset?: number | null;
+        /** @description Filter records from this date onwards */
+        start_date?: string | null;
+        /** @description If true, only return successful requests */
+        success_only?: boolean | null;
         /** @description Filter by specific user ID (admin only) */
         user_id?: number | null;
       };
@@ -1565,18 +1572,18 @@ export interface operations {
   get_admin_usage_summaries: {
     parameters: {
       query?: {
-        /** @description Filter summaries from this date onwards */
-        start_date?: string | null;
         /** @description Filter summaries up to this date */
         end_date?: string | null;
-        /** @description Period type for aggregation (hourly, daily, weekly, monthly) */
-        period_type?: string | null;
-        /** @description Filter by specific model ID */
-        model_id?: string | null;
         /** @description Maximum number of summaries to return (default: 1000) */
         limit?: number | null;
+        /** @description Filter by specific model ID */
+        model_id?: string | null;
         /** @description Number of summaries to skip for pagination */
         offset?: number | null;
+        /** @description Period type for aggregation (hourly, daily, weekly, monthly) */
+        period_type?: string | null;
+        /** @description Filter summaries from this date onwards */
+        start_date?: string | null;
         /** @description Filter by specific user ID (admin only) */
         user_id?: number | null;
       };
@@ -1631,10 +1638,10 @@ export interface operations {
         limit?: number;
         /** @description Number of users to skip for pagination (default: 0) */
         offset?: number;
-        /** @description Sort order: created_at, updated_at, last_login, email (default: created_at) */
-        sort?: string;
         /** @description Sort direction: asc or desc (default: desc) */
         order?: string;
+        /** @description Sort order: created_at, updated_at, last_login, email (default: created_at) */
+        sort?: string;
       };
       header?: never;
       path?: never;
@@ -1652,69 +1659,6 @@ export interface operations {
         };
       };
       /** @description Invalid query parameters */
-      400: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/json': components['schemas']['ApiErrorResponse'];
-        };
-      };
-      /** @description Unauthorized */
-      401: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/json': components['schemas']['ApiErrorResponse'];
-        };
-      };
-      /** @description Forbidden - admin access required */
-      403: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/json': components['schemas']['ApiErrorResponse'];
-        };
-      };
-      /** @description Internal server error */
-      500: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/json': components['schemas']['ApiErrorResponse'];
-        };
-      };
-    };
-  };
-  search_users: {
-    parameters: {
-      query: {
-        /** @description Search term to match against email, display_name, or provider_user_id */
-        q: string;
-        /** @description Maximum number of users to return (default: 50, max: 500) */
-        limit?: number;
-        /** @description Number of users to skip for pagination (default: 0) */
-        offset?: number;
-      };
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    requestBody?: never;
-    responses: {
-      /** @description Search completed successfully */
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/json': components['schemas']['UserListResponse'];
-        };
-      };
-      /** @description Invalid search parameters */
       400: {
         headers: {
           [name: string]: unknown;
@@ -1865,6 +1809,69 @@ export interface operations {
       };
       /** @description User not found */
       404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['ApiErrorResponse'];
+        };
+      };
+      /** @description Internal server error */
+      500: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['ApiErrorResponse'];
+        };
+      };
+    };
+  };
+  search_users: {
+    parameters: {
+      query: {
+        /** @description Maximum number of users to return (default: 50, max: 500) */
+        limit?: number;
+        /** @description Number of users to skip for pagination (default: 0) */
+        offset?: number;
+        /** @description Search term to match against email, display_name, or provider_user_id */
+        q: string;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Search completed successfully */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['UserListResponse'];
+        };
+      };
+      /** @description Invalid search parameters */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['ApiErrorResponse'];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['ApiErrorResponse'];
+        };
+      };
+      /** @description Forbidden - admin access required */
+      403: {
         headers: {
           [name: string]: unknown;
         };
@@ -2034,20 +2041,20 @@ export interface operations {
   get_user_usage_records: {
     parameters: {
       query?: {
-        /** @description Maximum number of records to return (default: 50, max: 500) */
-        limit?: number | null;
-        /** @description Number of records to skip for pagination */
-        offset?: number | null;
-        /** @description Filter by specific model ID */
-        model?: string | null;
-        /** @description Filter records from this date onwards */
-        start_date?: string | null;
         /** @description Filter records up to this date */
         end_date?: string | null;
-        /** @description If true, only return successful requests */
-        success_only?: boolean | null;
         /** @description Response format (json or csv) */
         format?: string | null;
+        /** @description Maximum number of records to return (default: 50, max: 500) */
+        limit?: number | null;
+        /** @description Filter by specific model ID */
+        model?: string | null;
+        /** @description Number of records to skip for pagination */
+        offset?: number | null;
+        /** @description Filter records from this date onwards */
+        start_date?: string | null;
+        /** @description If true, only return successful requests */
+        success_only?: boolean | null;
         /** @description Filter by specific user ID (admin only) */
         user_id?: number | null;
       };
@@ -2089,18 +2096,18 @@ export interface operations {
   get_user_usage_summaries: {
     parameters: {
       query?: {
-        /** @description Filter summaries from this date onwards */
-        start_date?: string | null;
         /** @description Filter summaries up to this date */
         end_date?: string | null;
-        /** @description Period type for aggregation (hourly, daily, weekly, monthly) */
-        period_type?: string | null;
-        /** @description Filter by specific model ID */
-        model_id?: string | null;
         /** @description Maximum number of summaries to return (default: 1000) */
         limit?: number | null;
+        /** @description Filter by specific model ID */
+        model_id?: string | null;
         /** @description Number of summaries to skip for pagination */
         offset?: number | null;
+        /** @description Period type for aggregation (hourly, daily, weekly, monthly) */
+        period_type?: string | null;
+        /** @description Filter summaries from this date onwards */
+        start_date?: string | null;
         /** @description Filter by specific user ID (admin only) */
         user_id?: number | null;
       };
