@@ -42,11 +42,9 @@ impl<T> RedisCache<T> {
     async fn get_connection(&self) -> CacheResult<redis::aio::MultiplexedConnection> {
         let mut conn_guard = self.connection.lock().await;
 
-        // Try to reuse existing connection
-        if let Some(conn) = conn_guard.take() {
-            // Test if connection is still alive
-            if self.test_connection(&conn).await.is_ok() {
-                return Ok(conn);
+        if let Some(conn) = &*conn_guard {
+            if self.test_connection(conn).await.is_ok() {
+                return Ok(conn.clone());
             }
         }
 
@@ -57,6 +55,7 @@ impl<T> RedisCache<T> {
             .await
             .map_err(|e| CacheError::Connection(format!("Connection failed: {e}")))?;
 
+        *conn_guard = Some(new_conn.clone());
         Ok(new_conn)
     }
 
@@ -68,11 +67,6 @@ impl<T> RedisCache<T> {
         let mut conn = conn.clone();
         let _: String = redis::cmd("PING").query_async(&mut conn).await?;
         Ok(())
-    }
-
-    /// Return connection to storage for reuse
-    async fn return_connection(&self, conn: redis::aio::MultiplexedConnection) {
-        *self.connection.lock().await = Some(conn);
     }
 
     /// Add key prefix to avoid conflicts
@@ -87,8 +81,6 @@ impl<T> RedisCache<T> {
             .query_async(&mut conn)
             .await
             .map_err(|e| CacheError::Cache(format!("Ping failed: {e}")))?;
-
-        self.return_connection(conn).await;
         Ok(())
     }
 }
@@ -107,8 +99,6 @@ where
             .get(&key)
             .await
             .map_err(|e| CacheError::Cache(e.to_string()))?;
-
-        self.return_connection(conn).await;
 
         match result {
             Some(data) => {
@@ -140,7 +130,6 @@ where
                 .map_err(|e| CacheError::Cache(e.to_string()))?;
         }
 
-        self.return_connection(conn).await;
         Ok(())
     }
 
@@ -154,7 +143,6 @@ where
             .await
             .map_err(|e| CacheError::Cache(e.to_string()))?;
 
-        self.return_connection(conn).await;
         Ok(())
     }
 
@@ -168,7 +156,6 @@ where
             .await
             .map_err(|e| CacheError::Cache(e.to_string()))?;
 
-        self.return_connection(conn).await;
         Ok(exists)
     }
 
@@ -181,7 +168,6 @@ where
             .await
             .map_err(|e| CacheError::Cache(e.to_string()))?;
 
-        self.return_connection(conn).await;
         Ok(())
     }
 }
