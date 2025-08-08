@@ -85,6 +85,10 @@ pub struct Model {
     pub last_login: Option<DateTime<Utc>>,
     #[sea_orm(column_type = "String(StringLen::N(16))", default_value = "active")]
     pub state: UserState,
+    /// Last time OAuth provider verification was performed
+    pub last_oauth_check: Option<DateTime<Utc>>,
+    /// OAuth provider refresh token for account verification
+    pub provider_refresh_token: Option<String>,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
@@ -105,6 +109,8 @@ impl Default for Model {
             updated_at: now,
             last_login: None,
             state: UserState::Active,
+            last_oauth_check: None,
+            provider_refresh_token: None,
         }
     }
 }
@@ -155,6 +161,12 @@ impl Model {
     /// Builder method to set ID (for tests)
     pub fn with_id(mut self, id: i32) -> Self {
         self.id = id;
+        self
+    }
+
+    /// Builder method to set provider refresh token
+    pub fn with_provider_refresh_token(mut self, token: Option<String>) -> Self {
+        self.provider_refresh_token = token;
         self
     }
 }

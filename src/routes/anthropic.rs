@@ -402,7 +402,7 @@ async fn handle_streaming_message(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::auth::middleware::jwt_auth_middleware;
+    use crate::auth::middleware::jwt_only_auth_middleware;
     use crate::utils::request_id_middleware;
     use axum::{
         body::Body,
@@ -468,7 +468,7 @@ mod tests {
             .with_state(server.clone())
             .layer(middleware::from_fn_with_state(
                 server.clone(),
-                jwt_auth_middleware,
+                jwt_only_auth_middleware,
             ))
             .layer(middleware::from_fn(request_id_middleware));
 
@@ -492,7 +492,7 @@ mod tests {
             .with_state(server.clone())
             .layer(middleware::from_fn_with_state(
                 server.clone(),
-                jwt_auth_middleware,
+                jwt_only_auth_middleware,
             ))
             .layer(middleware::from_fn(request_id_middleware));
 
@@ -516,7 +516,7 @@ mod tests {
             .with_state(server.clone())
             .layer(middleware::from_fn_with_state(
                 server.clone(),
-                jwt_auth_middleware,
+                jwt_only_auth_middleware,
             ))
             .layer(middleware::from_fn(request_id_middleware));
 
@@ -553,7 +553,7 @@ mod tests {
             .with_state(server.clone())
             .layer(middleware::from_fn_with_state(
                 server.clone(),
-                jwt_auth_middleware,
+                jwt_only_auth_middleware,
             ))
             .layer(middleware::from_fn(request_id_middleware));
 
@@ -582,7 +582,7 @@ mod tests {
             .with_state(server.clone())
             .layer(middleware::from_fn_with_state(
                 server.clone(),
-                jwt_auth_middleware,
+                jwt_only_auth_middleware,
             ))
             .layer(middleware::from_fn(request_id_middleware));
 
@@ -617,7 +617,7 @@ mod tests {
             .with_state(server.clone())
             .layer(middleware::from_fn_with_state(
                 server.clone(),
-                jwt_auth_middleware,
+                jwt_only_auth_middleware,
             ))
             .layer(middleware::from_fn(request_id_middleware));
 
@@ -654,7 +654,7 @@ mod tests {
             .with_state(server.clone())
             .layer(middleware::from_fn_with_state(
                 server.clone(),
-                jwt_auth_middleware,
+                jwt_only_auth_middleware,
             ))
             .layer(middleware::from_fn(request_id_middleware));
 
@@ -695,7 +695,7 @@ mod tests {
             .with_state(server.clone())
             .layer(middleware::from_fn_with_state(
                 server.clone(),
-                jwt_auth_middleware,
+                jwt_only_auth_middleware,
             ))
             .layer(middleware::from_fn(request_id_middleware));
 
@@ -731,7 +731,7 @@ mod tests {
             .with_state(server.clone())
             .layer(middleware::from_fn_with_state(
                 server.clone(),
-                jwt_auth_middleware,
+                jwt_only_auth_middleware,
             ))
             .layer(middleware::from_fn(request_id_middleware));
 

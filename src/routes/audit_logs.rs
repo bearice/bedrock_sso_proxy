@@ -158,7 +158,7 @@ pub fn create_admin_audit_logs_routes() -> Router<Server> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::auth::middleware::{admin_middleware, jwt_auth_middleware};
+    use crate::auth::middleware::{admin_auth_middleware, jwt_only_auth_middleware};
     use crate::database::DatabaseManager;
     use crate::database::entities::{AuditEventType, AuditLogEntry as DbAuditLogEntry};
     use crate::test_utils::TestServerBuilder;
@@ -238,11 +238,11 @@ mod tests {
             .with_state(server.clone())
             .layer(middleware::from_fn_with_state(
                 server.clone(),
-                admin_middleware,
+                admin_auth_middleware,
             ))
             .layer(middleware::from_fn_with_state(
                 server.clone(),
-                jwt_auth_middleware,
+                jwt_only_auth_middleware,
             ));
 
         let request = Request::builder()
@@ -304,11 +304,11 @@ mod tests {
             .with_state(server.clone())
             .layer(middleware::from_fn_with_state(
                 server.clone(),
-                admin_middleware,
+                admin_auth_middleware,
             ))
             .layer(middleware::from_fn_with_state(
                 server.clone(),
-                jwt_auth_middleware,
+                jwt_only_auth_middleware,
             ));
 
         // Test filtering by success=false
@@ -360,11 +360,11 @@ mod tests {
             .with_state(server.clone())
             .layer(middleware::from_fn_with_state(
                 server.clone(),
-                admin_middleware,
+                admin_auth_middleware,
             ))
             .layer(middleware::from_fn_with_state(
                 server.clone(),
-                jwt_auth_middleware,
+                jwt_only_auth_middleware,
             ));
 
         let request = Request::builder()
@@ -385,11 +385,11 @@ mod tests {
             .with_state(server.clone())
             .layer(middleware::from_fn_with_state(
                 server.clone(),
-                admin_middleware,
+                admin_auth_middleware,
             ))
             .layer(middleware::from_fn_with_state(
                 server.clone(),
-                jwt_auth_middleware,
+                jwt_only_auth_middleware,
             ));
 
         let request = Request::builder()
@@ -430,11 +430,11 @@ mod tests {
             .with_state(server.clone())
             .layer(middleware::from_fn_with_state(
                 server.clone(),
-                admin_middleware,
+                admin_auth_middleware,
             ))
             .layer(middleware::from_fn_with_state(
                 server.clone(),
-                jwt_auth_middleware,
+                jwt_only_auth_middleware,
             ));
 
         // Invalid date range (start > end)
