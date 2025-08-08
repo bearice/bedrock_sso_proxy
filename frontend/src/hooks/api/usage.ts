@@ -58,54 +58,7 @@ export function useUserUsageSummaries(token?: string, query?: Partial<UsageSumma
   });
 }
 
-// Admin endpoints for system-wide usage (future use)
-export function useSystemUsageRecords(token?: string, query?: Partial<UsageRecordsQuery>) {
-  return useQuery({
-    queryKey: ['usage', 'admin', 'records', token, query],
-    queryFn: async (): Promise<UsageRecordsResponse> => {
-      if (!token) {
-        throw new Error('No token provided');
-      }
-
-      setAuthToken(token);
-      const { data, error } = await apiClient.GET('/api/admin/usage/records', {
-        params: {
-          query: query || {},
-        },
-      });
-
-      if (error) {
-        throw new ApiError(500, error.error || 'Failed to fetch system usage records');
-      }
-      return data as UsageRecordsResponse;
-    },
-    enabled: !!token,
-  });
-}
-
-export function useAdminUsageSummaries(token?: string, query?: Partial<UsageSummariesQuery>) {
-  return useQuery({
-    queryKey: ['usage', 'admin', 'summaries', token, query],
-    queryFn: async (): Promise<UsageSummariesResponse> => {
-      if (!token) {
-        throw new Error('No token provided');
-      }
-
-      setAuthToken(token);
-      const { data, error } = await apiClient.GET('/api/admin/usage/summaries', {
-        params: {
-          query: query || {},
-        },
-      });
-
-      if (error) {
-        throw new ApiError(500, error.error || 'Failed to fetch admin usage summaries');
-      }
-      return data as UsageSummariesResponse;
-    },
-    enabled: !!token,
-  });
-}
+// Note: Admin usage hooks have been moved to admin-usage.ts
 
 // Export usage data as CSV
 export function useExportUsageData(
