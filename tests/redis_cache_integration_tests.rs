@@ -14,10 +14,10 @@ use std::time::Duration;
 
 // Test helper function to create Redis cache manager
 async fn create_redis_cache_manager() -> Option<CacheManager> {
-    let redis_url = std::env::var("TEST_REDIS_URL")
-        .unwrap_or_else(|_| "redis://localhost:6379".to_string());
+    let redis_url =
+        std::env::var("TEST_REDIS_URL").unwrap_or_else(|_| "redis://localhost:6379".to_string());
     let is_explicit = std::env::var("TEST_REDIS_URL").is_ok();
-    
+
     let config = bedrock_sso_proxy::cache::config::CacheConfig {
         backend: "redis".to_string(),
         redis_url,

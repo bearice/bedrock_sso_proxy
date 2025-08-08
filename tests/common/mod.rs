@@ -361,7 +361,10 @@ impl PostgresTestDb {
             Ok(pool) => pool,
             Err(e) => {
                 if is_explicit {
-                    panic!("PostgreSQL connection failed (TEST_POSTGRES_URL is set): {}", e);
+                    panic!(
+                        "PostgreSQL connection failed (TEST_POSTGRES_URL is set): {}",
+                        e
+                    );
                 } else {
                     return Err(e.into());
                 }
