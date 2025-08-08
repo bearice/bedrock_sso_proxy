@@ -3,7 +3,7 @@
 //! These tests verify that the Redis cache backend properly serializes and deserializes
 //! complex types including those with rust_decimal::Decimal fields.
 //!
-//! Note: These tests require a Redis server running on localhost:6379
+//! Note: These tests will be skipped if Redis is not available on localhost:6379
 
 use bedrock_sso_proxy::cache::CacheManager;
 use bedrock_sso_proxy::database::entities::{ApiKeyRecord, ModelCost, UserRecord};
@@ -13,25 +13,50 @@ use serial_test::serial;
 use std::time::Duration;
 
 // Test helper function to create Redis cache manager
-async fn create_redis_cache_manager() -> CacheManager {
+async fn create_redis_cache_manager() -> Option<CacheManager> {
+    let redis_url = std::env::var("TEST_REDIS_URL")
+        .unwrap_or_else(|_| "redis://localhost:6379".to_string());
+    let is_explicit = std::env::var("TEST_REDIS_URL").is_ok();
+    
     let config = bedrock_sso_proxy::cache::config::CacheConfig {
         backend: "redis".to_string(),
-        redis_url: "redis://localhost:6379".to_string(),
+        redis_url,
         redis_key_prefix: "test_redis_cache:".to_string(),
         validation_ttl: 3600,
         max_entries: 1000,
         cleanup_interval: 3600,
     };
 
-    CacheManager::new_from_config(&config)
-        .await
-        .expect("Failed to create Redis cache manager - ensure Redis is running on localhost:6379")
+    match CacheManager::new_from_config(&config).await {
+        Ok(manager) => Some(manager),
+        Err(e) => {
+            if is_explicit {
+                // TEST_REDIS_URL was explicitly set, so this should be an error
+                panic!("Redis connection failed (TEST_REDIS_URL is set): {}", e);
+            } else {
+                // TEST_REDIS_URL was not set, skip test gracefully
+                println!("Redis not available, skipping test: {}", e);
+                None
+            }
+        }
+    }
+}
+
+macro_rules! get_redis_cache_manager {
+    () => {
+        match create_redis_cache_manager().await {
+            Some(manager) => manager,
+            None => {
+                return;
+            }
+        }
+    };
 }
 
 #[tokio::test]
 #[serial] // Ensure Redis tests don't interfere with each other
 async fn test_redis_model_cost_serialization() {
-    let cache_manager = create_redis_cache_manager().await;
+    let cache_manager = get_redis_cache_manager!();
     let typed_cache = cache_manager.cache::<ModelCost>();
 
     // Create a ModelCost with complex Decimal values
@@ -92,7 +117,7 @@ async fn test_redis_model_cost_serialization() {
 #[tokio::test]
 #[serial]
 async fn test_redis_user_record_serialization() {
-    let cache_manager = create_redis_cache_manager().await;
+    let cache_manager = get_redis_cache_manager!();
     let typed_cache = cache_manager.cache::<UserRecord>();
 
     let user = UserRecord {
@@ -122,7 +147,7 @@ async fn test_redis_user_record_serialization() {
 #[tokio::test]
 #[serial]
 async fn test_redis_api_key_record_serialization() {
-    let cache_manager = create_redis_cache_manager().await;
+    let cache_manager = get_redis_cache_manager!();
     let typed_cache = cache_manager.cache::<ApiKeyRecord>();
 
     let api_key = ApiKeyRecord {
@@ -153,7 +178,7 @@ async fn test_redis_api_key_record_serialization() {
 #[tokio::test]
 #[serial]
 async fn test_redis_cache_ttl_functionality() {
-    let cache_manager = create_redis_cache_manager().await;
+    let cache_manager = get_redis_cache_manager!();
     let typed_cache = cache_manager.cache::<UserRecord>();
 
     let test_user = UserRecord {
@@ -191,7 +216,7 @@ async fn test_redis_cache_ttl_functionality() {
 #[tokio::test]
 #[serial]
 async fn test_redis_cache_type_isolation() {
-    let cache_manager = create_redis_cache_manager().await;
+    let cache_manager = get_redis_cache_manager!();
 
     let user_cache = cache_manager.cache::<UserRecord>();
     let model_cache = cache_manager.cache::<ModelCost>();
@@ -240,7 +265,7 @@ async fn test_redis_cache_type_isolation() {
 #[tokio::test]
 #[serial]
 async fn test_redis_cache_complex_decimal_operations() {
-    let cache_manager = create_redis_cache_manager().await;
+    let cache_manager = get_redis_cache_manager!();
     let typed_cache = cache_manager.cache::<ModelCost>();
 
     // Test various decimal precision scenarios that might trigger deserialize_any
@@ -293,7 +318,7 @@ async fn test_redis_cache_complex_decimal_operations() {
 #[tokio::test]
 #[serial]
 async fn test_redis_cache_get_or_compute() {
-    let cache_manager = create_redis_cache_manager().await;
+    let cache_manager = get_redis_cache_manager!();
     let typed_cache = cache_manager.cache::<UserRecord>();
 
     let key = "compute_test";
@@ -352,7 +377,7 @@ async fn test_redis_cache_get_or_compute() {
 #[tokio::test]
 #[serial]
 async fn test_redis_health_check() {
-    let cache_manager = create_redis_cache_manager().await;
+    let cache_manager = get_redis_cache_manager!();
 
     // Test health check passes
     let result = cache_manager.health_check().await;
@@ -370,7 +395,7 @@ async fn test_redis_health_check() {
 #[tokio::test]
 #[serial]
 async fn test_redis_complex_model_cost_decimals() {
-    let cache_manager = create_redis_cache_manager().await;
+    let cache_manager = get_redis_cache_manager!();
     let typed_cache = cache_manager.cache::<ModelCost>();
 
     let test_model_cost = ModelCost {

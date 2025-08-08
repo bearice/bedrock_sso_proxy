@@ -225,7 +225,14 @@ async fn test_postgres_invalid_signature() {
     let created_user_id = harness.create_test_user("postgres_test3@example.com").await;
 
     // Create token with different secret (will fail validation)
-    let postgres_db2 = PostgresTestDb::new().await.unwrap();
+    let postgres_db2 = match PostgresTestDb::new().await {
+        Ok(db) => db,
+        Err(_) => {
+            println!("Skipping PostgreSQL test - database not available for second instance");
+            let _ = postgres_db.cleanup().await;
+            return;
+        }
+    };
     let wrong_harness = TestHarness::with_postgres_and_secret(&postgres_db2, "wrong-secret").await;
     let token = wrong_harness.create_integration_token(created_user_id);
 

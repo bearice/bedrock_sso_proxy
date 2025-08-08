@@ -104,16 +104,26 @@ async fn test_model_cost_cache_with_redis_backend() {
     // Create Redis cache manager
     let config = CacheConfig {
         backend: "redis".to_string(),
-        redis_url: "redis://localhost:6379".to_string(),
+        redis_url: std::env::var("TEST_REDIS_URL")
+            .unwrap_or_else(|_| "redis://localhost:6379".to_string()),
         redis_key_prefix: "test_model_cost:".to_string(),
         validation_ttl: 3600,
         max_entries: 1000,
         cleanup_interval: 3600,
     };
 
-    let cache_manager = CacheManager::new_from_config(&config)
-        .await
-        .expect("Failed to create Redis cache manager - ensure Redis is running");
+    let is_explicit = std::env::var("TEST_REDIS_URL").is_ok();
+    let cache_manager = match CacheManager::new_from_config(&config).await {
+        Ok(manager) => manager,
+        Err(e) => {
+            if is_explicit {
+                panic!("Redis connection failed (TEST_REDIS_URL is set): {}", e);
+            } else {
+                println!("Redis not available, skipping Redis test: {}", e);
+                return;
+            }
+        }
+    };
 
     let mock_dao = MockModelCostsDao::new();
     let cached_dao = CachedDao::new(mock_dao.clone(), &cache_manager);
@@ -196,16 +206,26 @@ async fn test_model_cost_cache_with_redis_backend() {
 async fn test_model_cost_cache_edge_case_decimals() {
     let config = CacheConfig {
         backend: "redis".to_string(),
-        redis_url: "redis://localhost:6379".to_string(),
+        redis_url: std::env::var("TEST_REDIS_URL")
+            .unwrap_or_else(|_| "redis://localhost:6379".to_string()),
         redis_key_prefix: "test_edge_cases:".to_string(),
         validation_ttl: 3600,
         max_entries: 1000,
         cleanup_interval: 3600,
     };
 
-    let cache_manager = CacheManager::new_from_config(&config)
-        .await
-        .expect("Failed to create Redis cache manager");
+    let is_explicit = std::env::var("TEST_REDIS_URL").is_ok();
+    let cache_manager = match CacheManager::new_from_config(&config).await {
+        Ok(manager) => manager,
+        Err(e) => {
+            if is_explicit {
+                panic!("Redis connection failed (TEST_REDIS_URL is set): {}", e);
+            } else {
+                println!("Redis not available, skipping Redis edge case test: {}", e);
+                return;
+            }
+        }
+    };
 
     let typed_cache = cache_manager.cache::<ModelCost>();
 
@@ -261,7 +281,8 @@ async fn test_model_cost_cache_comparison_memory_vs_redis() {
 
     let redis_config = CacheConfig {
         backend: "redis".to_string(),
-        redis_url: "redis://localhost:6379".to_string(),
+        redis_url: std::env::var("TEST_REDIS_URL")
+            .unwrap_or_else(|_| "redis://localhost:6379".to_string()),
         redis_key_prefix: "test_comparison:".to_string(),
         validation_ttl: 3600,
         max_entries: 1000,

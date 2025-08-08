@@ -352,11 +352,21 @@ impl PostgresTestDb {
         let database_name = format!("test_db_{}", Uuid::new_v4().to_string().replace('-', "_"));
         let base_url = std::env::var("TEST_POSTGRES_URL")
             .unwrap_or_else(|_| "postgresql://localhost/postgres".to_string());
+        let is_explicit = std::env::var("TEST_POSTGRES_URL").is_ok();
         let base_without_db = base_url.trim_end_matches("/postgres");
         let database_url = format!("{base_without_db}/{database_name}");
 
         // Connect to postgres database to create the test database
-        let pool = sqlx::postgres::PgPool::connect(&base_url).await?;
+        let pool = match sqlx::postgres::PgPool::connect(&base_url).await {
+            Ok(pool) => pool,
+            Err(e) => {
+                if is_explicit {
+                    panic!("PostgreSQL connection failed (TEST_POSTGRES_URL is set): {}", e);
+                } else {
+                    return Err(e.into());
+                }
+            }
+        };
 
         // Create the temporary database
         sqlx::query(&format!("CREATE DATABASE \"{database_name}\""))
