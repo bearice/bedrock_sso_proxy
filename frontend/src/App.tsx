@@ -2,12 +2,13 @@ import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-d
 import { LoginPage } from './pages/LoginPage';
 import { DashboardPage } from './pages/DashboardPage';
 import { CallbackPage } from './pages/CallbackPage';
+import { AdminPage } from './pages/admin/AdminPage';
 import { AuthProvider } from './contexts/AuthContext';
 import { useAuth } from './hooks/useAuth';
 import './App.css';
 
 function AppContent() {
-  const { isAuthenticated, loading } = useAuth();
+  const { isAuthenticated, loading, isAdmin } = useAuth();
 
   if (loading) {
     return (
@@ -80,6 +81,30 @@ function AppContent() {
                 : (() => {
                     return <Navigate to="/login" replace />;
                   })()
+            }
+          />
+          <Route
+            path="/admin"
+            element={
+              isAuthenticated && isAdmin ? (
+                <Navigate to="/admin/users" replace />
+              ) : isAuthenticated ? (
+                <Navigate to="/dashboard/overview" replace />
+              ) : (
+                <Navigate to="/login" replace />
+              )
+            }
+          />
+          <Route
+            path="/admin/*"
+            element={
+              isAuthenticated && isAdmin ? (
+                <AdminPage />
+              ) : isAuthenticated ? (
+                <Navigate to="/dashboard/overview" replace />
+              ) : (
+                <Navigate to="/login" replace />
+              )
             }
           />
           <Route

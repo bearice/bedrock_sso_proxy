@@ -8,10 +8,10 @@ import { useValidateToken } from '../hooks/api/auth';
 import type { components } from '../generated/api';
 
 type UserInfo = components['schemas']['Model']; // The /auth/me endpoint returns Model schema
-import { LogOut, User, Key, Activity, Settings } from 'lucide-react';
+import { LogOut, User, Key, Activity, Settings, Shield } from 'lucide-react';
 
 export function DashboardPage() {
-  const { token, provider, user, logout } = useAuth();
+  const { token, provider, user, logout, isAdmin } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
   const { data: userInfo } = useValidateToken(token || undefined);
@@ -19,13 +19,14 @@ export function DashboardPage() {
   const [userInfoState, setUserInfoState] = useState<UserInfo | null>(null);
 
   // Determine active tab from URL
-  const getActiveTabFromPath = (pathname: string): 'dashboard' | 'api-keys' | 'usage' => {
+  const getActiveTabFromPath = (pathname: string): 'dashboard' | 'api-keys' | 'usage' | 'admin' => {
     if (pathname.includes('/api-keys')) return 'api-keys';
     if (pathname.includes('/usage')) return 'usage';
+    if (pathname.includes('/admin')) return 'admin';
     return 'dashboard';
   };
 
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'api-keys' | 'usage'>(
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'api-keys' | 'usage' | 'admin'>(
     getActiveTabFromPath(location.pathname)
   );
 
@@ -212,6 +213,39 @@ export function DashboardPage() {
             <Activity size={18} />
             Usage Tracking
           </button>
+          {isAdmin && (
+            <button
+              onClick={() => navigate('/admin')}
+              style={{
+                flex: 1,
+                padding: '1rem 1.5rem',
+                border: 'none',
+                background: activeTab === 'admin' ? '#4f46e5' : 'transparent',
+                color: activeTab === 'admin' ? 'white' : '#6c757d',
+                cursor: 'pointer',
+                fontSize: '1rem',
+                fontWeight: 500,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '0.5rem',
+                transition: 'all 0.2s ease',
+              }}
+              onMouseEnter={(e) => {
+                if (activeTab !== 'admin') {
+                  e.currentTarget.style.background = '#f8f9fa';
+                }
+              }}
+              onMouseLeave={(e) => {
+                if (activeTab !== 'admin') {
+                  e.currentTarget.style.background = 'transparent';
+                }
+              }}
+            >
+              <Shield size={18} />
+              Admin
+            </button>
+          )}
         </div>
       </div>
 

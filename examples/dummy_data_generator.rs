@@ -61,6 +61,9 @@ enum Commands {
         /// Seed for random number generator
         #[arg(short, long)]
         seed: Option<u64>,
+        /// Create a single user with a specific email
+        #[arg(long)]
+        email: Option<String>,
     },
     /// Generate both records and summaries
     All {
@@ -168,55 +171,75 @@ impl DataGenerator {
         Ok(users)
     }
 
-    async fn generate_users(&mut self, count: usize) -> Result<(), Box<dyn std::error::Error>> {
-        println!("Generating {count} test users...");
-
-        let providers = ["google", "github", "microsoft", "gitlab"];
-        let domains = ["example.com", "test.org", "demo.net", "sample.io"];
-        let names = vec![
-            "Alice", "Bob", "Charlie", "Diana", "Eve", "Frank", "Grace", "Henry", "Ivy", "Jack",
-            "Kate", "Liam", "Maya", "Noah", "Olivia", "Paul", "Quinn", "Ruby", "Sam", "Tara",
-            "Uma", "Victor", "Wendy", "Xander", "Yara", "Zoe",
-        ];
-
-        for i in 0..count {
-            if i % 10 == 0 {
-                println!("Generated {i} / {count} users");
-            }
-
-            let provider = providers.choose(&mut self.rng).unwrap();
-            let domain = domains.choose(&mut self.rng).unwrap();
-            let name = names.choose(&mut self.rng).unwrap();
-
-            let user_id = self.rng.random_range(100000..999999);
-            let provider_user_id = format!("test_{user_id}");
-            let email = format!("{}{}@{}", name.to_lowercase(), user_id, domain);
-            let display_name = format!("{name} Test{user_id}");
-
-            let now = Utc::now();
-            let created_at = now - Duration::days(self.rng.random_range(1..365) as i64);
-
+    async fn generate_users(
+        &mut self,
+        count: usize,
+        email_override: Option<String>,
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        if let Some(email) = email_override {
+            println!("Generating a single user with email: {email}");
             let user = UserRecord {
-                id: 0, // Will be auto-assigned
-                provider_user_id,
-                provider: provider.to_string(),
+                id: 0,
+                provider_user_id: format!("test_{}", self.rng.random_range(100000..999999)),
+                provider: "google".to_string(),
                 email,
-                display_name: Some(display_name),
-                created_at,
-                updated_at: created_at,
-                last_login: if self.rng.random_bool(0.8) {
-                    Some(created_at + Duration::days(self.rng.random_range(1..30) as i64))
-                } else {
-                    None
-                },
+                display_name: Some("Test Admin User".to_string()),
+                created_at: Utc::now(),
+                updated_at: Utc::now(),
+                last_login: Some(Utc::now()),
                 ..Default::default()
             };
-
             self.database.users().upsert(&user).await?;
+            println!("Successfully generated single user.");
+        } else {
+            println!("Generating {count} test users...");
+
+            let providers = ["google", "github", "microsoft", "gitlab"];
+            let domains = ["example.com", "test.org", "demo.net", "sample.io"];
+            let names = vec![
+                "Alice", "Bob", "Charlie", "Diana", "Eve", "Frank", "Grace", "Henry", "Ivy", "Jack",
+                "Kate", "Liam", "Maya", "Noah", "Olivia", "Paul", "Quinn", "Ruby", "Sam", "Tara",
+                "Uma", "Victor", "Wendy", "Xander", "Yara", "Zoe",
+            ];
+
+            for i in 0..count {
+                if i % 10 == 0 {
+                    println!("Generated {i} / {count} users");
+                }
+
+                let provider = providers.choose(&mut self.rng).unwrap();
+                let domain = domains.choose(&mut self.rng).unwrap();
+                let name = names.choose(&mut self.rng).unwrap();
+
+                let user_id = self.rng.random_range(100000..999999);
+                let provider_user_id = format!("test_{user_id}");
+                let email = format!("{}{}@{}", name.to_lowercase(), user_id, domain);
+                let display_name = format!("{name} Test{user_id}");
+
+                let now = Utc::now();
+                let created_at = now - Duration::days(self.rng.random_range(1..365) as i64);
+
+                let user = UserRecord {
+                    id: 0, // Will be auto-assigned
+                    provider_user_id,
+                    provider: provider.to_string(),
+                    email,
+                    display_name: Some(display_name),
+                    created_at,
+                    updated_at: created_at,
+                    last_login: if self.rng.random_bool(0.8) {
+                        Some(created_at + Duration::days(self.rng.random_range(1..30) as i64))
+                    } else {
+                        None
+                    },
+                    ..Default::default()
+                };
+
+                self.database.users().upsert(&user).await?;
+            }
+
+            println!("Successfully generated {count} test users");
         }
-
-        println!("Successfully generated {count} test users");
-
         // Update our internal users list
         self.users = Self::get_all_users_from_db(&self.database).await?;
 
@@ -606,9 +629,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 .generate_usage_summaries(period.into(), days_back, users)
                 .await?;
         }
-        Commands::Users { count, seed } => {
+        Commands::Users { count, seed, email } => {
             let mut generator = DataGenerator::new(database, seed).await?;
-            generator.generate_users(count).await?;
+            generator.generate_users(count, email).await?;
         }
         Commands::All {
             record_count,
@@ -622,7 +645,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             // Generate users first if none exist
             if generator.users.is_empty() {
                 println!("No users found. Generating {users} test users first...");
-                generator.generate_users(users).await?;
+                generator.generate_users(users, None).await?;
             }
 
             generator

@@ -14,6 +14,7 @@ interface AuthState {
   user: string | null;
   expiresAt: number | null;
   scopes: string[];
+  isAdmin: boolean;
 }
 
 const STORAGE_KEY = 'bedrock_auth';
@@ -21,7 +22,14 @@ const STORAGE_KEY = 'bedrock_auth';
 // Parse JWT payload to get expiration and user info
 function parseJwtPayload(
   token: string
-): { sub?: string; exp?: number; scopes?: string[]; email?: string; provider?: string } | null {
+): {
+  sub?: string;
+  exp?: number;
+  scopes?: string[];
+  email?: string;
+  provider?: string;
+  admin?: boolean;
+} | null {
   try {
     const payload = token.split('.')[1];
     const decoded = atob(payload);
@@ -51,6 +59,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     user: null,
     expiresAt: null,
     scopes: [],
+    isAdmin: false,
   });
 
   const [loading, setLoading] = useState(true);
@@ -74,6 +83,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       user: null,
       expiresAt: null,
       scopes: [],
+      isAdmin: false,
     });
   }, [saveAuthState]);
 
@@ -92,6 +102,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             refreshToken: response.refresh_token,
             expiresAt: payload?.exp || null,
             scopes: payload?.scopes || response.scope.split(' '),
+            isAdmin: payload?.admin || false,
           };
 
           // Save to localStorage
@@ -138,6 +149,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 refreshToken: response.refresh_token,
                 expiresAt: payload?.exp || null,
                 scopes: payload?.scopes || response.scope.split(' '),
+                isAdmin: payload?.admin || false,
               };
 
               setAuthState(newAuthState);
@@ -153,6 +165,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 user: null,
                 expiresAt: null,
                 scopes: [],
+                isAdmin: false,
               });
               localStorage.removeItem(STORAGE_KEY);
             }
@@ -166,6 +179,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
               user: null,
               expiresAt: null,
               scopes: [],
+              isAdmin: false,
             });
             localStorage.removeItem(STORAGE_KEY);
           }
@@ -184,6 +198,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           user: null,
           expiresAt: null,
           scopes: [],
+          isAdmin: false,
         });
         localStorage.removeItem(STORAGE_KEY);
       } finally {
@@ -207,6 +222,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         user: payload?.email || payload?.sub || null,
         expiresAt: payload?.exp || null,
         scopes: payload?.scopes || tokenResponse.scope.split(' '),
+        isAdmin: payload?.admin || false,
       };
 
       saveAuthState(newAuthState);
