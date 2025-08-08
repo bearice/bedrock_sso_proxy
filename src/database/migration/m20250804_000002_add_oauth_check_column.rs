@@ -14,7 +14,7 @@ impl MigrationTrait for Migration {
                     .add_column(
                         ColumnDef::new(Users::LastOauthCheck)
                             .timestamp_with_time_zone()
-                            .null()
+                            .null(),
                     )
                     .to_owned(),
             )
@@ -25,11 +25,7 @@ impl MigrationTrait for Migration {
             .alter_table(
                 Table::alter()
                     .table(Users::Table)
-                    .add_column(
-                        ColumnDef::new(Users::ProviderRefreshToken)
-                            .text()
-                            .null()
-                    )
+                    .add_column(ColumnDef::new(Users::ProviderRefreshToken).text().null())
                     .to_owned(),
             )
             .await

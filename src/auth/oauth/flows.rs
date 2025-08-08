@@ -274,15 +274,13 @@ impl OAuthFlows {
 
         // Store user information persistently if storage is available
         let (db_user_id, is_admin) = {
-            let user_record = UserRecord::new(
-                &request.provider,
-                provider_user_id,
-                email,
-            )
-            .with_display_name(display_name)
-            .with_provider_refresh_token(
-                token_result.refresh_token().map(|rt| rt.secret().to_string())
-            );
+            let user_record = UserRecord::new(&request.provider, provider_user_id, email)
+                .with_display_name(display_name)
+                .with_provider_refresh_token(
+                    token_result
+                        .refresh_token()
+                        .map(|rt| rt.secret().to_string()),
+                );
 
             let db_user_id = self
                 .database
@@ -694,10 +692,7 @@ impl OAuthFlows {
     }
 
     /// Verify if user's account is still active with OAuth provider using stored refresh token
-    pub async fn verify_user_with_provider(
-        &self,
-        user: &UserRecord,
-    ) -> Result<(), AppError> {
+    pub async fn verify_user_with_provider(&self, user: &UserRecord) -> Result<(), AppError> {
         let provider_refresh_token = match &user.provider_refresh_token {
             Some(token) => token,
             None => {
@@ -706,23 +701,26 @@ impl OAuthFlows {
                     provider = %user.provider,
                     "No provider refresh token stored for user"
                 );
-                return Err(AppError::Unauthorized("No provider refresh token available".to_string()));
+                return Err(AppError::Unauthorized(
+                    "No provider refresh token available".to_string(),
+                ));
             }
         };
 
         let client = self.get_oauth_client(&user.provider)?;
-        
+
         // Try to refresh the access token using the stored provider refresh token
         // If this fails, the user's account has been revoked by the provider
         let refresh_token = oauth2::RefreshToken::new(provider_refresh_token.clone());
-        
+
         // Create HTTP client for token refresh
         let http_client = reqwest::ClientBuilder::new()
             .redirect(reqwest::redirect::Policy::none())
             .build()
             .map_err(|e| AppError::Internal(format!("HTTP client error: {e}")))?;
 
-        match client.exchange_refresh_token(&refresh_token)
+        match client
+            .exchange_refresh_token(&refresh_token)
             .request_async(&http_client)
             .await
         {
@@ -733,7 +731,7 @@ impl OAuthFlows {
                     "OAuth provider verification successful"
                 );
                 Ok(())
-            },
+            }
             Err(e) => {
                 tracing::warn!(
                     user_id = %user.id,

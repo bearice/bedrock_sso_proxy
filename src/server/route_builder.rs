@@ -1,5 +1,5 @@
 use crate::{
-    auth::middleware::{admin_auth_middleware, universal_auth_middleware, jwt_only_auth_middleware},
+    auth::middleware::{admin_auth_middleware, auth_middleware},
     server::Server,
     utils::RequestIdExt,
 };
@@ -20,7 +20,7 @@ impl RouteHelpers {
             path,
             routes.layer(middleware::from_fn_with_state(
                 server.clone(),
-                jwt_only_auth_middleware,
+                auth_middleware,
             )),
         )
     }
@@ -32,7 +32,7 @@ impl RouteHelpers {
             routes
                 .layer(middleware::from_fn_with_state(
                     server.clone(),
-                    jwt_only_auth_middleware,
+                    auth_middleware,
                 ))
                 .layer(middleware::from_fn_with_state(
                     server.clone(),
@@ -51,7 +51,7 @@ impl RouteHelpers {
             path,
             routes.layer(middleware::from_fn_with_state(
                 server.clone(),
-                universal_auth_middleware,
+                auth_middleware,
             )),
         )
     }
@@ -69,7 +69,7 @@ impl RouteHelpers {
                 .layer(DefaultBodyLimit::max(max_size))
                 .layer(middleware::from_fn_with_state(
                     server.clone(),
-                    universal_auth_middleware,
+                    auth_middleware,
                 )),
         )
     }

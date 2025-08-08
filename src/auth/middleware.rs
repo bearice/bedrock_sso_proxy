@@ -1,16 +1,16 @@
 use crate::database::DatabaseManager;
-use crate::database::entities::{UserRecord, UserState};
 use crate::database::entities::api_keys::{API_KEY_PREFIX, hash_api_key, validate_api_key_format};
+use crate::database::entities::{UserRecord, UserState};
 use crate::error::AppError;
 use crate::server::Server;
 use crate::utils::RequestIdExt;
-use chrono::{Duration, Utc};
 use axum::{
     extract::{FromRequestParts, Request, State},
     http::{HeaderName, header::AUTHORIZATION, request::Parts},
     middleware::Next,
     response::Response,
 };
+use chrono::{Duration, Utc};
 use std::sync::Arc;
 use tracing::{trace, warn};
 
@@ -18,7 +18,7 @@ use tracing::{trace, warn};
 static X_API_KEY: HeaderName = HeaderName::from_static("x-api-key");
 
 /// Extracts bearer token from Authorization header string.
-/// 
+///
 /// **Expected format:** `"Bearer <token>"`
 /// **Returns:** The token portion (everything after "Bearer ")
 fn extract_bearer_token(auth_header: &str) -> Result<&str, AppError> {
@@ -30,18 +30,18 @@ fn extract_bearer_token(auth_header: &str) -> Result<&str, AppError> {
     Ok(&auth_header[7..])
 }
 
-/// Universal authentication middleware supporting multiple authentication methods:
-/// 
+/// Authentication middleware supporting multiple authentication methods:
+///
 /// **JWT Authentication:**
 /// - `Authorization: Bearer <jwt_token>`
-/// 
+///
 /// **API Key Authentication:**
 /// - `Authorization: Bearer SSOK_<api_key>` (API key with Bearer prefix)
 /// - `X-API-Key: SSOK_<api_key>` (API key in dedicated header)
-/// 
+///
 /// Returns authenticated UserRecord in request extensions for downstream handlers.
 /// Validates user account state and performs background OAuth provider verification.
-pub async fn universal_auth_middleware(
+pub async fn auth_middleware(
     State(server): State<Server>,
     mut request: Request,
     next: Next,
@@ -49,11 +49,12 @@ pub async fn universal_auth_middleware(
     let request_id = request.extensions().request_id().as_str();
     // Try JWT authentication first
     let user = if let Some(auth_header) = request.headers().get(AUTHORIZATION) {
-        let auth_str = auth_header.to_str()
+        let auth_str = auth_header
+            .to_str()
             .map_err(|_| AppError::Unauthorized("Invalid Authorization header".to_string()))?;
-        
+
         let token = extract_bearer_token(auth_str)?;
-        
+
         // Check if it's an API key (has the SSOK_ prefix)
         if token.starts_with(API_KEY_PREFIX) {
             if !server.config.api_keys.enabled {
@@ -76,9 +77,10 @@ pub async fn universal_auth_middleware(
                 "API key authentication is disabled".to_string(),
             ));
         }
-        let api_key = api_key_header.to_str()
+        let api_key = api_key_header
+            .to_str()
             .map_err(|_| AppError::Unauthorized("Invalid API key header".to_string()))?;
-        
+
         trace!(request_id = %request_id, auth_method = "x_api_key", "Authenticating request");
         authenticate_with_api_key(api_key, &server, &request_id).await?
     } else {
@@ -94,7 +96,7 @@ pub async fn universal_auth_middleware(
 }
 
 /// Authenticates JWT token and returns associated UserRecord.
-/// 
+///
 /// **Process:**
 /// 1. Validates JWT signature and expiration
 /// 2. Extracts user ID from token claims
@@ -115,7 +117,7 @@ async fn authenticate_with_jwt(
 }
 
 /// Authenticates API key and returns associated UserRecord.
-/// 
+///
 /// **Process:**
 /// 1. Validates API key format (SSOK_ prefix)
 /// 2. Hashes API key for secure database lookup
@@ -173,10 +175,10 @@ async fn get_user_record(
     // Check if user account is active
     if !user.state.is_active() {
         warn!(
-            user_id = %user.id, 
-            email = %user.email, 
+            user_id = %user.id,
+            email = %user.email,
             state = ?user.state,
-            request_id = %request_id, 
+            request_id = %request_id,
             "User account is not active"
         );
         return Err(AppError::Unauthorized(format!(
@@ -187,7 +189,8 @@ async fn get_user_record(
     }
 
     // Check if we need to verify OAuth provider status (every 24 hours)
-    let needs_oauth_check = user.last_oauth_check
+    let needs_oauth_check = user
+        .last_oauth_check
         .map(|last_check| Utc::now() - last_check > Duration::hours(24))
         .unwrap_or(true); // Check if never verified
 
@@ -197,9 +200,16 @@ async fn get_user_record(
         let database_clone = server.database.clone();
         let user_clone = user.clone();
         let request_id_clone = request_id.to_string();
-        
+
         tokio::spawn(async move {
-            if let Err(e) = perform_oauth_verification(&user_clone, &oauth_service_clone, &database_clone, &request_id_clone).await {
+            if let Err(e) = perform_oauth_verification(
+                &user_clone,
+                &oauth_service_clone,
+                &database_clone,
+                &request_id_clone,
+            )
+            .await
+            {
                 warn!(
                     user_id = %user_clone.id,
                     error = %e,
@@ -215,49 +225,13 @@ async fn get_user_record(
     Ok(user)
 }
 
-/// JWT-only authentication middleware for web UI routes.
-/// 
-/// **Accepts only:**
-/// - `Authorization: Bearer <jwt_token>`
-/// 
-/// **Rejects:**
-/// - API keys (SSOK_ prefixed tokens)
-/// - X-API-Key headers
-/// 
-/// Returns authenticated UserRecord in request extensions for downstream handlers.
-pub async fn jwt_only_auth_middleware(
-    State(server): State<Server>,
-    mut request: Request,
-    next: Next,
-) -> Result<Response, AppError> {
-    let request_id = request.extensions().request_id().as_str();
-    
-    // Extract and validate Authorization header
-    let auth_header = request
-        .headers()
-        .get(AUTHORIZATION)
-        .and_then(|header| header.to_str().ok())
-        .ok_or_else(|| AppError::Unauthorized("Missing Authorization header".to_string()))?;
-
-    let token = extract_bearer_token(auth_header)?;
-
-    // Authenticate with JWT and get UserRecord
-    let user = authenticate_with_jwt(token, &server, &request_id).await?;
-
-    // Add UserRecord to request extensions for downstream handlers
-    request.extensions_mut().insert(user);
-
-    Ok(next.run(request).await)
-}
-
-
 /// Admin authorization middleware that verifies user has admin permissions.
-/// 
+///
 /// **Requirements:**
-/// - Must be used after an authentication middleware (universal_auth_middleware or jwt_only_auth_middleware)
+/// - Must be used after the authentication middleware (auth_middleware)
 /// - User's email must be in the configured admin.emails list
 /// - Email comparison is case-insensitive
-/// 
+///
 /// **Returns:**
 /// - 200: User is authenticated admin
 /// - 401: No UserRecord found in extensions (authentication middleware missing)
@@ -286,14 +260,17 @@ pub async fn admin_auth_middleware(
 }
 
 /// Axum extractor for authenticated UserRecord from request extensions.
-/// 
+///
 /// **Usage in route handlers:**
 /// ```rust
+/// use bedrock_sso_proxy::auth::middleware::UserExtractor;
+/// use axum::response::IntoResponse;
+///
 /// async fn my_handler(UserExtractor(user): UserExtractor) -> impl IntoResponse {
 ///     format!("Hello, {}!", user.email)
 /// }
 /// ```
-/// 
+///
 /// **Requirements:**
 /// - Route must use an authentication middleware that sets UserRecord in extensions
 /// - Returns 401 Unauthorized if no UserRecord is found
@@ -316,13 +293,13 @@ where
 }
 
 /// Background task: Verifies user account with OAuth provider and updates state.
-/// 
+///
 /// **Process:**
 /// 1. Contacts OAuth provider to verify user account status
 /// 2. Updates user.last_oauth_check timestamp
 /// 3. If verification succeeds: Sets user state to Active
 /// 4. If verification fails: Sets user state to Expired
-/// 
+///
 /// **Frequency:** Runs every 24 hours per user (non-blocking background task)
 async fn perform_oauth_verification(
     user: &UserRecord,
@@ -331,7 +308,7 @@ async fn perform_oauth_verification(
     request_id: &str,
 ) -> Result<(), AppError> {
     let now = Utc::now();
-    
+
     // Try to verify with OAuth provider
     match oauth_service.verify_user_with_provider(user).await {
         Ok(()) => {
@@ -342,7 +319,7 @@ async fn perform_oauth_verification(
                 updated_at: now,
                 ..user.clone()
             };
-            
+
             if let Err(e) = database.users().upsert(&updated_user).await {
                 warn!(
                     user_id = %user.id,
@@ -358,7 +335,7 @@ async fn perform_oauth_verification(
                     "OAuth provider verification successful"
                 );
             }
-        },
+        }
         Err(_) => {
             // Verification failed - mark user as expired
             let updated_user = UserRecord {
@@ -367,7 +344,7 @@ async fn perform_oauth_verification(
                 updated_at: now,
                 ..user.clone()
             };
-            
+
             if let Err(e) = database.users().upsert(&updated_user).await {
                 warn!(
                     user_id = %user.id,
@@ -383,11 +360,13 @@ async fn perform_oauth_verification(
                     "OAuth provider verification failed - user marked as expired"
                 );
             }
-            
-            return Err(AppError::Unauthorized("Account no longer valid with OAuth provider".to_string()));
+
+            return Err(AppError::Unauthorized(
+                "Account no longer valid with OAuth provider".to_string(),
+            ));
         }
     }
-    
+
     Ok(())
 }
 
@@ -408,39 +387,10 @@ mod tests {
         "success"
     }
 
-
     fn create_test_token(jwt_service: &dyn JwtService, user_id: i32) -> String {
         let claims = crate::auth::jwt::OAuthClaims::new(user_id, 3600);
         jwt_service.create_oauth_token(&claims).unwrap()
     }
-
-
-    async fn create_test_user(
-        server: &crate::server::Server,
-        requested_id: i32,
-        email: &str,
-    ) -> i32 {
-        let user = crate::database::entities::UserRecord {
-            id: 0, // Let database assign ID
-            provider_user_id: format!("test_user_{requested_id}"),
-            provider: "test".to_string(),
-            email: email.to_string(),
-            display_name: Some(format!("Test User {requested_id}")),
-            created_at: chrono::Utc::now(),
-            updated_at: chrono::Utc::now(),
-            last_login: Some(chrono::Utc::now()),
-            ..Default::default() // Uses default state and other fields
-        };
-        server.database.users().upsert(&user).await.unwrap()
-    }
-
-
-
-
-
-
-
-
 
     // Admin middleware tests
     mod admin_middleware_tests {
@@ -490,7 +440,7 @@ mod tests {
                 ))
                 .layer(middleware::from_fn_with_state(
                     server.clone(),
-                    jwt_only_auth_middleware,
+                    auth_middleware,
                 ))
         }
 

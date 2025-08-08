@@ -81,7 +81,7 @@ fn create_test_router(server: &bedrock_sso_proxy::server::Server) -> Router {
         ))
         .layer(middleware::from_fn_with_state(
             server.clone(),
-            bedrock_sso_proxy::auth::middleware::jwt_only_auth_middleware,
+            bedrock_sso_proxy::auth::middleware::auth_middleware,
         ))
 }
 
