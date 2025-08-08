@@ -6,17 +6,24 @@ import { useAuth } from '../../hooks/useAuth';
 type User = components['schemas']['UserResponse'];
 
 export function UserManagement() {
-  const { loading: authLoading } = useAuth();
+  const { loading: authLoading, token } = useAuth();
   const { data, isLoading, error } = useQuery({
-    queryKey: ['admin_users'],
+    queryKey: ['admin_users', token],
     queryFn: async () => {
-      const { data, error } = await apiClient.GET('/api/admin/users');
+      if (!token) {
+        throw new Error('No token provided');
+      }
+      const { data, error } = await apiClient.GET('/api/admin/users', {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
       if (error) {
         throw new Error(error.error);
       }
       return data;
     },
-    enabled: !authLoading,
+    enabled: !authLoading && !!token,
   });
 
   if (isLoading || authLoading) {
