@@ -32,10 +32,10 @@ async fn create_redis_cache_manager() -> Option<CacheManager> {
         Err(e) => {
             if is_explicit {
                 // TEST_REDIS_URL was explicitly set, so this should be an error
-                panic!("Redis connection failed (TEST_REDIS_URL is set): {}", e);
+                panic!("Redis connection failed (TEST_REDIS_URL is set): {e}");
             } else {
                 // TEST_REDIS_URL was not set, skip test gracefully
-                println!("Redis not available, skipping test: {}", e);
+                println!("Redis not available, skipping test: {e}");
                 None
             }
         }

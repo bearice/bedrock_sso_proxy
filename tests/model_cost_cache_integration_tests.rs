@@ -117,9 +117,9 @@ async fn test_model_cost_cache_with_redis_backend() {
         Ok(manager) => manager,
         Err(e) => {
             if is_explicit {
-                panic!("Redis connection failed (TEST_REDIS_URL is set): {}", e);
+                panic!("Redis connection failed (TEST_REDIS_URL is set): {e}");
             } else {
-                println!("Redis not available, skipping Redis test: {}", e);
+                println!("Redis not available, skipping Redis test: {e}");
                 return;
             }
         }
@@ -219,9 +219,9 @@ async fn test_model_cost_cache_edge_case_decimals() {
         Ok(manager) => manager,
         Err(e) => {
             if is_explicit {
-                panic!("Redis connection failed (TEST_REDIS_URL is set): {}", e);
+                panic!("Redis connection failed (TEST_REDIS_URL is set): {e}");
             } else {
-                println!("Redis not available, skipping Redis edge case test: {}", e);
+                println!("Redis not available, skipping Redis edge case test: {e}");
                 return;
             }
         }
