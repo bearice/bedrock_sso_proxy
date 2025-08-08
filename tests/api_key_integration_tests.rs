@@ -2,189 +2,130 @@ use axum::{
     body::Body,
     http::{Request, StatusCode},
 };
-use bedrock_sso_proxy::{
-    auth::api_key::CreateApiKeyRequest,
-    server::Server,
-    test_utils::{TestServerBuilder, create_test_jwt, create_test_user_with_data},
-};
-use tower::ServiceExt;
+use bedrock_sso_proxy::auth::api_key::{CreateApiKeyRequest, CreateApiKeyResponse};
 
-async fn create_test_server() -> Server {
-    let mut config = bedrock_sso_proxy::config::Config::default();
-    config.api_keys.enabled = true;
+mod common;
+use common::{RequestBuilder, TestHarness};
 
-    TestServerBuilder::new().with_config(config).build().await
+/// Helper function to create an API key for a given user
+async fn create_api_key(
+    harness: &TestHarness,
+    user_email: &str,
+    key_name: &str,
+    expires_in_days: Option<u32>,
+) -> (String, String) {
+    let user_id = harness.create_test_user(user_email).await;
+    let jwt_token = harness.create_integration_token(user_id);
+
+    let create_request = CreateApiKeyRequest {
+        name: key_name.to_string(),
+        expires_in_days,
+    };
+
+    let request = Request::builder()
+        .uri("/api/keys")
+        .method("POST")
+        .header("Authorization", format!("Bearer {}", jwt_token))
+        .header("Content-Type", "application/json")
+        .body(Body::from(serde_json::to_string(&create_request).unwrap()))
+        .unwrap();
+
+    let response = harness.make_request(request).await;
+    assert_eq!(response.status(), StatusCode::OK, "Failed to create API key");
+
+    let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    let create_response: CreateApiKeyResponse = serde_json::from_slice(&body).unwrap();
+
+    (create_response.key, jwt_token)
 }
 
 #[tokio::test]
 async fn test_api_key_authentication_with_authorization_header() {
-    let server = create_test_server().await;
-    let user_id =
-        create_test_user_with_data(&server.database, "test_user_1", "test", "test1@example.com")
-            .await;
-    let app = server.create_app();
-
-    // First, create an API key via JWT authentication
-    let jwt_token = create_test_jwt(&server.jwt_service, user_id);
-    let create_request = CreateApiKeyRequest {
-        name: "Test API Key".to_string(),
-        expires_in_days: Some(30),
-    };
-
-    let request = Request::builder()
-        .uri("/api/keys")
-        .method("POST")
-        .header("Authorization", format!("Bearer {jwt_token}"))
-        .header("Content-Type", "application/json")
-        .body(Body::from(serde_json::to_string(&create_request).unwrap()))
-        .unwrap();
-
-    let response = app.clone().oneshot(request).await.unwrap();
-    assert_eq!(response.status(), StatusCode::OK);
-
-    let body = axum::body::to_bytes(response.into_body(), usize::MAX)
-        .await
-        .unwrap();
-    let create_response: bedrock_sso_proxy::auth::api_key::CreateApiKeyResponse =
-        serde_json::from_slice(&body).unwrap();
-
-    let api_key = create_response.key;
+    let harness = TestHarness::new_for_security_tests().await;
+    let (api_key, _) = create_api_key(
+        &harness,
+        "test1@example.com",
+        "Test API Key",
+        Some(30),
+    )
+    .await;
     assert!(api_key.starts_with("SSOK_"));
 
     // Now test using the API key to access Bedrock API
-    let bedrock_request = Request::builder()
-        .uri("/bedrock/model/anthropic.claude-sonnet-4-20250514-v1:0/invoke")
-        .method("POST")
-        .header("Authorization", format!("Bearer {api_key}"))
-        .header("Content-Type", "application/json")
-        .body(Body::from(r#"{"anthropic_version": "bedrock-2023-05-31", "max_tokens": 100, "messages": [{"role": "user", "content": "Hello"}]}"#))
-        .unwrap();
+    let bedrock_request = RequestBuilder::invoke_model_with_api_key_bearer(
+        "anthropic.claude-sonnet-4-20250514-v1:0",
+        &api_key,
+        r#"{"anthropic_version": "bedrock-2023-05-31", "max_tokens": 100, "messages": [{"role": "user", "content": "Hello"}]}"#,
+    );
 
-    let response = app.oneshot(bedrock_request).await.unwrap();
-    // Should not be unauthorized (would get 401 if API key auth failed)
-    // Note: Will get 500 or other error due to AWS not being configured, but not 401
-    assert_ne!(response.status(), StatusCode::UNAUTHORIZED);
+    let response = harness.make_request(bedrock_request).await;
+    // With mock AWS, we should get a 200 OK
+    assert_eq!(response.status(), StatusCode::OK);
 }
 
 #[tokio::test]
 async fn test_api_key_authentication_with_x_api_key_header() {
-    let server = create_test_server().await;
-    let user_id =
-        create_test_user_with_data(&server.database, "test_user_2", "test", "test2@example.com")
-            .await;
-    let app = server.create_app();
-
-    // First, create an API key via JWT authentication
-    let jwt_token = create_test_jwt(&server.jwt_service, user_id);
-    let create_request = CreateApiKeyRequest {
-        name: "Test X-API-Key".to_string(),
-        expires_in_days: Some(30),
-    };
-
-    let request = Request::builder()
-        .uri("/api/keys")
-        .method("POST")
-        .header("Authorization", format!("Bearer {jwt_token}"))
-        .header("Content-Type", "application/json")
-        .body(Body::from(serde_json::to_string(&create_request).unwrap()))
-        .unwrap();
-
-    let response = app.clone().oneshot(request).await.unwrap();
-    assert_eq!(response.status(), StatusCode::OK);
-
-    let body = axum::body::to_bytes(response.into_body(), usize::MAX)
-        .await
-        .unwrap();
-    let create_response: bedrock_sso_proxy::auth::api_key::CreateApiKeyResponse =
-        serde_json::from_slice(&body).unwrap();
-
-    let api_key = create_response.key;
+    let harness = TestHarness::new_for_security_tests().await;
+    let (api_key, _) = create_api_key(
+        &harness,
+        "test2@example.com",
+        "Test X-API-Key",
+        Some(30),
+    )
+    .await;
 
     // Test using X-API-Key header instead of Authorization header
-    let anthropic_request = Request::builder()
-        .uri("/anthropic/v1/messages")
-        .method("POST")
-        .header("X-API-Key", &api_key)
-        .header("Content-Type", "application/json")
-        .body(Body::from(r#"{"model": "claude-sonnet-4-20250514", "max_tokens": 100, "messages": [{"role": "user", "content": "Hello"}]}"#))
-        .unwrap();
+    let anthropic_request = RequestBuilder::invoke_model_with_api_key_header(
+        "anthropic.claude-sonnet-4-20250514-v1:0",
+        &api_key,
+        r#"{"anthropic_version": "bedrock-2023-05-31", "max_tokens": 100, "messages": [{"role": "user", "content": "Hello"}]}"#,
+    );
 
-    let response = app.oneshot(anthropic_request).await.unwrap();
-    // Should not be unauthorized (would get 401 if API key auth failed)
-    assert_ne!(response.status(), StatusCode::UNAUTHORIZED);
+    let response = harness.make_request(anthropic_request).await;
+    // With mock AWS, we should get a 200 OK
+    assert_eq!(response.status(), StatusCode::OK);
 }
 
 #[tokio::test]
 async fn test_invalid_api_key_authentication() {
-    let server = create_test_server().await;
-    let app = server.create_app();
+    let harness = TestHarness::new_for_security_tests().await;
 
     // Test with invalid API key
-    let request = Request::builder()
-        .uri("/bedrock/model/anthropic.claude-sonnet-4-20250514-v1:0/invoke")
-        .method("POST")
-        .header("Authorization", "Bearer SSOK_invalid_key_12345678")
-        .header("Content-Type", "application/json")
-        .body(Body::from(r#"{"anthropic_version": "bedrock-2023-05-31", "max_tokens": 100, "messages": [{"role": "user", "content": "Hello"}]}"#))
-        .unwrap();
+    let request = RequestBuilder::invoke_model_with_api_key_bearer(
+        "anthropic.claude-sonnet-4-20250514-v1:0",
+        "SSOK_invalid_key_12345678",
+        r#"{"anthropic_version": "bedrock-2023-05-31", "max_tokens": 100, "messages": [{"role": "user", "content": "Hello"}]}"#,
+    );
 
-    let response = app.oneshot(request).await.unwrap();
+    let response = harness.make_request(request).await;
     assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
 }
 
 #[tokio::test]
 async fn test_api_key_disabled() {
-    let mut config = bedrock_sso_proxy::config::Config::default();
-    config.api_keys.enabled = false; // Disable API keys
-
-    let server = TestServerBuilder::new().with_config(config).build().await;
-
-    let app = server.create_app();
+    // The default harness (`new()`) has API keys disabled.
+    let harness = TestHarness::new().await;
 
     // Test with API key when disabled
-    let request = Request::builder()
-        .uri("/bedrock/model/anthropic.claude-sonnet-4-20250514-v1:0/invoke")
-        .method("POST")
-        .header("Authorization", "Bearer SSOK_some_key_12345678")
-        .header("Content-Type", "application/json")
-        .body(Body::from(r#"{"anthropic_version": "bedrock-2023-05-31", "max_tokens": 100, "messages": [{"role": "user", "content": "Hello"}]}"#))
-        .unwrap();
+    let request = RequestBuilder::invoke_model_with_api_key_bearer(
+        "anthropic.claude-sonnet-4-20250514-v1:0",
+        "SSOK_some_key_12345678",
+        r#"{"anthropic_version": "bedrock-2023-05-31", "max_tokens": 100, "messages": [{"role": "user", "content": "Hello"}]}"#,
+    );
 
-    let response = app.oneshot(request).await.unwrap();
+    let response = harness.make_request(request).await;
     assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
 }
 
 #[tokio::test]
 async fn test_revoked_api_key_authentication() {
-    let server = create_test_server().await;
-    let user_id =
-        create_test_user_with_data(&server.database, "test_user_3", "test", "test3@example.com")
-            .await;
-    let app = server.create_app();
+    let harness = TestHarness::new_for_security_tests().await;
 
     // Create an API key
-    let jwt_token = create_test_jwt(&server.jwt_service, user_id);
-    let create_request = CreateApiKeyRequest {
-        name: "Test Revoke Key".to_string(),
-        expires_in_days: Some(30),
-    };
-
-    let request = Request::builder()
-        .uri("/api/keys")
-        .method("POST")
-        .header("Authorization", format!("Bearer {jwt_token}"))
-        .header("Content-Type", "application/json")
-        .body(Body::from(serde_json::to_string(&create_request).unwrap()))
-        .unwrap();
-
-    let response = app.clone().oneshot(request).await.unwrap();
-    let body = axum::body::to_bytes(response.into_body(), usize::MAX)
-        .await
-        .unwrap();
-    let create_response: bedrock_sso_proxy::auth::api_key::CreateApiKeyResponse =
-        serde_json::from_slice(&body).unwrap();
-
-    let api_key = create_response.key;
+    let (api_key, jwt_token) =
+        create_api_key(&harness, "test3@example.com", "Test Revoke Key", Some(30)).await;
 
     // Hash the API key for revocation (endpoint expects key hash, not raw key)
     let key_hash = bedrock_sso_proxy::database::entities::api_keys::hash_api_key(&api_key);
@@ -197,77 +138,72 @@ async fn test_revoked_api_key_authentication() {
         .body(Body::empty())
         .unwrap();
 
-    let response = app.clone().oneshot(revoke_request).await.unwrap();
+    let response = harness.make_request(revoke_request).await;
     assert_eq!(response.status(), StatusCode::OK);
 
     // Try to use the revoked API key
-    let test_request = Request::builder()
-        .uri("/bedrock/model/anthropic.claude-sonnet-4-20250514-v1:0/invoke")
-        .method("POST")
-        .header("Authorization", format!("Bearer {api_key}"))
-        .header("Content-Type", "application/json")
-        .body(Body::from(r#"{"anthropic_version": "bedrock-2023-05-31", "max_tokens": 100, "messages": [{"role": "user", "content": "Hello"}]}"#))
-        .unwrap();
+    let test_request = RequestBuilder::invoke_model_with_api_key_bearer(
+        "anthropic.claude-sonnet-4-20250514-v1:0",
+        &api_key,
+        r#"{"anthropic_version": "bedrock-2023-05-31", "max_tokens": 100, "messages": [{"role": "user", "content": "Hello"}]}"#,
+    );
 
-    let response = app.oneshot(test_request).await.unwrap();
+    let response = harness.make_request(test_request).await;
     assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
 }
 
 #[tokio::test]
 async fn test_dual_authentication_support() {
-    let server = create_test_server().await;
-    let user_id =
-        create_test_user_with_data(&server.database, "test_user_4", "test", "test4@example.com")
-            .await;
-    let app = server.create_app();
+    let harness = TestHarness::new_for_security_tests().await;
+    let user_id = harness.create_test_user("test4@example.com").await;
+    let jwt_token = harness.create_integration_token(user_id);
 
     // Test JWT authentication still works
-    let jwt_token = create_test_jwt(&server.jwt_service, user_id);
-    let jwt_request = Request::builder()
-        .uri("/bedrock/model/anthropic.claude-sonnet-4-20250514-v1:0/invoke")
-        .method("POST")
-        .header("Authorization", format!("Bearer {jwt_token}"))
-        .header("Content-Type", "application/json")
-        .body(Body::from(r#"{"anthropic_version": "bedrock-2023-05-31", "max_tokens": 100, "messages": [{"role": "user", "content": "Hello"}]}"#))
-        .unwrap();
+    let jwt_request = RequestBuilder::invoke_model_with_auth(
+        "anthropic.claude-sonnet-4-20250514-v1:0",
+        &jwt_token,
+        r#"{"anthropic_version": "bedrock-2023-05-31", "max_tokens": 100, "messages": [{"role": "user", "content": "Hello"}]}"#,
+    );
 
-    let response = app.clone().oneshot(jwt_request).await.unwrap();
-    // Should not be unauthorized (would get 401 if JWT auth failed)
-    assert_ne!(response.status(), StatusCode::UNAUTHORIZED);
+    let response = harness.make_request(jwt_request).await;
+    assert_eq!(response.status(), StatusCode::OK);
 
     // Create and test API key authentication
-    let create_request = CreateApiKeyRequest {
-        name: "Dual Auth Test".to_string(),
-        expires_in_days: Some(30),
-    };
-
-    let request = Request::builder()
-        .uri("/api/keys")
-        .method("POST")
-        .header("Authorization", format!("Bearer {jwt_token}"))
-        .header("Content-Type", "application/json")
-        .body(Body::from(serde_json::to_string(&create_request).unwrap()))
-        .unwrap();
-
-    let response = app.clone().oneshot(request).await.unwrap();
-    let body = axum::body::to_bytes(response.into_body(), usize::MAX)
-        .await
-        .unwrap();
-    let create_response: bedrock_sso_proxy::auth::api_key::CreateApiKeyResponse =
-        serde_json::from_slice(&body).unwrap();
-
-    let api_key = create_response.key;
+    let (api_key, _) =
+        create_api_key(&harness, "test4@example.com", "Dual Auth Test", Some(30)).await;
 
     // Test API key authentication
-    let api_key_request = Request::builder()
-        .uri("/anthropic/v1/messages")
-        .method("POST")
-        .header("Authorization", format!("Bearer {api_key}"))
-        .header("Content-Type", "application/json")
-        .body(Body::from(r#"{"model": "claude-sonnet-4-20250514", "max_tokens": 100, "messages": [{"role": "user", "content": "Hello"}]}"#))
-        .unwrap();
+    let api_key_request = RequestBuilder::invoke_model_with_api_key_bearer(
+        "anthropic.claude-sonnet-4-20250514-v1:0",
+        &api_key,
+        r#"{"anthropic_version": "bedrock-2023-05-31", "max_tokens": 100, "messages": [{"role": "user", "content": "Hello"}]}"#,
+    );
 
-    let response = app.oneshot(api_key_request).await.unwrap();
-    // Should not be unauthorized (would get 401 if API key auth failed)
-    assert_ne!(response.status(), StatusCode::UNAUTHORIZED);
+    let response = harness.make_request(api_key_request).await;
+    assert_eq!(response.status(), StatusCode::OK);
+}
+
+#[tokio::test]
+async fn test_expired_api_key_is_rejected() {
+    let harness = TestHarness::new_for_security_tests().await;
+
+    // Create an API key that expires immediately by passing Some(0).
+    let (api_key, _) = create_api_key(
+        &harness,
+        "expired@example.com",
+        "Expired Key",
+        Some(0),
+    )
+    .await;
+
+    // Now, try to use the expired key.
+    let bedrock_request = RequestBuilder::invoke_model_with_api_key_bearer(
+        "anthropic.claude-sonnet-4-20250514-v1:0",
+        &api_key,
+        r#"{"anthropic_version": "bedrock-2023-05-31", "max_tokens": 100, "messages": [{"role": "user", "content": "Hello"}]}"#,
+    );
+
+    let response = harness.make_request(bedrock_request).await;
+    // Should be unauthorized because the key is expired.
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
 }

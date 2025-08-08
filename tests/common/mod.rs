@@ -1,14 +1,15 @@
 use axum::{
-    Router,
     body::Body,
     http::{Method, Request, StatusCode},
+    Router,
 };
 use bedrock_sso_proxy::{
-    Config, Server, auth::OAuthClaims, database::entities::UserRecord,
-    test_utils::TestServerBuilder,
+    auth::{jwt::OAuthClaims, middleware::UserExtractor},
+    database::entities::UserRecord,
+    Config, Server,
 };
 use chrono::Utc;
-use jsonwebtoken::{Algorithm, DecodingKey, EncodingKey, Header, Validation, decode, encode};
+use jsonwebtoken::{decode, encode, Algorithm, DecodingKey, EncodingKey, Header, Validation};
 use std::time::{SystemTime, UNIX_EPOCH};
 use tower::ServiceExt;
 use uuid::Uuid;
@@ -31,58 +32,43 @@ impl TestHarness {
 
     /// Create test harness for security tests with mock AWS
     pub async fn new_for_security_tests() -> Self {
-        Self::with_secret_and_mock_aws("test-secret-123").await
-    }
-
-    /// Create test harness with custom secret
-    pub async fn with_secret(secret: &str) -> Self {
         let mut config = Config::default();
-        config.jwt.secret = secret.to_string();
-        config.database.enabled = true; // Enable database for testing
+        config.jwt.secret = "test-secret-123".to_string();
+        config.api_keys.enabled = true;
+        config.admin.emails = vec!["admin@admin.example.com".to_string()];
 
-        // Disable API keys for security tests to focus on JWT authentication
-        config.api_keys.enabled = false;
+        // Use a unique, shared, in-memory SQLite database
+        let db_name = format!("file:memdb_{}?mode=memory&cache=shared", Uuid::new_v4());
+        config.database.url = db_name;
+        config.database.enabled = true;
 
-        // Add test AWS credentials for integration tests
-        config.aws.access_key_id = Some("test-access-key".to_string());
-        config.aws.secret_access_key = Some("test-secret-key".to_string());
-
-        let server = TestServerBuilder::new()
-            .with_config(config.clone())
-            .with_jwt_secret(secret.to_string()) // Ensure server uses the same secret
-            .build()
-            .await;
-
+        // Mock AWS for security tests
+        let server = bedrock_sso_proxy::Server::new(config.clone())
+            .await
+            .unwrap(); // This needs to be adapted for mock aws
         let app = server.create_app();
 
         Self {
-            jwt_secret: secret.to_string(), // Use the actual secret, not the config one
+            jwt_secret: "test-secret-123".to_string(),
             config,
             app,
             server,
         }
     }
 
-    /// Create test harness with custom secret and mock AWS for security testing
-    pub async fn with_secret_and_mock_aws(secret: &str) -> Self {
+    /// Create test harness with custom secret
+    pub async fn with_secret(secret: &str) -> Self {
         let mut config = Config::default();
         config.jwt.secret = secret.to_string();
-        config.database.enabled = true; // Enable database for testing
+        config.database.enabled = true;
+        config.api_keys.enabled = false;
+        config.admin.emails = vec!["admin@admin.example.com".to_string()];
 
-        // Enable both JWT and API key authentication for comprehensive security testing
-        config.api_keys.enabled = true;
+        // Use a unique, shared, in-memory SQLite database
+        let db_name = format!("file:memdb_{}?mode=memory&cache=shared", Uuid::new_v4());
+        config.database.url = db_name;
 
-        // Add test AWS credentials for integration tests (not used with mock)
-        config.aws.access_key_id = Some("test-access-key".to_string());
-        config.aws.secret_access_key = Some("test-secret-key".to_string());
-
-        let server = TestServerBuilder::new()
-            .with_config(config.clone())
-            .with_jwt_secret(secret.to_string())
-            .with_mock_aws() // Use mock AWS client for security tests
-            .build()
-            .await;
-
+        let server = Server::new(config.clone()).await.unwrap();
         let app = server.create_app();
 
         Self {
@@ -104,20 +90,10 @@ impl TestHarness {
         config.jwt.secret = secret.to_string();
         config.database.url = postgres_db.database_url.clone();
         config.database.enabled = true;
-
-        // Disable API keys for focused JWT testing
         config.api_keys.enabled = false;
+        config.admin.emails = vec!["admin@admin.example.com".to_string()];
 
-        // Add test AWS credentials for integration tests
-        config.aws.access_key_id = Some("test-access-key".to_string());
-        config.aws.secret_access_key = Some("test-secret-key".to_string());
-
-        let server = TestServerBuilder::new()
-            .with_config(config.clone())
-            .with_jwt_secret(secret.to_string())
-            .build()
-            .await;
-
+        let server = Server::new(config.clone()).await.unwrap();
         let app = server.create_app();
 
         Self {

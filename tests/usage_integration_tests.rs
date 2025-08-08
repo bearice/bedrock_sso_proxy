@@ -2,115 +2,19 @@
 //! These tests verify end-to-end functionality with real JWT authentication
 
 use axum::{
-    Router,
     body::Body,
-    extract::Request,
-    http::{Method, StatusCode, header::AUTHORIZATION},
-    middleware,
+    http::{Method, Request, StatusCode},
 };
-use bedrock_sso_proxy::{auth::jwt::JwtService, database::DatabaseManager, database::entities::*};
+use bedrock_sso_proxy::database::entities::{users, *};
 use chrono::Utc;
-
 use rust_decimal::Decimal;
 use serde_json::Value;
 
-use tower::ServiceExt;
-
 mod common;
-use common::PostgresTestDb;
+use common::{PostgresTestDb, TestHarness};
 
-// Macro to run the same test with both SQLite and PostgreSQL
-macro_rules! database_test {
-    ($test_name:ident, $test_impl:ident) => {
-        pastey::paste! {
-                #[tokio::test]
-                async fn [<sqlite_ $test_name>]() {
-                    $test_impl(&create_test_server().await).await;
-                }
-
-                #[tokio::test]
-                async fn [<postgres_ $test_name>]() {
-                    let postgres_db = match PostgresTestDb::new().await {
-                        Ok(db) => db,
-                        Err(_) => {
-                            println!("Skipping PostgreSQL test - database not available");
-                            return;
-                        }
-        };
-
-                    let server = create_postgres_test_server(&postgres_db).await;
-                    $test_impl(&server).await;
-
-                    // Clean up
-                    let _ = postgres_db.cleanup().await;
-                }
-            }
-    };
-}
-
-async fn create_test_server() -> bedrock_sso_proxy::server::Server {
-    let mut config = bedrock_sso_proxy::config::Config::default();
-    // Add admin email for tests
-    config.admin.emails = vec!["admin@admin.example.com".to_string()];
-
-    bedrock_sso_proxy::test_utils::TestServerBuilder::new()
-        .with_config(config)
-        .build()
-        .await
-}
-
-async fn create_postgres_test_server(
-    postgres_db: &PostgresTestDb,
-) -> bedrock_sso_proxy::server::Server {
-    let mut config = bedrock_sso_proxy::config::Config::default();
-    config.database.url = postgres_db.database_url.clone();
-    config.database.enabled = true;
-    // Add admin email for tests
-    config.admin.emails = vec!["admin@admin.example.com".to_string()];
-
-    bedrock_sso_proxy::test_utils::TestServerBuilder::new()
-        .with_config(config)
-        .build()
-        .await
-}
-
-fn create_test_router(server: &bedrock_sso_proxy::server::Server) -> Router {
-    // Combine user and admin routes for testing
-    Router::new()
-        .merge(
-            bedrock_sso_proxy::routes::create_user_usage_routes()
-                .with_state(server.clone())
-                .layer(middleware::from_fn_with_state(
-                    server.clone(),
-                    bedrock_sso_proxy::auth::middleware::jwt_auth_middleware,
-                )),
-        )
-        .merge(
-            bedrock_sso_proxy::routes::create_admin_usage_routes()
-                .with_state(server.clone())
-                .layer(middleware::from_fn_with_state(
-                    server.clone(),
-                    bedrock_sso_proxy::auth::middleware::admin_middleware,
-                ))
-                .layer(middleware::from_fn_with_state(
-                    server.clone(),
-                    bedrock_sso_proxy::auth::middleware::jwt_auth_middleware,
-                )),
-        )
-}
-
-fn create_test_token(
-    jwt_service: &dyn JwtService,
-    _email: &str,
-    _is_admin: bool,
-    user_id: i32,
-) -> String {
-    let claims = bedrock_sso_proxy::auth::jwt::OAuthClaims::new(user_id, 3600);
-
-    jwt_service.create_oauth_token(&claims).unwrap()
-}
-
-async fn setup_test_data(database: &dyn DatabaseManager) -> (i32, i32) {
+async fn setup_test_data(harness: &TestHarness) -> (i32, i32) {
+    let database = harness.server.database.as_ref();
     // Create test users
     let user1 = UserRecord {
         id: 0,
@@ -216,25 +120,18 @@ async fn setup_test_data(database: &dyn DatabaseManager) -> (i32, i32) {
 }
 
 // Test implementation functions
-async fn test_get_user_usage_records_success_impl(server: &bedrock_sso_proxy::server::Server) {
-    let (user_id, _) = setup_test_data(server.database.as_ref()).await;
-
-    let token = create_test_token(
-        server.jwt_service.as_ref(),
-        "user1@example.com",
-        false,
-        user_id,
-    );
-    let app = create_test_router(server);
+async fn test_get_user_usage_records_success_impl(harness: &TestHarness) {
+    let (user_id, _) = setup_test_data(harness).await;
+    let token = harness.create_integration_token(user_id);
 
     let request = Request::builder()
         .method(Method::GET)
-        .uri("/usage/records?limit=10&offset=0")
-        .header(AUTHORIZATION, format!("Bearer {token}"))
+        .uri("/api/usage/records?limit=10&offset=0")
+        .header("Authorization", format!("Bearer {token}"))
         .body(Body::empty())
         .unwrap();
 
-    let response = app.oneshot(request).await.unwrap();
+    let response = harness.make_request(request).await;
     assert_eq!(response.status(), StatusCode::OK);
 
     let body = axum::body::to_bytes(response.into_body(), usize::MAX)
@@ -249,32 +146,19 @@ async fn test_get_user_usage_records_success_impl(server: &bedrock_sso_proxy::se
     assert_eq!(json["offset"], 0);
 }
 
-// Generate both SQLite and PostgreSQL tests
-database_test!(
-    test_get_user_usage_records_success,
-    test_get_user_usage_records_success_impl
-);
-
-async fn test_get_user_usage_with_filters_impl(server: &bedrock_sso_proxy::server::Server) {
-    let (user_id, _) = setup_test_data(server.database.as_ref()).await;
-
-    let token = create_test_token(
-        server.jwt_service.as_ref(),
-        "user1@example.com",
-        false,
-        user_id,
-    );
-    let app = create_test_router(server);
+async fn test_get_user_usage_with_filters_impl(harness: &TestHarness) {
+    let (user_id, _) = setup_test_data(harness).await;
+    let token = harness.create_integration_token(user_id);
 
     // Test model filtering
     let request = Request::builder()
         .method(Method::GET)
-        .uri("/usage/records?model=anthropic.claude-sonnet-4-20250514-v1:0")
-        .header(AUTHORIZATION, format!("Bearer {token}"))
+        .uri("/api/usage/records?model=anthropic.claude-sonnet-4-20250514-v1:0")
+        .header("Authorization", format!("Bearer {token}"))
         .body(Body::empty())
         .unwrap();
 
-    let response = app.oneshot(request).await.unwrap();
+    let response = harness.make_request(request).await;
     assert_eq!(response.status(), StatusCode::OK);
 
     let body = axum::body::to_bytes(response.into_body(), usize::MAX)
@@ -290,30 +174,18 @@ async fn test_get_user_usage_with_filters_impl(server: &bedrock_sso_proxy::serve
     );
 }
 
-database_test!(
-    test_get_user_usage_with_filters,
-    test_get_user_usage_with_filters_impl
-);
-
-async fn test_admin_get_system_usage_records_impl(server: &bedrock_sso_proxy::server::Server) {
-    let (_user_id, admin_id) = setup_test_data(server.database.as_ref()).await;
-
-    let admin_token = create_test_token(
-        server.jwt_service.as_ref(),
-        "admin@admin.example.com",
-        true,
-        admin_id,
-    );
-    let app = create_test_router(server);
+async fn test_admin_get_system_usage_records_impl(harness: &TestHarness) {
+    let (_user_id, admin_id) = setup_test_data(harness).await;
+    let admin_token = harness.create_integration_token(admin_id);
 
     let request = Request::builder()
         .method(Method::GET)
-        .uri("/admin/usage/records")
-        .header(AUTHORIZATION, format!("Bearer {admin_token}"))
+        .uri("/api/admin/usage/records")
+        .header("Authorization", format!("Bearer {admin_token}"))
         .body(Body::empty())
         .unwrap();
 
-    let response = app.oneshot(request).await.unwrap();
+    let response = harness.make_request(request).await;
     assert_eq!(response.status(), StatusCode::OK);
 
     let body = axum::body::to_bytes(response.into_body(), usize::MAX)
@@ -325,88 +197,60 @@ async fn test_admin_get_system_usage_records_impl(server: &bedrock_sso_proxy::se
     assert_eq!(json["records"].as_array().unwrap().len(), 3); // All system records
 }
 
-database_test!(
-    test_admin_get_system_usage_records,
-    test_admin_get_system_usage_records_impl
-);
-
-async fn test_non_admin_access_denied_impl(server: &bedrock_sso_proxy::server::Server) {
-    let (user1_id, _) = setup_test_data(server.database.as_ref()).await;
-
-    let user_token = create_test_token(
-        server.jwt_service.as_ref(),
-        "user1@example.com",
-        false,
-        user1_id,
-    );
-    let app = create_test_router(server);
+async fn test_non_admin_access_denied_impl(harness: &TestHarness) {
+    let (user1_id, _) = setup_test_data(harness).await;
+    let user_token = harness.create_integration_token(user1_id);
 
     // Test admin endpoint access with non-admin token
     let request = Request::builder()
         .method(Method::GET)
-        .uri("/admin/usage/records")
-        .header(AUTHORIZATION, format!("Bearer {user_token}"))
+        .uri("/api/admin/usage/records")
+        .header("Authorization", format!("Bearer {user_token}"))
         .body(Body::empty())
         .unwrap();
 
-    let response = app.oneshot(request).await.unwrap();
+    let response = harness.make_request(request).await;
     assert_eq!(response.status(), StatusCode::FORBIDDEN);
 }
 
-database_test!(
-    test_non_admin_access_denied,
-    test_non_admin_access_denied_impl
-);
-
-async fn test_unauthorized_access_impl(server: &bedrock_sso_proxy::server::Server) {
-    setup_test_data(server.database.as_ref()).await;
+async fn test_unauthorized_access_impl(harness: &TestHarness) {
+    setup_test_data(harness).await;
 
     // Test without authorization header
-    let app1 = create_test_router(server);
     let request = Request::builder()
         .method(Method::GET)
-        .uri("/usage/records")
+        .uri("/api/usage/records")
         .body(Body::empty())
         .unwrap();
 
-    let response = app1.oneshot(request).await.unwrap();
+    let response = harness.make_request(request).await;
     assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
 
     // Test with invalid token
-    let app2 = create_test_router(server);
     let request = Request::builder()
         .method(Method::GET)
-        .uri("/usage/records")
-        .header(AUTHORIZATION, "Bearer invalid-token")
+        .uri("/api/usage/records")
+        .header("Authorization", "Bearer invalid-token")
         .body(Body::empty())
         .unwrap();
 
-    let response = app2.oneshot(request).await.unwrap();
+    let response = harness.make_request(request).await;
     assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
 }
 
-database_test!(test_unauthorized_access, test_unauthorized_access_impl);
-
-async fn test_pagination_limits_impl(server: &bedrock_sso_proxy::server::Server) {
-    let (user1_id, _) = setup_test_data(server.database.as_ref()).await;
-
-    let token = create_test_token(
-        server.jwt_service.as_ref(),
-        "user1@example.com",
-        false,
-        user1_id,
-    );
-    let app = create_test_router(server);
+async fn test_pagination_limits_impl(harness: &TestHarness) {
+    let (user1_id, _) = setup_test_data(harness).await;
+    let token = harness.create_integration_token(user1_id);
 
     // Test limit enforcement (max 500)
     let request = Request::builder()
         .method(Method::GET)
-        .uri("/usage/records?limit=1000")
-        .header(AUTHORIZATION, format!("Bearer {token}"))
+        .uri("/api/usage/records?limit=1000")
+        .header("Authorization", format!("Bearer {token}"))
         .body(Body::empty())
         .unwrap();
 
-    let response = app.oneshot(request).await.unwrap();
+    let response = harness.make_request(request).await;
     assert_eq!(response.status(), StatusCode::OK);
 
     let body = axum::body::to_bytes(response.into_body(), usize::MAX)
@@ -416,12 +260,9 @@ async fn test_pagination_limits_impl(server: &bedrock_sso_proxy::server::Server)
     assert_eq!(json["limit"], 500); // Should be capped at 500
 }
 
-database_test!(test_pagination_limits, test_pagination_limits_impl);
-
-async fn test_get_stats_uses_summaries_when_available_impl(
-    server: &bedrock_sso_proxy::server::Server,
-) {
-    let (user_id, _) = setup_test_data(server.database.as_ref()).await;
+async fn test_get_stats_uses_summaries_when_available_impl(harness: &TestHarness) {
+    let (user_id, _) = setup_test_data(harness).await;
+    let database = harness.server.database.as_ref();
 
     // Create a usage summary record for the same user
     let summary = UsageSummary {
@@ -445,12 +286,7 @@ async fn test_get_stats_uses_summaries_when_available_impl(
     };
 
     // Store the summary
-    server
-        .database
-        .usage()
-        .upsert_many_summaries(&[summary])
-        .await
-        .unwrap();
+    database.usage().upsert_many_summaries(&[summary]).await.unwrap();
 
     // Test the DAO method directly to verify it uses summaries
     use bedrock_sso_proxy::database::dao::usage::UsageQuery;
@@ -461,7 +297,7 @@ async fn test_get_stats_uses_summaries_when_available_impl(
         ..Default::default()
     };
 
-    let stats = server.database.usage().get_stats(&query).await.unwrap();
+    let stats = database.usage().get_stats(&query).await.unwrap();
 
     // Verify stats come from summary (not from records)
     // The summary should override the record data for this model
@@ -478,14 +314,8 @@ async fn test_get_stats_uses_summaries_when_available_impl(
     assert_eq!(cost, Decimal::new(150, 3)); // 0.150
 }
 
-database_test!(
-    test_get_stats_uses_summaries_when_available,
-    test_get_stats_uses_summaries_when_available_impl
-);
-
-// Test real-time hourly summary updates
-async fn test_realtime_hourly_summary_updates_impl(server: &bedrock_sso_proxy::server::Server) {
-    let database = server.database.clone();
+async fn test_realtime_hourly_summary_updates_impl(harness: &TestHarness) {
+    let database = harness.server.database.clone();
 
     // Create test user
     let user = users::Model {
@@ -658,16 +488,8 @@ async fn test_realtime_hourly_summary_updates_impl(server: &bedrock_sso_proxy::s
     assert_eq!(new_hour_summary.estimated_cost, Some(Decimal::new(10, 3)));
 }
 
-database_test!(
-    test_realtime_hourly_summary_updates,
-    test_realtime_hourly_summary_updates_impl
-);
-
-// Test real-time hourly summary with different users and models
-async fn test_realtime_hourly_summary_different_keys_impl(
-    server: &bedrock_sso_proxy::server::Server,
-) {
-    let database = server.database.clone();
+async fn test_realtime_hourly_summary_different_keys_impl(harness: &TestHarness) {
+    let database = harness.server.database.clone();
 
     // Create test users
     let user1 = users::Model {
@@ -804,14 +626,9 @@ async fn test_realtime_hourly_summary_different_keys_impl(
     assert_eq!(user2_model_a.total_tokens, 225);
 }
 
-database_test!(
-    test_realtime_hourly_summary_different_keys,
-    test_realtime_hourly_summary_different_keys_impl
-);
-
-// Test pagination total count functionality
-async fn test_pagination_total_count_accuracy_impl(server: &bedrock_sso_proxy::server::Server) {
-    let (user_id, _) = setup_test_data(server.database.as_ref()).await;
+async fn test_pagination_total_count_accuracy_impl(harness: &TestHarness) {
+    let (user_id, _) = setup_test_data(harness).await;
+    let database = harness.server.database.as_ref();
 
     // Create additional records to test pagination (setup_test_data creates 3)
     for i in 4..=20 {
@@ -833,26 +650,20 @@ async fn test_pagination_total_count_accuracy_impl(server: &bedrock_sso_proxy::s
             stop_reason: Some("end_turn".to_string()),
             cost_usd: Some(Decimal::new(10, 4)), // 0.001
         };
-        server.database.usage().store_record(&record).await.unwrap();
+        database.usage().store_record(&record).await.unwrap();
     }
 
-    let token = create_test_token(
-        server.jwt_service.as_ref(),
-        "user1@example.com",
-        false,
-        user_id,
-    );
-    let app = create_test_router(server);
+    let token = harness.create_integration_token(user_id);
 
     // Test first page (limit 5)
     let request = Request::builder()
         .method(Method::GET)
-        .uri("/usage/records?limit=5&offset=0")
-        .header(AUTHORIZATION, format!("Bearer {token}"))
+        .uri("/api/usage/records?limit=5&offset=0")
+        .header("Authorization", format!("Bearer {token}"))
         .body(Body::empty())
         .unwrap();
 
-    let response = app.oneshot(request).await.unwrap();
+    let response = harness.make_request(request).await;
     assert_eq!(response.status(), StatusCode::OK);
 
     let body = axum::body::to_bytes(response.into_body(), usize::MAX)
@@ -867,15 +678,14 @@ async fn test_pagination_total_count_accuracy_impl(server: &bedrock_sso_proxy::s
     assert_eq!(json["offset"], 0);
 
     // Test second page (limit 5, offset 5)
-    let app2 = create_test_router(server);
     let request2 = Request::builder()
         .method(Method::GET)
-        .uri("/usage/records?limit=5&offset=5")
-        .header(AUTHORIZATION, format!("Bearer {token}"))
+        .uri("/api/usage/records?limit=5&offset=5")
+        .header("Authorization", format!("Bearer {token}"))
         .body(Body::empty())
         .unwrap();
 
-    let response2 = app2.oneshot(request2).await.unwrap();
+    let response2 = harness.make_request(request2).await;
     assert_eq!(response2.status(), StatusCode::OK);
 
     let body2 = axum::body::to_bytes(response2.into_body(), usize::MAX)
@@ -890,15 +700,14 @@ async fn test_pagination_total_count_accuracy_impl(server: &bedrock_sso_proxy::s
     assert_eq!(json2["offset"], 5);
 
     // Test last page (limit 5, offset 15)
-    let app3 = create_test_router(server);
     let request3 = Request::builder()
         .method(Method::GET)
-        .uri("/usage/records?limit=5&offset=15")
-        .header(AUTHORIZATION, format!("Bearer {token}"))
+        .uri("/api/usage/records?limit=5&offset=15")
+        .header("Authorization", format!("Bearer {token}"))
         .body(Body::empty())
         .unwrap();
 
-    let response3 = app3.oneshot(request3).await.unwrap();
+    let response3 = harness.make_request(request3).await;
     assert_eq!(response3.status(), StatusCode::OK);
 
     let body3 = axum::body::to_bytes(response3.into_body(), usize::MAX)
@@ -913,15 +722,14 @@ async fn test_pagination_total_count_accuracy_impl(server: &bedrock_sso_proxy::s
     assert_eq!(json3["offset"], 15);
 
     // Test beyond last page (limit 5, offset 20)
-    let app4 = create_test_router(server);
     let request4 = Request::builder()
         .method(Method::GET)
-        .uri("/usage/records?limit=5&offset=20")
-        .header(AUTHORIZATION, format!("Bearer {token}"))
+        .uri("/api/usage/records?limit=5&offset=20")
+        .header("Authorization", format!("Bearer {token}"))
         .body(Body::empty())
         .unwrap();
 
-    let response4 = app4.oneshot(request4).await.unwrap();
+    let response4 = harness.make_request(request4).await;
     assert_eq!(response4.status(), StatusCode::OK);
 
     let body4 = axum::body::to_bytes(response4.into_body(), usize::MAX)
@@ -936,14 +744,9 @@ async fn test_pagination_total_count_accuracy_impl(server: &bedrock_sso_proxy::s
     assert_eq!(json4["offset"], 20);
 }
 
-database_test!(
-    test_pagination_total_count_accuracy,
-    test_pagination_total_count_accuracy_impl
-);
-
-// Test pagination with filters maintains accurate count
-async fn test_pagination_with_filters_total_count_impl(server: &bedrock_sso_proxy::server::Server) {
-    let (user_id, _) = setup_test_data(server.database.as_ref()).await;
+async fn test_pagination_with_filters_total_count_impl(harness: &TestHarness) {
+    let (user_id, _) = setup_test_data(harness).await;
+    let database = harness.server.database.as_ref();
 
     // Create additional records with specific model filter (5 matching records)
     for i in 1..=5 {
@@ -965,26 +768,20 @@ async fn test_pagination_with_filters_total_count_impl(server: &bedrock_sso_prox
             stop_reason: Some("end_turn".to_string()),
             cost_usd: Some(Decimal::new(10, 4)),
         };
-        server.database.usage().store_record(&record).await.unwrap();
+        database.usage().store_record(&record).await.unwrap();
     }
 
-    let token = create_test_token(
-        server.jwt_service.as_ref(),
-        "user1@example.com",
-        false,
-        user_id,
-    );
-    let app = create_test_router(server);
+    let token = harness.create_integration_token(user_id);
 
     // Test with model filter (should find 6 records: 1 from setup + 5 new)
     let request = Request::builder()
         .method(Method::GET)
-        .uri("/usage/records?model=anthropic.claude-sonnet-4-20250514-v1:0&limit=3&offset=0")
-        .header(AUTHORIZATION, format!("Bearer {token}"))
+        .uri("/api/usage/records?model=anthropic.claude-sonnet-4-20250514-v1:0&limit=3&offset=0")
+        .header("Authorization", format!("Bearer {token}"))
         .body(Body::empty())
         .unwrap();
 
-    let response = app.oneshot(request).await.unwrap();
+    let response = harness.make_request(request).await;
     assert_eq!(response.status(), StatusCode::OK);
 
     let body = axum::body::to_bytes(response.into_body(), usize::MAX)
@@ -1008,15 +805,14 @@ async fn test_pagination_with_filters_total_count_impl(server: &bedrock_sso_prox
     }
 
     // Test second page of filtered results
-    let app2 = create_test_router(server);
     let request2 = Request::builder()
         .method(Method::GET)
-        .uri("/usage/records?model=anthropic.claude-sonnet-4-20250514-v1:0&limit=3&offset=3")
-        .header(AUTHORIZATION, format!("Bearer {token}"))
+        .uri("/api/usage/records?model=anthropic.claude-sonnet-4-20250514-v1:0&limit=3&offset=3")
+        .header("Authorization", format!("Bearer {token}"))
         .body(Body::empty())
         .unwrap();
 
-    let response2 = app2.oneshot(request2).await.unwrap();
+    let response2 = harness.make_request(request2).await;
     assert_eq!(response2.status(), StatusCode::OK);
 
     let body2 = axum::body::to_bytes(response2.into_body(), usize::MAX)
@@ -1031,32 +827,19 @@ async fn test_pagination_with_filters_total_count_impl(server: &bedrock_sso_prox
     assert_eq!(json2["offset"], 3);
 }
 
-database_test!(
-    test_pagination_with_filters_total_count,
-    test_pagination_with_filters_total_count_impl
-);
-
-// Test empty results pagination
-async fn test_empty_results_pagination_impl(server: &bedrock_sso_proxy::server::Server) {
-    let (user_id, _) = setup_test_data(server.database.as_ref()).await;
-
-    let token = create_test_token(
-        server.jwt_service.as_ref(),
-        "user1@example.com",
-        false,
-        user_id,
-    );
-    let app = create_test_router(server);
+async fn test_empty_results_pagination_impl(harness: &TestHarness) {
+    let (user_id, _) = setup_test_data(harness).await;
+    let token = harness.create_integration_token(user_id);
 
     // Test with filter that matches no records
     let request = Request::builder()
         .method(Method::GET)
-        .uri("/usage/records?model=nonexistent-model&limit=10&offset=0")
-        .header(AUTHORIZATION, format!("Bearer {token}"))
+        .uri("/api/usage/records?model=nonexistent-model&limit=10&offset=0")
+        .header("Authorization", format!("Bearer {token}"))
         .body(Body::empty())
         .unwrap();
 
-    let response = app.oneshot(request).await.unwrap();
+    let response = harness.make_request(request).await;
     assert_eq!(response.status(), StatusCode::OK);
 
     let body = axum::body::to_bytes(response.into_body(), usize::MAX)
@@ -1071,14 +854,9 @@ async fn test_empty_results_pagination_impl(server: &bedrock_sso_proxy::server::
     assert_eq!(json["offset"], 0);
 }
 
-database_test!(
-    test_empty_results_pagination,
-    test_empty_results_pagination_impl
-);
-
-// Test user summaries endpoint
-async fn test_get_user_usage_summaries_success_impl(server: &bedrock_sso_proxy::server::Server) {
-    let (user_id, _) = setup_test_data(server.database.as_ref()).await;
+async fn test_get_user_usage_summaries_success_impl(harness: &TestHarness) {
+    let (user_id, _) = setup_test_data(harness).await;
+    let database = harness.server.database.as_ref();
 
     // Create usage summaries for the user
     let summaries = vec![
@@ -1122,29 +900,17 @@ async fn test_get_user_usage_summaries_success_impl(server: &bedrock_sso_proxy::
         },
     ];
 
-    server
-        .database
-        .usage()
-        .upsert_many_summaries(&summaries)
-        .await
-        .unwrap();
-
-    let token = create_test_token(
-        server.jwt_service.as_ref(),
-        "user1@example.com",
-        false,
-        user_id,
-    );
-    let app = create_test_router(server);
+    database.usage().upsert_many_summaries(&summaries).await.unwrap();
+    let token = harness.create_integration_token(user_id);
 
     let request = Request::builder()
         .method(Method::GET)
-        .uri("/usage/summaries?period_type=daily&limit=10")
-        .header(AUTHORIZATION, format!("Bearer {token}"))
+        .uri("/api/usage/summaries?period_type=daily&limit=10")
+        .header("Authorization", format!("Bearer {token}"))
         .body(Body::empty())
         .unwrap();
 
-    let response = app.oneshot(request).await.unwrap();
+    let response = harness.make_request(request).await;
     assert_eq!(response.status(), StatusCode::OK);
 
     let body = axum::body::to_bytes(response.into_body(), usize::MAX)
@@ -1167,16 +933,9 @@ async fn test_get_user_usage_summaries_success_impl(server: &bedrock_sso_proxy::
     assert!(summary["estimated_cost"].is_string());
 }
 
-database_test!(
-    test_get_user_usage_summaries_success,
-    test_get_user_usage_summaries_success_impl
-);
-
-// Test user summaries with model filter
-async fn test_get_user_usage_summaries_with_model_filter_impl(
-    server: &bedrock_sso_proxy::server::Server,
-) {
-    let (user_id, _) = setup_test_data(server.database.as_ref()).await;
+async fn test_get_user_usage_summaries_with_model_filter_impl(harness: &TestHarness) {
+    let (user_id, _) = setup_test_data(harness).await;
+    let database = harness.server.database.as_ref();
 
     // Create usage summaries for different models
     let summaries = vec![
@@ -1220,30 +979,18 @@ async fn test_get_user_usage_summaries_with_model_filter_impl(
         },
     ];
 
-    server
-        .database
-        .usage()
-        .upsert_many_summaries(&summaries)
-        .await
-        .unwrap();
-
-    let token = create_test_token(
-        server.jwt_service.as_ref(),
-        "user1@example.com",
-        false,
-        user_id,
-    );
-    let app = create_test_router(server);
+    database.usage().upsert_many_summaries(&summaries).await.unwrap();
+    let token = harness.create_integration_token(user_id);
 
     // Test filtering by specific model
     let request = Request::builder()
         .method(Method::GET)
-        .uri("/usage/summaries?model_id=anthropic.claude-sonnet-4-20250514-v1:0")
-        .header(AUTHORIZATION, format!("Bearer {token}"))
+        .uri("/api/usage/summaries?model_id=anthropic.claude-sonnet-4-20250514-v1:0")
+        .header("Authorization", format!("Bearer {token}"))
         .body(Body::empty())
         .unwrap();
 
-    let response = app.oneshot(request).await.unwrap();
+    let response = harness.make_request(request).await;
     assert_eq!(response.status(), StatusCode::OK);
 
     let body = axum::body::to_bytes(response.into_body(), usize::MAX)
@@ -1262,14 +1009,9 @@ async fn test_get_user_usage_summaries_with_model_filter_impl(
     );
 }
 
-database_test!(
-    test_get_user_usage_summaries_with_model_filter,
-    test_get_user_usage_summaries_with_model_filter_impl
-);
-
-// Test admin summaries endpoint
-async fn test_admin_get_usage_summaries_success_impl(server: &bedrock_sso_proxy::server::Server) {
-    let (user1_id, admin_id) = setup_test_data(server.database.as_ref()).await;
+async fn test_admin_get_usage_summaries_success_impl(harness: &TestHarness) {
+    let (user1_id, admin_id) = setup_test_data(harness).await;
+    let database = harness.server.database.as_ref();
 
     // Create another user for system-wide data
     let user2 = UserRecord {
@@ -1283,7 +1025,7 @@ async fn test_admin_get_usage_summaries_success_impl(server: &bedrock_sso_proxy:
         last_login: Some(Utc::now()),
         ..Default::default()
     };
-    let user2_id = server.database.users().upsert(&user2).await.unwrap();
+    let user2_id = database.users().upsert(&user2).await.unwrap();
 
     // Create usage summaries for multiple users
     let summaries = vec![
@@ -1327,29 +1069,17 @@ async fn test_admin_get_usage_summaries_success_impl(server: &bedrock_sso_proxy:
         },
     ];
 
-    server
-        .database
-        .usage()
-        .upsert_many_summaries(&summaries)
-        .await
-        .unwrap();
-
-    let admin_token = create_test_token(
-        server.jwt_service.as_ref(),
-        "admin@admin.example.com",
-        true,
-        admin_id,
-    );
-    let app = create_test_router(server);
+    database.usage().upsert_many_summaries(&summaries).await.unwrap();
+    let admin_token = harness.create_integration_token(admin_id);
 
     let request = Request::builder()
         .method(Method::GET)
-        .uri("/admin/usage/summaries?period_type=daily")
-        .header(AUTHORIZATION, format!("Bearer {admin_token}"))
+        .uri("/api/admin/usage/summaries?period_type=daily")
+        .header("Authorization", format!("Bearer {admin_token}"))
         .body(Body::empty())
         .unwrap();
 
-    let response = app.oneshot(request).await.unwrap();
+    let response = harness.make_request(request).await;
     assert_eq!(response.status(), StatusCode::OK);
 
     let body = axum::body::to_bytes(response.into_body(), usize::MAX)
@@ -1371,78 +1101,50 @@ async fn test_admin_get_usage_summaries_success_impl(server: &bedrock_sso_proxy:
     assert!(user_ids.contains(&(user2_id as i64)));
 }
 
-database_test!(
-    test_admin_get_usage_summaries_success,
-    test_admin_get_usage_summaries_success_impl
-);
-
-// Test non-admin cannot access admin summaries endpoint
-async fn test_non_admin_summaries_access_denied_impl(server: &bedrock_sso_proxy::server::Server) {
-    let (user1_id, _) = setup_test_data(server.database.as_ref()).await;
-
-    let user_token = create_test_token(
-        server.jwt_service.as_ref(),
-        "user1@example.com",
-        false,
-        user1_id,
-    );
-    let app = create_test_router(server);
+async fn test_non_admin_summaries_access_denied_impl(harness: &TestHarness) {
+    let (user1_id, _) = setup_test_data(harness).await;
+    let user_token = harness.create_integration_token(user1_id);
 
     // Test admin summaries endpoint access with non-admin token
     let request = Request::builder()
         .method(Method::GET)
-        .uri("/admin/usage/summaries")
-        .header(AUTHORIZATION, format!("Bearer {user_token}"))
+        .uri("/api/admin/usage/summaries")
+        .header("Authorization", format!("Bearer {user_token}"))
         .body(Body::empty())
         .unwrap();
 
-    let response = app.oneshot(request).await.unwrap();
+    let response = harness.make_request(request).await;
     assert_eq!(response.status(), StatusCode::FORBIDDEN);
 }
 
-database_test!(
-    test_non_admin_summaries_access_denied,
-    test_non_admin_summaries_access_denied_impl
-);
-
-// Test summaries unauthorized access
-async fn test_summaries_unauthorized_access_impl(server: &bedrock_sso_proxy::server::Server) {
-    setup_test_data(server.database.as_ref()).await;
+async fn test_summaries_unauthorized_access_impl(harness: &TestHarness) {
+    setup_test_data(harness).await;
 
     // Test without authorization header
-    let app1 = create_test_router(server);
     let request = Request::builder()
         .method(Method::GET)
-        .uri("/usage/summaries")
+        .uri("/api/usage/summaries")
         .body(Body::empty())
         .unwrap();
 
-    let response = app1.oneshot(request).await.unwrap();
+    let response = harness.make_request(request).await;
     assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
 
     // Test with invalid token
-    let app2 = create_test_router(server);
     let request = Request::builder()
         .method(Method::GET)
-        .uri("/usage/summaries")
-        .header(AUTHORIZATION, "Bearer invalid-token")
+        .uri("/api/usage/summaries")
+        .header("Authorization", "Bearer invalid-token")
         .body(Body::empty())
         .unwrap();
 
-    let response = app2.oneshot(request).await.unwrap();
+    let response = harness.make_request(request).await;
     assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
 }
 
-database_test!(
-    test_summaries_unauthorized_access,
-    test_summaries_unauthorized_access_impl
-);
-
-// Test summaries pagination
-
-// Test summaries with different period types
-async fn test_summaries_period_type_filtering_impl(server: &bedrock_sso_proxy::server::Server) {
-    let (user_id, _) = setup_test_data(server.database.as_ref()).await;
+async fn test_summaries_period_type_filtering_impl(harness: &TestHarness) {
+    let (user_id, _) = setup_test_data(harness).await;
+    let database = harness.server.database.as_ref();
 
     // Create summaries with different period types
     let summaries = vec![
@@ -1505,30 +1207,18 @@ async fn test_summaries_period_type_filtering_impl(server: &bedrock_sso_proxy::s
         },
     ];
 
-    server
-        .database
-        .usage()
-        .upsert_many_summaries(&summaries)
-        .await
-        .unwrap();
-
-    let token = create_test_token(
-        server.jwt_service.as_ref(),
-        "user1@example.com",
-        false,
-        user_id,
-    );
-    let app = create_test_router(server);
+    database.usage().upsert_many_summaries(&summaries).await.unwrap();
+    let token = harness.create_integration_token(user_id);
 
     // Test filtering by hourly period
     let request = Request::builder()
         .method(Method::GET)
-        .uri("/usage/summaries?period_type=hourly")
-        .header(AUTHORIZATION, format!("Bearer {token}"))
+        .uri("/api/usage/summaries?period_type=hourly")
+        .header("Authorization", format!("Bearer {token}"))
         .body(Body::empty())
         .unwrap();
 
-    let response = app.oneshot(request).await.unwrap();
+    let response = harness.make_request(request).await;
     assert_eq!(response.status(), StatusCode::OK);
 
     let body = axum::body::to_bytes(response.into_body(), usize::MAX)
@@ -1542,15 +1232,14 @@ async fn test_summaries_period_type_filtering_impl(server: &bedrock_sso_proxy::s
     assert_eq!(summaries_array[0]["total_requests"], 5);
 
     // Test filtering by weekly period
-    let app2 = create_test_router(server);
     let request2 = Request::builder()
         .method(Method::GET)
-        .uri("/usage/summaries?period_type=weekly")
-        .header(AUTHORIZATION, format!("Bearer {token}"))
+        .uri("/api/usage/summaries?period_type=weekly")
+        .header("Authorization", format!("Bearer {token}"))
         .body(Body::empty())
         .unwrap();
 
-    let response2 = app2.oneshot(request2).await.unwrap();
+    let response2 = harness.make_request(request2).await;
     assert_eq!(response2.status(), StatusCode::OK);
 
     let body2 = axum::body::to_bytes(response2.into_body(), usize::MAX)
@@ -1564,15 +1253,14 @@ async fn test_summaries_period_type_filtering_impl(server: &bedrock_sso_proxy::s
     assert_eq!(summaries_array2[0]["total_requests"], 50);
 
     // Test invalid period type (should default to daily)
-    let app3 = create_test_router(server);
     let request3 = Request::builder()
         .method(Method::GET)
-        .uri("/usage/summaries?period_type=invalid")
-        .header(AUTHORIZATION, format!("Bearer {token}"))
+        .uri("/api/usage/summaries?period_type=invalid")
+        .header("Authorization", format!("Bearer {token}"))
         .body(Body::empty())
         .unwrap();
 
-    let response3 = app3.oneshot(request3).await.unwrap();
+    let response3 = harness.make_request(request3).await;
     assert_eq!(response3.status(), StatusCode::OK);
 
     let body3 = axum::body::to_bytes(response3.into_body(), usize::MAX)
@@ -1586,32 +1274,19 @@ async fn test_summaries_period_type_filtering_impl(server: &bedrock_sso_proxy::s
     assert_eq!(summaries_array3[0]["period_type"], "daily");
 }
 
-database_test!(
-    test_summaries_period_type_filtering,
-    test_summaries_period_type_filtering_impl
-);
-
-// Test empty summaries results
-async fn test_empty_summaries_results_impl(server: &bedrock_sso_proxy::server::Server) {
-    let (user_id, _) = setup_test_data(server.database.as_ref()).await;
-
-    let token = create_test_token(
-        server.jwt_service.as_ref(),
-        "user1@example.com",
-        false,
-        user_id,
-    );
-    let app = create_test_router(server);
+async fn test_empty_summaries_results_impl(harness: &TestHarness) {
+    let (user_id, _) = setup_test_data(harness).await;
+    let token = harness.create_integration_token(user_id);
 
     // Test with filter that matches no summaries
     let request = Request::builder()
         .method(Method::GET)
-        .uri("/usage/summaries?model_id=nonexistent-model")
-        .header(AUTHORIZATION, format!("Bearer {token}"))
+        .uri("/api/usage/summaries?model_id=nonexistent-model")
+        .header("Authorization", format!("Bearer {token}"))
         .body(Body::empty())
         .unwrap();
 
-    let response = app.oneshot(request).await.unwrap();
+    let response = harness.make_request(request).await;
     assert_eq!(response.status(), StatusCode::OK);
 
     let body = axum::body::to_bytes(response.into_body(), usize::MAX)
@@ -1626,7 +1301,221 @@ async fn test_empty_summaries_results_impl(server: &bedrock_sso_proxy::server::S
     assert_eq!(json["offset"], 0);
 }
 
-database_test!(
+// Macro to generate tests for both SQLite and PostgreSQL
+macro_rules! generate_db_tests {
+    ($test_name:ident, $test_impl:ident) => {
+        pastey::paste! {
+            #[tokio::test]
+            async fn [<sqlite_ $test_name>]() {
+                let harness = TestHarness::new().await;
+                $test_impl(&harness).await;
+            }
+
+            #[tokio::test]
+            async fn [<postgres_ $test_name>]() {
+                let postgres = match PostgresTestDb::new().await {
+                    Ok(db) => db,
+                    Err(_) => {
+                        println!("Skipping PostgreSQL test: TEST_POSTGRES_URL not set or connection failed.");
+                        return;
+                    }
+                };
+                let harness = TestHarness::with_postgres(&postgres).await;
+                $test_impl(&harness).await;
+                postgres.cleanup().await.unwrap();
+            }
+        }
+    };
+}
+
+generate_db_tests!(
+    test_get_user_usage_records_success,
+    test_get_user_usage_records_success_impl
+);
+generate_db_tests!(
+    test_get_user_usage_with_filters,
+    test_get_user_usage_with_filters_impl
+);
+generate_db_tests!(
+    test_admin_get_system_usage_records,
+    test_admin_get_system_usage_records_impl
+);
+generate_db_tests!(
+    test_non_admin_access_denied,
+    test_non_admin_access_denied_impl
+);
+generate_db_tests!(test_unauthorized_access, test_unauthorized_access_impl);
+generate_db_tests!(test_pagination_limits, test_pagination_limits_impl);
+generate_db_tests!(
+    test_get_stats_uses_summaries_when_available,
+    test_get_stats_uses_summaries_when_available_impl
+);
+generate_db_tests!(
+    test_realtime_hourly_summary_updates,
+    test_realtime_hourly_summary_updates_impl
+);
+generate_db_tests!(
+    test_realtime_hourly_summary_different_keys,
+    test_realtime_hourly_summary_different_keys_impl
+);
+generate_db_tests!(
+    test_pagination_total_count_accuracy,
+    test_pagination_total_count_accuracy_impl
+);
+generate_db_tests!(
+    test_pagination_with_filters_total_count,
+    test_pagination_with_filters_total_count_impl
+);
+generate_db_tests!(
+    test_empty_results_pagination,
+    test_empty_results_pagination_impl
+);
+generate_db_tests!(
+    test_get_user_usage_summaries_success,
+    test_get_user_usage_summaries_success_impl
+);
+generate_db_tests!(
+    test_get_user_usage_summaries_with_model_filter,
+    test_get_user_usage_summaries_with_model_filter_impl
+);
+generate_db_tests!(
+    test_admin_get_usage_summaries_success,
+    test_admin_get_usage_summaries_success_impl
+);
+generate_db_tests!(
+    test_non_admin_summaries_access_denied,
+    test_non_admin_summaries_access_denied_impl
+);
+generate_db_tests!(
+    test_summaries_unauthorized_access,
+    test_summaries_unauthorized_access_impl
+);
+generate_db_tests!(
+    test_summaries_period_type_filtering,
+    test_summaries_period_type_filtering_impl
+);
+generate_db_tests!(
     test_empty_summaries_results,
     test_empty_summaries_results_impl
+);
+
+async fn test_get_user_usage_with_date_filters_impl(harness: &TestHarness) {
+    let (user_id, _) = setup_test_data(harness).await;
+    let token = harness.create_integration_token(user_id);
+    let now = Utc::now();
+
+    // Test 1: start_date and end_date to find one record (created 10 mins ago)
+    let start_date = now - chrono::Duration::minutes(15);
+    let end_date = now - chrono::Duration::minutes(5);
+    let uri = format!(
+        "/api/usage/records?start_date={}&end_date={}",
+        start_date.to_rfc3339(),
+        end_date.to_rfc3339()
+    );
+
+    let request = Request::builder()
+        .method(Method::GET)
+        .uri(uri)
+        .header("Authorization", format!("Bearer {token}"))
+        .body(Body::empty())
+        .unwrap();
+
+    let response = harness.make_request(request).await;
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    let json: Value = serde_json::from_slice(&body).unwrap();
+    assert_eq!(
+        json["records"].as_array().unwrap().len(),
+        1,
+        "Failed start_date and end_date test"
+    );
+    assert_eq!(json["total"], 1);
+
+    // Test 2: Only start_date, should find two records (at T-0m and T-10m)
+    let start_date = now - chrono::Duration::minutes(15);
+    let uri = format!("/api/usage/records?start_date={}", start_date.to_rfc3339());
+    let request = Request::builder()
+        .method(Method::GET)
+        .uri(uri)
+        .header("Authorization", format!("Bearer {token}"))
+        .body(Body::empty())
+        .unwrap();
+
+    let response = harness.make_request(request).await;
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    let json: Value = serde_json::from_slice(&body).unwrap();
+    assert_eq!(
+        json["records"].as_array().unwrap().len(),
+        2,
+        "Failed start_date only test"
+    );
+    assert_eq!(json["total"], 2);
+
+    // Test 3: Only end_date, should find one record (at T-20m)
+    let end_date = now - chrono::Duration::minutes(15);
+    let uri = format!("/api/usage/records?end_date={}", end_date.to_rfc3339());
+    let request = Request::builder()
+        .method(Method::GET)
+        .uri(uri)
+        .header("Authorization", format!("Bearer {token}"))
+        .body(Body::empty())
+        .unwrap();
+    let response = harness.make_request(request).await;
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    let json: Value = serde_json::from_slice(&body).unwrap();
+    assert_eq!(
+        json["records"].as_array().unwrap().len(),
+        1,
+        "Failed end_date only test"
+    );
+    assert_eq!(json["total"], 1);
+}
+
+generate_db_tests!(
+    test_get_user_usage_with_date_filters,
+    test_get_user_usage_with_date_filters_impl
+);
+
+async fn test_invalid_query_parameters_are_handled_gracefully_impl(harness: &TestHarness) {
+    let (user_id, _) = setup_test_data(harness).await;
+    let token = harness.create_integration_token(user_id);
+
+    // Test 1: Invalid 'limit' parameter (non-numeric)
+    let uri = "/api/usage/records?limit=not-a-number";
+    let request = Request::builder()
+        .method(Method::GET)
+        .uri(uri)
+        .header("Authorization", format!("Bearer {token}"))
+        .body(Body::empty())
+        .unwrap();
+
+    let response = harness.make_request(request).await;
+    // Axum's Query extractor should return a 400-level error for deserialization failure.
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+
+    // Test 2: Invalid 'offset' parameter (negative number)
+    let uri = "/api/usage/records?offset=-10";
+    let request = Request::builder()
+        .method(Method::GET)
+        .uri(uri)
+        .header("Authorization", format!("Bearer {token}"))
+        .body(Body::empty())
+        .unwrap();
+
+    let response = harness.make_request(request).await;
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+}
+
+generate_db_tests!(
+    test_invalid_query_parameters_are_handled_gracefully,
+    test_invalid_query_parameters_are_handled_gracefully_impl
 );
