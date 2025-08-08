@@ -1,10 +1,12 @@
 import { useQuery } from '@tanstack/react-query';
 import { apiClient } from '../../lib/api-client';
 import type { components } from '../../generated/api';
+import { useAuth } from '../../hooks/useAuth';
 
 type User = components['schemas']['UserResponse'];
 
 export function UserManagement() {
+  const { loading: authLoading } = useAuth();
   const { data, isLoading, error } = useQuery({
     queryKey: ['admin_users'],
     queryFn: async () => {
@@ -14,9 +16,10 @@ export function UserManagement() {
       }
       return data;
     },
+    enabled: !authLoading,
   });
 
-  if (isLoading) {
+  if (isLoading || authLoading) {
     return (
       <div className="card">
         <h2>User Management</h2>
