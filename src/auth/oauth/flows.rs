@@ -274,6 +274,14 @@ impl OAuthFlows {
 
         // Store user information persistently if storage is available
         let (db_user_id, is_admin) = {
+            tracing::info!(
+                provider = %request.provider,
+                provider_user_id = %provider_user_id,
+                email = %email,
+                display_name = ?display_name,
+                "OAuth: About to upsert user record"
+            );
+
             let user_record = UserRecord::new(&request.provider, provider_user_id, email)
                 .with_display_name(display_name)
                 .with_provider_refresh_token(
@@ -288,6 +296,14 @@ impl OAuthFlows {
                 .upsert(&user_record)
                 .await
                 .map_err(|e| AppError::Internal(format!("Failed to store user: {e}")))?;
+
+            tracing::info!(
+                provider = %request.provider,
+                provider_user_id = %provider_user_id,
+                email = %email,
+                db_user_id = %db_user_id,
+                "OAuth: Upsert completed, got database user ID"
+            );
 
             let is_admin = self.config.is_admin(email);
 
@@ -337,7 +353,24 @@ impl OAuthFlows {
             self.config.jwt.access_token_ttl,
         );
         oauth_claims.set_admin(is_admin);
+        
+        tracing::info!(
+            provider = %request.provider,
+            provider_user_id = %provider_user_id,
+            email = %email,
+            db_user_id = %db_user_id,
+            is_admin = %is_admin,
+            "OAuth: Creating JWT token with user ID as subject"
+        );
+        
         let access_token = self.jwt_service.create_oauth_token(&oauth_claims)?;
+        
+        tracing::info!(
+            provider = %request.provider,
+            email = %email,
+            db_user_id = %db_user_id,
+            "OAuth: JWT token created successfully"
+        );
 
         // Create refresh token for proper OAuth flow
         let refresh_token = Uuid::new_v4().to_string();

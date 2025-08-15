@@ -50,21 +50,38 @@ impl UsersDao {
             .await
             .map_err(|e| DatabaseError::Database(e.to_string()))?;
 
-        // If last_insert_id is 0, it means the record already existed and was updated
-        // We need to find the existing record to get its ID
-        if result.last_insert_id == 0 {
-            let existing_user = users::Entity::find()
-                .filter(users::Column::Provider.eq(&user.provider))
-                .filter(users::Column::ProviderUserId.eq(&user.provider_user_id))
-                .one(&self.db)
-                .await
-                .map_err(|e| DatabaseError::Database(e.to_string()))?
-                .ok_or(DatabaseError::NotFound)?;
+        tracing::info!(
+            provider = %user.provider,
+            provider_user_id = %user.provider_user_id,
+            last_insert_id = %result.last_insert_id,
+            "Database upsert result"
+        );
 
-            Ok(existing_user.id)
-        } else {
-            Ok(result.last_insert_id)
-        }
+        // Always look up the user by provider/provider_user_id after upsert
+        // This ensures we get the correct existing ID regardless of SQLite's last_insert_id behavior
+        tracing::info!(
+            provider = %user.provider,
+            provider_user_id = %user.provider_user_id,
+            "Upsert: Looking up user to get correct ID"
+        );
+        
+        let existing_user = users::Entity::find()
+            .filter(users::Column::Provider.eq(&user.provider))
+            .filter(users::Column::ProviderUserId.eq(&user.provider_user_id))
+            .one(&self.db)
+            .await
+            .map_err(|e| DatabaseError::Database(e.to_string()))?
+            .ok_or(DatabaseError::NotFound)?;
+
+        tracing::info!(
+            provider = %user.provider,
+            provider_user_id = %user.provider_user_id,
+            final_user_id = %existing_user.id,
+            last_insert_id = %result.last_insert_id,
+            "Upsert: Final user ID determined"
+        );
+
+        Ok(existing_user.id)
     }
 
     /// Find user by provider and provider user ID
@@ -172,5 +189,126 @@ impl UsersDao {
         let expired_count = self.count_by_state(UserState::Expired).await?;
 
         Ok((active_count, disabled_count, expired_count))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::database::entities::AuditEventType;
+    use chrono::Utc;
+    use sea_orm::{Database, DatabaseConnection};
+
+    async fn create_test_db() -> DatabaseConnection {
+        Database::connect("sqlite::memory:").await.unwrap()
+    }
+
+    #[tokio::test]
+    async fn test_upsert_id_consistency_with_interference() {
+        // This test specifically checks that upsert returns consistent IDs
+        // even when other INSERT operations happen in between (the original bug)
+        
+        let db = create_test_db().await;
+        
+        // Run migrations to set up tables
+        use crate::database::migration::Migrator;
+        use sea_orm_migration::MigratorTrait;
+        Migrator::up(&db, None).await.unwrap();
+        
+        let dao = UsersDao::new(db.clone());
+        
+        // Create a user
+        let user = UserRecord::new("test_provider", "test_user_id", "test@example.com")
+            .with_display_name(Some("Test User".to_string()));
+        
+        // First upsert - should create the user
+        let user_id_1 = dao.upsert(&user).await.unwrap();
+        
+        // Insert several audit logs to mess with last_insert_id
+        // This simulates what happens in the real OAuth flow
+        for i in 0..5 {
+            use crate::database::entities::audit_logs;
+            
+            let audit_entry = audit_logs::ActiveModel {
+                id: sea_orm::ActiveValue::NotSet,
+                user_id: sea_orm::ActiveValue::Set(Some(user_id_1)),
+                event_type: sea_orm::ActiveValue::Set(AuditEventType::OAuthLogin),
+                provider: sea_orm::ActiveValue::Set(Some("test_provider".to_string())),
+                ip_address: sea_orm::ActiveValue::Set(Some("127.0.0.1".to_string())),
+                user_agent: sea_orm::ActiveValue::Set(Some(format!("test-agent-{}", i))),
+                success: sea_orm::ActiveValue::Set(true),
+                error_message: sea_orm::ActiveValue::Set(None),
+                created_at: sea_orm::ActiveValue::Set(Utc::now()),
+                metadata: sea_orm::ActiveValue::Set(Some("{}".to_string())),
+            };
+            
+            audit_logs::Entity::insert(audit_entry)
+                .exec(&db)
+                .await
+                .unwrap();
+        }
+        
+        // Second upsert - should return the SAME user ID despite all the audit log INSERTs
+        let user_id_2 = dao.upsert(&user).await.unwrap();
+        
+        // Third upsert after more interference
+        for i in 5..10 {
+            use crate::database::entities::audit_logs;
+            
+            let audit_entry = audit_logs::ActiveModel {
+                id: sea_orm::ActiveValue::NotSet,
+                user_id: sea_orm::ActiveValue::Set(Some(user_id_1)),
+                event_type: sea_orm::ActiveValue::Set(AuditEventType::TokenRefresh),
+                provider: sea_orm::ActiveValue::Set(Some("test_provider".to_string())),
+                ip_address: sea_orm::ActiveValue::Set(Some("127.0.0.1".to_string())),
+                user_agent: sea_orm::ActiveValue::Set(Some(format!("interference-agent-{}", i))),
+                success: sea_orm::ActiveValue::Set(true),
+                error_message: sea_orm::ActiveValue::Set(None),
+                created_at: sea_orm::ActiveValue::Set(Utc::now()),
+                metadata: sea_orm::ActiveValue::Set(Some("{}".to_string())),
+            };
+            
+            audit_logs::Entity::insert(audit_entry)
+                .exec(&db)
+                .await
+                .unwrap();
+        }
+        
+        let user_id_3 = dao.upsert(&user).await.unwrap();
+        
+        // This is the critical assertion that would have caught the original bug!
+        assert_eq!(user_id_1, user_id_2, "User ID should be consistent on second upsert despite audit log interference");
+        assert_eq!(user_id_2, user_id_3, "User ID should be consistent on third upsert despite more interference");
+        
+        println!("✅ Upsert ID consistency test passed: User ID {} remained stable across multiple operations", user_id_1);
+    }
+
+    #[tokio::test] 
+    async fn test_multiple_users_different_ids() {
+        let db = create_test_db().await;
+        
+        // Run migrations
+        use crate::database::migration::Migrator;
+        use sea_orm_migration::MigratorTrait;
+        Migrator::up(&db, None).await.unwrap();
+        
+        let dao = UsersDao::new(db);
+        
+        // Create two different users
+        let user1 = UserRecord::new("provider1", "user1", "user1@example.com");
+        let user2 = UserRecord::new("provider2", "user2", "user2@example.com");
+        
+        let user1_id = dao.upsert(&user1).await.unwrap();
+        let user2_id = dao.upsert(&user2).await.unwrap();
+        
+        // Different users should get different IDs
+        assert_ne!(user1_id, user2_id, "Different users should get different IDs");
+        
+        // Same users should get same IDs on repeat upserts
+        let user1_id_repeat = dao.upsert(&user1).await.unwrap();
+        let user2_id_repeat = dao.upsert(&user2).await.unwrap();
+        
+        assert_eq!(user1_id, user1_id_repeat, "User 1 should get consistent ID");
+        assert_eq!(user2_id, user2_id_repeat, "User 2 should get consistent ID");
     }
 }

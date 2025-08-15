@@ -74,16 +74,18 @@ impl CachedUsersDao {
         // Generate cache keys that might be affected by this operation
         let cache_keys = self.generate_user_cache_keys(user);
 
+        // Store the result from the upsert operation
+        let user_id = self.cached_dao.inner().upsert(user).await?;
+
+        // Invalidate cache keys after successful upsert
         self.cached_dao
             .update_and_invalidate(
-                || async { self.cached_dao.inner().upsert(user).await.map(|_| ()) },
+                || async { Ok(()) },
                 &cache_keys,
             )
             .await?;
 
-        // Return the result by calling the inner DAO again
-        // In practice, you might want to cache the ID as well
-        self.cached_dao.inner().upsert(user).await
+        Ok(user_id)
     }
 
     /// Update last login timestamp with cache invalidation
