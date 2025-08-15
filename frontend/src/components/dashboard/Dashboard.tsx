@@ -19,7 +19,7 @@ export function Dashboard() {
   const [copied, setCopied] = useState<string | null>(null);
 
   // Load API keys using React Query
-  const { data: apiKeys = [], isLoading: isLoadingApiKeys } = useApiKeys(token || undefined);
+  const { data: apiKeys = [], isLoading: isLoadingApiKeys } = useApiKeys();
 
   // Get active API keys count
   const activeApiKeysCount = apiKeys.filter(

@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { apiClient, setAuthToken, ApiError } from '../../../lib/api-client';
+import { apiClient, ApiError } from '../../../lib/api-client';
 import type { components } from '../../../generated/api';
 
 // Type aliases for better readability
@@ -21,10 +21,12 @@ export function useAdminAuditLogs(token?: string, query?: Partial<AuditLogQueryP
         throw new Error('No token provided');
       }
 
-      setAuthToken(token);
       const { data, error } = await apiClient.GET('/api/admin/audit-logs', {
         params: {
           query: query || {},
+        },
+        headers: {
+          Authorization: `Bearer ${token}`,
         },
       });
 

@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { apiClient, setAuthToken, ApiError } from '../../../lib/api-client';
+import { apiClient, ApiError } from '../../../lib/api-client';
 import type { components } from '../../../generated/api';
 
 // Type aliases for better readability
@@ -22,8 +22,11 @@ export function useAdminModelCosts(token?: string) {
         throw new Error('No token provided');
       }
 
-      setAuthToken(token);
-      const { data, error } = await apiClient.GET('/api/admin/costs');
+      const { data, error } = await apiClient.GET('/api/admin/costs', {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
 
       if (error) {
         throw new ApiError(500, error.error || 'Failed to fetch model costs');
@@ -45,10 +48,12 @@ export function useAdminModelCost(token?: string, region?: string, modelId?: str
         throw new Error('No token, region, or model ID provided');
       }
 
-      setAuthToken(token);
       const { data, error } = await apiClient.GET('/api/admin/costs/{region}/{model_id}', {
         params: {
           path: { region, model_id: modelId },
+        },
+        headers: {
+          Authorization: `Bearer ${token}`,
         },
       });
 
@@ -81,12 +86,14 @@ export function useUpdateModelCost(token?: string) {
         throw new Error('No token provided');
       }
 
-      setAuthToken(token);
       const { data, error } = await apiClient.PUT('/api/admin/costs/{region}/{model_id}', {
         params: {
           path: { region, model_id: modelId },
         },
         body: costData,
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
       });
 
       if (error) {
@@ -114,10 +121,12 @@ export function useDeleteModelCost(token?: string) {
         throw new Error('No token provided');
       }
 
-      setAuthToken(token);
       const { error } = await apiClient.DELETE('/api/admin/costs/{region}/{model_id}', {
         params: {
           path: { region, model_id: modelId },
+        },
+        headers: {
+          Authorization: `Bearer ${token}`,
         },
       });
 
@@ -145,9 +154,11 @@ export function useBulkUpdateModelCosts(token?: string) {
         throw new Error('No token provided');
       }
 
-      setAuthToken(token);
       const { data, error } = await apiClient.POST('/api/admin/costs', {
         body: csvContent,
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
       });
 
       if (error) {

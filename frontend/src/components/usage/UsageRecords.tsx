@@ -1,5 +1,4 @@
 import { useState, useCallback, useEffect } from 'react';
-import { useAuth } from '../../hooks/useAuth';
 import { useUserUsageRecords } from '../../hooks/api/usage';
 import type { components } from '../../generated/api';
 
@@ -33,7 +32,6 @@ export function UsageRecords({
   onExport,
   isExporting = false,
 }: UsageRecordsProps) {
-  const { token } = useAuth();
   const [currentPage, setCurrentPage] = useState(1);
   const [showDetails, setShowDetails] = useState<Set<number>>(new Set());
   const [expandedErrors, setExpandedErrors] = useState<Set<number>>(new Set());
@@ -46,7 +44,7 @@ export function UsageRecords({
     isLoading,
     error: queryError,
     refetch,
-  } = useUserUsageRecords(token || undefined, {
+  } = useUserUsageRecords({
     ...filters,
     offset: (currentPage - 1) * pageSize,
     limit: pageSize,

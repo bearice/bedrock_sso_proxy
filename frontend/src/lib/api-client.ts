@@ -11,28 +11,34 @@ export const apiClient = createClient<paths>({
 
 // Set up persistent middleware that checks for the current token
 apiClient.use({
-  onRequest(req) {
-    if (req instanceof Request) {
-      // Always check for the latest token at request time
-      const authData = typeof window !== 'undefined' ? localStorage.getItem('bedrock_auth') : null;
-      let token = currentAuthToken;
+  onRequest(req: any) {
+    // Always check for the latest token at request time
+    const authData = typeof window !== 'undefined' ? localStorage.getItem('bedrock_auth') : null;
+    let token = currentAuthToken;
 
-      // Fallback to localStorage if the global token isn't set yet
-      if (!token && authData) {
-        try {
-          const parsed = JSON.parse(authData);
-          if (parsed.isAuthenticated && parsed.token) {
-            token = parsed.token;
-          }
-        } catch (e) {
-          console.error('Failed to parse auth data from localStorage:', e);
+    // Fallback to localStorage if the global token isn't set yet
+    if (!token && authData) {
+      try {
+        const parsed = JSON.parse(authData);
+        if (parsed.isAuthenticated && parsed.token) {
+          token = parsed.token;
+          // Update the global token for subsequent requests
+          currentAuthToken = token;
         }
+      } catch (e) {
+        console.error('Failed to parse auth data from localStorage:', e);
       }
+    }
 
-      if (token) {
+    if (token) {
+      // Handle openapi-fetch request object structure
+      if (req && req.request instanceof Request) {
+        req.request.headers.set('Authorization', `Bearer ${token}`);
+      } else if (req instanceof Request) {
         req.headers.set('Authorization', `Bearer ${token}`);
       }
     }
+    
     return undefined;
   },
 });

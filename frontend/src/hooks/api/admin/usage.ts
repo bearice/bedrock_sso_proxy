@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { apiClient, setAuthToken, ApiError } from '../../../lib/api-client';
+import { apiClient, ApiError } from '../../../lib/api-client';
 import type { components } from '../../../generated/api';
 
 // Type aliases for better readability
@@ -23,7 +23,6 @@ export function useAdminUsageRecords(token?: string, query?: Partial<UsageRecord
         throw new Error('No token provided');
       }
 
-      setAuthToken(token);
       const { data, error } = await apiClient.GET('/api/admin/usage/records', {
         params: {
           query: query || {},
@@ -50,7 +49,6 @@ export function useAdminUsageSummaries(token?: string, query?: Partial<UsageSumm
         throw new Error('No token provided');
       }
 
-      setAuthToken(token);
       const { data, error } = await apiClient.GET('/api/admin/usage/summaries', {
         params: {
           query: query || {},
@@ -127,8 +125,6 @@ export function useAdminUsageStats(
       if (!token) {
         throw new Error('No token provided');
       }
-
-      setAuthToken(token);
 
       // Fetch summaries for each period
       const results = await Promise.all(

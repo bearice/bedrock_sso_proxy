@@ -63,7 +63,7 @@ export function UsageTracking() {
     isLoading: isLoadingSummaries,
     error: summariesQueryError,
     refetch: refetchSummaries,
-  } = useUserUsageSummaries(token || undefined, summariesQuery);
+  } = useUserUsageSummaries(summariesQuery);
 
   const summaries = summariesData?.summaries || [];
   const summariesError = summariesQueryError instanceof Error ? summariesQueryError.message : null;
@@ -80,8 +80,6 @@ export function UsageTracking() {
 
   // Export usage data using direct API call
   const handleExport = useCallback(async () => {
-    if (!token) return;
-
     try {
       setIsExporting(true);
 

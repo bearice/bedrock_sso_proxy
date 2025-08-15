@@ -52,10 +52,12 @@ export function useAdminUserSearch(token?: string, q?: string) {
         throw new Error('No token or search query provided');
       }
 
-      setAuthToken(token);
       const { data, error } = await apiClient.GET('/api/admin/users/search', {
         params: {
           query: { q },
+        },
+        headers: {
+          Authorization: `Bearer ${token}`,
         },
       });
 
@@ -79,10 +81,12 @@ export function useAdminUser(token?: string, userId?: number) {
         throw new Error('No token or user ID provided');
       }
 
-      setAuthToken(token);
       const { data, error } = await apiClient.GET('/api/admin/users/{user_id}', {
         params: {
           path: { user_id: userId },
+        },
+        headers: {
+          Authorization: `Bearer ${token}`,
         },
       });
 
@@ -113,12 +117,14 @@ export function useUpdateUserState(token?: string) {
         throw new Error('No token provided');
       }
 
-      setAuthToken(token);
       const { data, error } = await apiClient.PUT('/api/admin/users/{user_id}/state', {
         params: {
           path: { user_id: userId },
         },
         body: stateUpdate,
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
       });
 
       if (error) {
@@ -153,14 +159,15 @@ export function useBatchUpdateUsers(token?: string) {
         throw new Error('No token provided');
       }
 
-      setAuthToken(token);
-
       // Execute updates in parallel
       const results = await Promise.allSettled(
         userIds.map((userId) =>
           apiClient.PUT('/api/admin/users/{user_id}/state', {
             params: { path: { user_id: userId } },
             body: stateUpdate,
+            headers: {
+              Authorization: `Bearer ${token}`,
+            },
           })
         )
       );

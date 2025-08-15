@@ -8,41 +8,26 @@ type CreateApiKeyRequest = components['schemas']['CreateApiKeyRequest'];
 type CreateApiKeyResponse = components['schemas']['CreateApiKeyResponse'];
 
 // List all API keys for the authenticated user
-export function useApiKeys(token?: string) {
+export function useApiKeys() {
   return useQuery({
-    queryKey: ['api-keys', token],
+    queryKey: ['api-keys'],
     queryFn: async (): Promise<ApiKey[]> => {
-      if (!token) {
-        throw new Error('No token provided');
-      }
-
-      // Manually add the authorization header to ensure it's included
-      const { data, error } = await apiClient.GET('/api/keys', {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
+      const { data, error } = await apiClient.GET('/api/keys');
 
       if (error) {
         throw new ApiError(500, error.error || 'Failed to fetch API keys');
       }
       return data as ApiKey[];
     },
-    enabled: !!token,
   });
 }
 
 // Create a new API key
-export function useCreateApiKey(token?: string) {
+export function useCreateApiKey() {
   const queryClient = useQueryClient();
 
   return useMutation({
     mutationFn: async (request: CreateApiKeyRequest): Promise<CreateApiKeyResponse> => {
-      if (!token) {
-        throw new Error('No token provided');
-      }
-
-      // Token is now set globally in AuthContext, no need to set it here
       const { data, error } = await apiClient.POST('/api/keys', {
         body: request,
       });
@@ -55,23 +40,18 @@ export function useCreateApiKey(token?: string) {
     onSuccess: () => {
       // Invalidate and refetch API keys list
       queryClient.invalidateQueries({
-        queryKey: ['api-keys', token],
+        queryKey: ['api-keys'],
       });
     },
   });
 }
 
 // Revoke an API key
-export function useRevokeApiKey(token?: string) {
+export function useRevokeApiKey() {
   const queryClient = useQueryClient();
 
   return useMutation({
     mutationFn: async (keyHash: string): Promise<void> => {
-      if (!token) {
-        throw new Error('No token provided');
-      }
-
-      // Token is now set globally in AuthContext, no need to set it here
       const { error } = await apiClient.DELETE('/api/keys/{key_hash}', {
         params: {
           path: { key_hash: keyHash },
@@ -85,7 +65,7 @@ export function useRevokeApiKey(token?: string) {
     onSuccess: () => {
       // Invalidate and refetch API keys list
       queryClient.invalidateQueries({
-        queryKey: ['api-keys', token],
+        queryKey: ['api-keys'],
       });
     },
   });

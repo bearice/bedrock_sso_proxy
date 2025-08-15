@@ -20,9 +20,9 @@ export function ApiKeyManagement() {
     isLoading,
     error: loadError,
     refetch: loadApiKeys,
-  } = useApiKeys(token || undefined);
-  const createApiKeyMutation = useCreateApiKey(token || undefined);
-  const revokeApiKeyMutation = useRevokeApiKey(token || undefined);
+  } = useApiKeys();
+  const createApiKeyMutation = useCreateApiKey();
+  const revokeApiKeyMutation = useRevokeApiKey();
 
   const error =
     loadError?.message ||
