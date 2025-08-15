@@ -1,330 +1,342 @@
 region_id,model_id,model_name,provider,input_price,output_price,batch_input_price,batch_output_price,cache_write_price,cache_read_price,timestamp
-ap-south-1,amazon.nova-micro-v1:0,Amazon Nova Micro,Amazon,4.1e-05,0.000164,,,,,2025-07-29T12:05:49.097204
-ap-south-1,amazon.nova-lite-v1:0,Amazon Nova Lite,Amazon,7.1e-05,0.000284,,,,,2025-07-29T12:05:49.097204
-ap-south-1,amazon.nova-pro-v1:0,Amazon Nova Pro,Amazon,0.00094,0.00376,,,,,2025-07-29T12:05:49.097204
-ap-south-1,amazon_titan_text_lite,Amazon Titan Text Lite,Amazon,0.0004,0.0005,,,,,2025-07-29T12:05:49.097204
-ap-south-1,amazon_titan_text_express,Amazon Titan Text Express,Amazon,0.001,0.0019,,,,,2025-07-29T12:05:49.097204
-ap-south-1,anthropic.claude-sonnet-4-20250514-v1:0,Claude Sonnet 4,Anthropic,0.003,0.015,0.00375,0.0003,,,2025-07-29T12:05:49.097204
-ap-south-1,anthropic.claude-3-7-sonnet-20250219-v1:0,Claude 3.7 Sonnet,Anthropic,0.003,0.015,,,0.00375,0.0003,2025-07-29T12:05:49.097204
-ap-south-1,anthropic.claude-3-5-sonnet-20240620-v1:0,Claude 3.5 Sonnet,Anthropic,0.003,0.015,0.0015,0.0075,,,2025-07-29T12:05:49.097204
-ap-south-1,anthropic.claude-3-5-sonnet-20241022-v2:0,Claude 3.5 Sonnet v2,Anthropic,0.003,0.015,0.0015,0.0075,,,2025-07-29T12:05:49.097204
-ap-south-1,anthropic.claude-3-haiku-20240307-v1:0,Claude 3 Haiku,Anthropic,0.00025,0.00125,0.000125,0.000625,,,2025-07-29T12:05:49.097204
-ap-south-1,anthropic.claude-3-sonnet-20240229-v1:0,Claude 3 Sonnet,Anthropic,0.003,0.015,0.0015,0.0075,,,2025-07-29T12:05:49.097204
-ap-south-1,embed_3_english,Embed 3 English,Unknown,0.0001,0.0001,,,,,2025-07-29T12:05:49.097204
-ap-south-1,embed_3_multilingual,Embed 3 Multilingual,Unknown,0.0001,0.0001,,,,,2025-07-29T12:05:49.097204
-ap-south-1,llama_3_instruct_8b,Llama 3 Instruct (8B),Meta,0.00036,0.00072,,,,,2025-07-29T12:05:49.097204
-ap-south-1,llama_3_instruct_70b,Llama 3 Instruct (70B),Meta,0.00318,0.0042,,,,,2025-07-29T12:05:49.097204
-ap-south-1,mistral.mistral-7b-instruct-v0:2,Mistral 7B,Mistral AI,0.00018,0.00024,,,,,2025-07-29T12:05:49.097204
-ap-south-1,mixtral_8*7b,Mixtral 8*7B,Mistral AI,0.00054,0.00084,,,,,2025-07-29T12:05:49.097204
-ap-south-1,mistral.mistral-large-2402-v1:0,Mistral Large (24.02),Mistral AI,0.0048,0.0144,,,,,2025-07-29T12:05:49.097204
-ap-northeast-2,amazon.nova-micro-v1:0,Amazon Nova Micro,Amazon,4.1e-05,0.000164,,,,,2025-07-29T12:05:49.097204
-ap-northeast-2,amazon.nova-lite-v1:0,Amazon Nova Lite,Amazon,7.1e-05,0.000284,,,,,2025-07-29T12:05:49.097204
-ap-northeast-2,amazon.nova-pro-v1:0,Amazon Nova Pro,Amazon,0.00095,0.0038,,,,,2025-07-29T12:05:49.097204
-ap-northeast-2,amazon.titan-embed-g1-text-02,Amazon  Titan Text Embeddings V2,Amazon,2.4592e-05,1.2296e-05,,,,,2025-07-29T12:05:49.097204
-ap-northeast-2,anthropic.claude-sonnet-4-20250514-v1:0,Claude Sonnet 4,Anthropic,0.003,0.015,0.00375,0.0003,,,2025-07-29T12:05:49.097204
-ap-northeast-2,anthropic.claude-3-7-sonnet-20250219-v1:0,Claude 3.7 Sonnet,Anthropic,0.003,0.015,,,0.00375,0.0003,2025-07-29T12:05:49.097204
-ap-northeast-2,anthropic.claude-3-5-sonnet-20240620-v1:0,Claude 3.5 Sonnet,Anthropic,0.003,0.015,0.0015,0.0075,,,2025-07-29T12:05:49.097204
-ap-northeast-2,anthropic.claude-3-5-sonnet-20241022-v2:0,Claude 3.5 Sonnet v2,Anthropic,0.003,0.015,0.0015,0.0075,,,2025-07-29T12:05:49.097204
-ap-northeast-2,anthropic.claude-3-haiku-20240307-v1:0,Claude 3 Haiku,Anthropic,0.00025,0.00125,0.000125,0.000625,,,2025-07-29T12:05:49.097204
-ap-northeast-2,anthropic.claude-3-sonnet-20240229-v1:0,Claude 3 Sonnet,Anthropic,0.003,0.015,0.0015,0.0075,,,2025-07-29T12:05:49.097204
-us-gov-west-1,amazon.nova-micro-v1:0,Amazon Nova Micro,Amazon,4.2e-05,0.000168,,,,,2025-07-29T12:05:49.097204
-us-gov-west-1,amazon.nova-lite-v1:0,Amazon Nova Lite,Amazon,7.2e-05,0.000288,,,,,2025-07-29T12:05:49.097204
-us-gov-west-1,amazon.nova-pro-v1:0,Amazon Nova Pro,Amazon,0.00096,0.00384,,,,,2025-07-29T12:05:49.097204
-us-gov-west-1,amazon_titan_text_express,Amazon Titan Text Express,Amazon,0.0008,0.0016,,,,,2025-07-29T12:05:49.097204
-us-gov-west-1,anthropic.claude-3-7-sonnet-20250219-v1:0,Claude 3.7 Sonnet,Anthropic,0.0036000000000000003,0.018000000000000002,,,0.0045000000000000005,0.00035999999999999997,2025-07-29T12:05:49.097204
-us-gov-west-1,anthropic.claude-3-5-sonnet-20240620-v1:0,Claude 3.5 Sonnet,Anthropic,0.0036000000000000003,0.018000000000000002,,,,,2025-07-29T12:05:49.097204
-us-gov-west-1,anthropic.claude-3-haiku-20240307-v1:0,Claude 3 Haiku,Anthropic,0.0003,0.0015,,,,,2025-07-29T12:05:49.097204
-us-gov-west-1,llama_3_instruct_8b,Llama 3 Instruct (8B),Meta,0.0003,0.0006,,,,,2025-07-29T12:05:49.097204
-us-gov-west-1,llama_3_instruct_70b,Llama 3 Instruct (70B),Meta,0.00265,0.0035,,,,,2025-07-29T12:05:49.097204
-eu-north-1,amazon.nova-micro-v1:0,Amazon Nova Micro,Amazon,3.8e-05,0.000152,,,,,2025-07-29T12:05:49.097204
-eu-north-1,amazon.nova-lite-v1:0,Amazon Nova Lite,Amazon,6.5e-05,0.00026,,,,,2025-07-29T12:05:49.097204
-eu-north-1,amazon.nova-pro-v1:0,Amazon Nova Pro,Amazon,0.00087,0.00348,,,,,2025-07-29T12:05:49.097204
-eu-north-1,amazon.titan-embed-g1-text-02,Amazon  Titan Text Embeddings V2,Amazon,2.1e-05,1.05e-05,,,,,2025-07-29T12:05:49.097204
-eu-north-1,anthropic.claude-sonnet-4-20250514-v1:0,Claude Sonnet 4,Anthropic,0.003,0.015,0.00375,0.0003,,,2025-07-29T12:05:49.097204
-eu-north-1,anthropic.claude-3-7-sonnet-20250219-v1:0,Claude 3.7 Sonnet,Anthropic,0.003,0.015,,,0.00375,0.0003,2025-07-29T12:05:49.097204
-eu-north-1,anthropic.claude-3-5-sonnet-20241022-v2:0,Claude 3.5 Sonnet v2,Anthropic,0.003,0.015,0.0015,0.0075,,,2025-07-29T12:05:49.097204
-eu-north-1,mistral.pixtral-large-2502-v1:0,Pixtral Large (25.02),Mistral AI,0.002,0.006,,,,,2025-07-29T12:05:49.097204
-ap-south-2,anthropic.claude-sonnet-4-20250514-v1:0,Claude Sonnet 4,Anthropic,0.003,0.015,0.00375,0.0003,,,2025-07-29T12:05:49.097204
-ap-south-2,anthropic.claude-3-7-sonnet-20250219-v1:0,Claude 3.7 Sonnet,Anthropic,0.003,0.015,,,0.00375,0.0003,2025-07-29T12:05:49.097204
-ap-south-2,anthropic.claude-3-5-sonnet-20241022-v2:0,Claude 3.5 Sonnet v2,Anthropic,0.003,0.015,0.0015,0.0075,,,2025-07-29T12:05:49.097204
-ap-southeast-1,amazon.nova-micro-v1:0,Amazon Nova Micro,Amazon,4.7e-05,0.000188,,,,,2025-07-29T12:05:49.097204
-ap-southeast-1,amazon.nova-lite-v1:0,Amazon Nova Lite,Amazon,8.1e-05,0.000324,,,,,2025-07-29T12:05:49.097204
-ap-southeast-1,amazon.nova-pro-v1:0,Amazon Nova Pro,Amazon,0.00108,0.00432,,,,,2025-07-29T12:05:49.097204
-ap-southeast-1,anthropic.claude-sonnet-4-20250514-v1:0,Claude Sonnet 4,Anthropic,0.003,0.015,0.00375,0.0003,,,2025-07-29T12:05:49.097204
-ap-southeast-1,anthropic.claude-3-7-sonnet-20250219-v1:0,Claude 3.7 Sonnet,Anthropic,0.003,0.015,,,0.00375,0.0003,2025-07-29T12:05:49.097204
-ap-southeast-1,anthropic.claude-3-5-sonnet-20240620-v1:0,Claude 3.5 Sonnet,Anthropic,0.003,0.015,0.0015,0.0075,,,2025-07-29T12:05:49.097204
-ap-southeast-1,anthropic.claude-3-5-sonnet-20241022-v2:0,Claude 3.5 Sonnet v2,Anthropic,0.003,0.015,0.0015,0.0075,,,2025-07-29T12:05:49.097204
-ap-southeast-1,anthropic.claude-3-haiku-20240307-v1:0,Claude 3 Haiku,Anthropic,0.00025,0.00125,0.000125,0.000625,,,2025-07-29T12:05:49.097204
-ap-southeast-1,anthropic.claude-3-sonnet-20240229-v1:0,Claude 3 Sonnet,Anthropic,0.003,0.015,0.0015,0.0075,,,2025-07-29T12:05:49.097204
-ap-southeast-1,anthropic.claude-v2,Claude 2.1,Anthropic,0.008,0.024,,,,,2025-07-29T12:05:49.097204
-ap-southeast-1,anthropic.claude-v2,Claude 2.0,Anthropic,0.008,0.024,,,,,2025-07-29T12:05:49.097204
-ap-southeast-1,anthropic.claude-instant-v1,Claude Instant,Anthropic,0.0008,0.0024,,,,,2025-07-29T12:05:49.097204
-ap-southeast-1,embed_3_english,Embed 3 English,Unknown,0.0001,0.0001,,,,,2025-07-29T12:05:49.097204
-ap-southeast-1,embed_3_multilingual,Embed 3 Multilingual,Unknown,0.0001,0.0001,,,,,2025-07-29T12:05:49.097204
-us-gov-east-1,anthropic.claude-3-5-sonnet-20240620-v1:0,Claude 3.5 Sonnet,Anthropic,0.0036000000000000003,0.018000000000000002,,,,,2025-07-29T12:05:49.097204
-us-gov-east-1,anthropic.claude-3-haiku-20240307-v1:0,Claude 3 Haiku,Anthropic,0.0003,0.0015,,,,,2025-07-29T12:05:49.097204
-sa-east-1,amazon_titan_text_lite,Amazon Titan Text Lite,Amazon,0.0003,0.0004,,,,,2025-07-29T12:05:49.097204
-sa-east-1,amazon_titan_text_express,Amazon Titan Text Express,Amazon,0.0004,0.0011,,,,,2025-07-29T12:05:49.097204
-sa-east-1,amazon.titan-embed-g1-text-02,Amazon  Titan Text Embeddings V2,Amazon,0.0002,0.0001,,,,,2025-07-29T12:05:49.097204
-sa-east-1,anthropic.claude-3-haiku-20240307-v1:0,Claude 3 Haiku,Anthropic,0.00025,0.00125,0.000125,0.000625,,,2025-07-29T12:05:49.097204
-sa-east-1,anthropic.claude-3-sonnet-20240229-v1:0,Claude 3 Sonnet,Anthropic,0.003,0.015,0.0015,0.0075,,,2025-07-29T12:05:49.097204
-sa-east-1,embed_3_english,Embed 3 English,Unknown,0.0001,0.0001,,,,,2025-07-29T12:05:49.097204
-sa-east-1,embed_3_multilingual,Embed 3 Multilingual,Unknown,0.0001,0.0001,,,,,2025-07-29T12:05:49.097204
-sa-east-1,llama_3_instruct_8b,Llama 3 Instruct (8B),Meta,0.0005,0.00101,,,,,2025-07-29T12:05:49.097204
-sa-east-1,llama_3_instruct_70b,Llama 3 Instruct (70B),Meta,0.00445,0.00588,,,,,2025-07-29T12:05:49.097204
-sa-east-1,mistral.mistral-7b-instruct-v0:2,Mistral 7B,Mistral AI,0.00025,0.00034,,,,,2025-07-29T12:05:49.097204
-sa-east-1,mixtral_8*7b,Mixtral 8*7B,Mistral AI,0.00076,0.00118,,,,,2025-07-29T12:05:49.097204
-sa-east-1,mistral.mistral-large-2402-v1:0,Mistral Large (24.02),Mistral AI,0.0067,0.0202,,,,,2025-07-29T12:05:49.097204
-ap-southeast-2,amazon.nova-micro-v1:0,Amazon Nova Micro,Amazon,3.7e-05,0.000148,,,,,2025-07-29T12:05:49.097204
-ap-southeast-2,amazon.nova-lite-v1:0,Amazon Nova Lite,Amazon,6.3e-05,0.000252,,,,,2025-07-29T12:05:49.097204
-ap-southeast-2,amazon.nova-pro-v1:0,Amazon Nova Pro,Amazon,0.00084,0.00336,,,,,2025-07-29T12:05:49.097204
-ap-southeast-2,amazon_titan_text_lite,Amazon Titan Text Lite,Amazon,0.0002,0.00025,,,,,2025-07-29T12:05:49.097204
-ap-southeast-2,amazon_titan_text_express,Amazon Titan Text Express,Amazon,0.00025,0.000788,,,,,2025-07-29T12:05:49.097204
-ap-southeast-2,anthropic.claude-sonnet-4-20250514-v1:0,Claude Sonnet 4,Anthropic,0.003,0.015,0.00375,0.0003,,,2025-07-29T12:05:49.097204
-ap-southeast-2,anthropic.claude-3-7-sonnet-20250219-v1:0,Claude 3.7 Sonnet,Anthropic,0.003,0.015,,,0.00375,0.0003,2025-07-29T12:05:49.097204
-ap-southeast-2,anthropic.claude-3-5-sonnet-20240620-v1:0,Claude 3.5 Sonnet,Anthropic,0.003,0.015,0.0015,0.0075,,,2025-07-29T12:05:49.097204
-ap-southeast-2,anthropic.claude-3-5-sonnet-20241022-v2:0,Claude 3.5 Sonnet v2,Anthropic,0.003,0.015,0.0015,0.0075,,,2025-07-29T12:05:49.097204
-ap-southeast-2,anthropic.claude-3-haiku-20240307-v1:0,Claude 3 Haiku,Anthropic,0.00025,0.00125,0.000125,0.000625,,,2025-07-29T12:05:49.097204
-ap-southeast-2,anthropic.claude-3-sonnet-20240229-v1:0,Claude 3 Sonnet,Anthropic,0.003,0.015,0.0015,0.0075,,,2025-07-29T12:05:49.097204
-ap-southeast-2,embed_3_english,Embed 3 English,Unknown,0.0001,0.0001,,,,,2025-07-29T12:05:49.097204
-ap-southeast-2,embed_3_multilingual,Embed 3 Multilingual,Unknown,0.0001,0.0001,,,,,2025-07-29T12:05:49.097204
-ap-southeast-2,mistral.mistral-7b-instruct-v0:2,Mistral 7B,Mistral AI,0.0002,0.00026,,,,,2025-07-29T12:05:49.097204
-ap-southeast-2,mixtral_8*7b,Mixtral 8*7B,Mistral AI,0.00059,0.00091,,,,,2025-07-29T12:05:49.097204
-ap-southeast-2,mistral.mistral-large-2402-v1:0,Mistral Large (24.02),Mistral AI,0.0052,0.0156,,,,,2025-07-29T12:05:49.097204
-eu-south-2,amazon.nova-micro-v1:0,Amazon Nova Micro,Amazon,3.9e-05,0.000156,,,,,2025-07-29T12:05:49.097204
-eu-south-2,amazon.nova-lite-v1:0,Amazon Nova Lite,Amazon,6.6e-05,0.000264,,,,,2025-07-29T12:05:49.097204
-eu-south-2,amazon.nova-pro-v1:0,Amazon Nova Pro,Amazon,0.00088,0.00352,,,,,2025-07-29T12:05:49.097204
-eu-south-2,amazon.titan-embed-g1-text-02,Amazon  Titan Text Embeddings V2,Amazon,2.1e-05,1.05e-05,,,,,2025-07-29T12:05:49.097204
-eu-south-2,anthropic.claude-sonnet-4-20250514-v1:0,Claude Sonnet 4,Anthropic,0.003,0.015,0.00375,0.0003,,,2025-07-29T12:05:49.097204
-eu-south-2,anthropic.claude-3-5-sonnet-20241022-v2:0,Claude 3.5 Sonnet v2,Anthropic,0.003,0.015,0.0015,0.0075,,,2025-07-29T12:05:49.097204
-us-west-2,amazon.nova-micro-v1:0,Amazon Nova Micro,Amazon,3.5e-05,0.00014,,,,,2025-07-29T12:05:49.097204
-us-west-2,amazon.nova-lite-v1:0,Amazon Nova Lite,Amazon,6e-05,0.00024,,,,,2025-07-29T12:05:49.097204
-us-west-2,amazon.nova-pro-v1:0,Amazon Nova Pro,Amazon,0.0008,0.0032,,,,,2025-07-29T12:05:49.097204
-us-west-2,amazon.nova-premier-v1:0,Amazon Nova Premier,Amazon,0.0025,0.0125,0.00125,0.00625,,0.000625,2025-07-29T12:05:49.097204
-us-west-2,amazon_titan_text_lite,Amazon Titan Text Lite,Amazon,0.00015,0.0002,,,,,2025-07-29T12:05:49.097204
-us-west-2,amazon_titan_text_express,Amazon Titan Text Express,Amazon,0.0002,0.0006,,,,,2025-07-29T12:05:49.097204
-us-west-2,amazon.titan-embed-g1-text-02,Amazon  Titan Text Embeddings V2,Amazon,2e-05,1e-05,,,,,2025-07-29T12:05:49.097204
-us-west-2,anthropic.claude-opus-4-20250514-v1:0,Claude Opus 4,Anthropic,0.015,0.075,0.01875,0.0015,,,2025-07-29T12:05:49.097204
-us-west-2,anthropic.claude-sonnet-4-20250514-v1:0,Claude Sonnet 4,Anthropic,0.003,0.015,0.00375,0.0003,,,2025-07-29T12:05:49.097204
-us-west-2,anthropic.claude-3-7-sonnet-20250219-v1:0,Claude 3.7 Sonnet,Anthropic,0.003,0.015,,,0.00375,0.0003,2025-07-29T12:05:49.097204
-us-west-2,anthropic.claude-3-5-sonnet-20240620-v1:0,Claude 3.5 Sonnet,Anthropic,0.003,0.015,0.0015,0.0075,,,2025-07-29T12:05:49.097204
-us-west-2,anthropic.claude-3-5-haiku-20241022-v1:0,Claude 3.5 Haiku,Anthropic,0.005,0.001,,,,,2025-07-29T12:05:49.097204
-us-west-2,anthropic.claude-3-5-sonnet-20241022-v2:0,Claude 3.5 Sonnet v2,Anthropic,0.003,0.015,0.0015,0.0075,0.00375,0.0003,2025-07-29T12:05:49.097204
-us-west-2,anthropic.claude-3-opus-20240229-v1:0,Claude 3 Opus,Anthropic,0.015,0.075,0.0075,0.0375,,,2025-07-29T12:05:49.097204
-us-west-2,anthropic.claude-3-haiku-20240307-v1:0,Claude 3 Haiku,Anthropic,0.00025,0.00125,0.000125,0.000625,,,2025-07-29T12:05:49.097204
-us-west-2,anthropic.claude-3-sonnet-20240229-v1:0,Claude 3 Sonnet,Anthropic,0.003,0.015,0.0015,0.0075,,,2025-07-29T12:05:49.097204
-us-west-2,anthropic.claude-v2,Claude 2.1,Anthropic,0.008,0.024,,,,,2025-07-29T12:05:49.097204
-us-west-2,anthropic.claude-v2,Claude 2.0,Anthropic,0.008,0.024,,,,,2025-07-29T12:05:49.097204
-us-west-2,anthropic.claude-instant-v1,Claude Instant,Anthropic,0.0008,0.0024,,,,,2025-07-29T12:05:49.097204
-us-west-2,cohere.command-text-v14,Command,Cohere,0.001,0.002,,,,,2025-07-29T12:05:49.097204
-us-west-2,cohere.command-text-v14,Command-Light,Cohere,0.0003,0.0006,,,,,2025-07-29T12:05:49.097204
-us-west-2,cohere.command-r-plus-v1:0,Command R+,Cohere,0.003,0.015,,,,,2025-07-29T12:05:49.097204
-us-west-2,cohere.command-r-v1:0,Command R,Cohere,0.0005,0.0015,,,,,2025-07-29T12:05:49.097204
-us-west-2,embed_3_english,Embed 3 English,Unknown,0.0001,0.0001,,,,,2025-07-29T12:05:49.097204
-us-west-2,embed_3_multilingual,Embed 3 Multilingual,Unknown,0.0001,0.0001,,,,,2025-07-29T12:05:49.097204
-us-west-2,deepseek.r1-v1:0,DeepSeek-R1,DeepSeek,0.00135,0.0054,,,,,2025-07-29T12:05:49.097204
-us-west-2,meta.llama4-maverick-17b-instruct-v1:0,Llama 4 Maverick 17B,Meta,0.00024,0.00097,0.00012,0.000485,,,2025-07-29T12:05:49.097204
-us-west-2,meta.llama4-scout-17b-instruct-v1:0,Llama 4 Scout 17B,Meta,0.00017,0.00066,8.5e-05,0.00033,,,2025-07-29T12:05:49.097204
-us-west-2,llama_3_3_instruct_70b,Llama 3.3 Instruct (70B),Meta,0.00072,0.00072,0.00036,0.00036,,,2025-07-29T12:05:49.097204
-us-west-2,llama_3_2_instruct_1b,Llama 3.2 Instruct (1B),Meta,0.0001,0.0001,5e-05,5e-05,,,2025-07-29T12:05:49.097204
-us-west-2,llama_3_2_instruct_3b,Llama 3.2 Instruct (3B),Meta,0.00015,0.00015,7.5e-05,7.5e-05,,,2025-07-29T12:05:49.097204
-us-west-2,llama_3_2_instruct_11b,Llama 3.2 Instruct (11B),Meta,0.00016,0.00016,8e-05,8e-05,,,2025-07-29T12:05:49.097204
-us-west-2,llama_3_2_instruct_90b,Llama 3.2 Instruct (90B),Meta,0.00072,0.00072,0.00036,0.00036,,,2025-07-29T12:05:49.097204
-us-west-2,llama_3_1_instruct_8b,Llama 3.1 Instruct (8B),Meta,0.00022,0.00022,0.00011,0.00011,,,2025-07-29T12:05:49.097204
-us-west-2,llama_3_1_instruct_70b,Llama 3.1 Instruct (70B),Meta,0.00072,0.00072,0.00036,0.00036,,,2025-07-29T12:05:49.097204
-us-west-2,llama_3_1_instruct_405b,Llama 3.1 Instruct (405B),Meta,0.0024,0.0024,0.0012,0.0012,,,2025-07-29T12:05:49.097204
-us-west-2,llama_3_1_instruct_70b_w/_latency_optimized_inference,Llama 3.1 Instruct (70B) (w/ latency optimized inference),Meta,0.0009,0.0009,,,,,2025-07-29T12:05:49.097204
-us-west-2,llama_3_instruct_8b,Llama 3 Instruct (8B),Meta,0.0003,0.0006,,,,,2025-07-29T12:05:49.097204
-us-west-2,llama_3_instruct_70b,Llama 3 Instruct (70B),Meta,0.00265,0.0035,,,,,2025-07-29T12:05:49.097204
-us-west-2,mistral.mistral-7b-instruct-v0:2,Mistral 7B,Mistral AI,0.00015,0.0002,,,,,2025-07-29T12:05:49.097204
-us-west-2,mixtral_8*7b,Mixtral 8*7B,Mistral AI,0.00045,0.0007,,,,,2025-07-29T12:05:49.097204
-us-west-2,mistral.mistral-large-2402-v1:0,Mistral Large (24.02),Mistral AI,0.004,0.012,,,,,2025-07-29T12:05:49.097204
-us-west-2,mistral_large_2_24_07,Mistral Large 2 (24.07),Mistral AI,0.002,0.006,0.0015,0.0045,,,2025-07-29T12:05:49.097204
-us-west-2,mistral.pixtral-large-2502-v1:0,Pixtral Large (25.02),Mistral AI,0.002,0.006,,,,,2025-07-29T12:05:49.097204
-eu-central-1,ai21.jamba-1-5-large-v1:0,Jamba 1.5 Large,AI21 Labs,0.002,0.008,,,,,2025-07-29T12:05:49.097204
-eu-central-1,ai21.jamba-1-5-mini-v1:0,Jamba 1.5 Mini,AI21 Labs,0.0002,0.0004,,,,,2025-07-29T12:05:49.097204
-eu-central-1,amazon.nova-micro-v1:0,Amazon Nova Micro,Amazon,4.6e-05,0.000184,,,,,2025-07-29T12:05:49.097204
-eu-central-1,amazon.nova-lite-v1:0,Amazon Nova Lite,Amazon,7.8e-05,0.000312,,,,,2025-07-29T12:05:49.097204
-eu-central-1,amazon.nova-pro-v1:0,Amazon Nova Pro,Amazon,0.00105,0.0042,,,,,2025-07-29T12:05:49.097204
-eu-central-1,amazon_titan_text_express,Amazon Titan Text Express,Amazon,0.0003,0.000863,,,,,2025-07-29T12:05:49.097204
-eu-central-1,amazon.titan-embed-g1-text-02,Amazon  Titan Text Embeddings V2,Amazon,0.0002,0.0001,,,,,2025-07-29T12:05:49.097204
-eu-central-1,anthropic.claude-sonnet-4-20250514-v1:0,Claude Sonnet 4,Anthropic,0.003,0.015,0.00375,0.0003,,,2025-07-29T12:05:49.097204
-eu-central-1,anthropic.claude-3-7-sonnet-20250219-v1:0,Claude 3.7 Sonnet,Anthropic,0.003,0.015,,,0.00375,0.0003,2025-07-29T12:05:49.097204
-eu-central-1,anthropic.claude-3-5-sonnet-20240620-v1:0,Claude 3.5 Sonnet,Anthropic,0.003,0.015,0.0015,0.0075,,,2025-07-29T12:05:49.097204
-eu-central-1,anthropic.claude-3-haiku-20240307-v1:0,Claude 3 Haiku,Anthropic,0.00025,0.00125,0.000125,0.000625,,,2025-07-29T12:05:49.097204
-eu-central-1,anthropic.claude-3-sonnet-20240229-v1:0,Claude 3 Sonnet,Anthropic,0.003,0.015,0.0015,0.0075,,,2025-07-29T12:05:49.097204
-eu-central-1,anthropic.claude-v2,Claude 2.1,Anthropic,0.008,0.024,,,,,2025-07-29T12:05:49.097204
-eu-central-1,anthropic.claude-v2,Claude 2.0,Anthropic,0.008,0.024,,,,,2025-07-29T12:05:49.097204
-eu-central-1,anthropic.claude-instant-v1,Claude Instant,Anthropic,0.0008,0.0024,,,,,2025-07-29T12:05:49.097204
-eu-central-1,embed_3_english,Embed 3 English,Unknown,0.0001,0.0001,,,,,2025-07-29T12:05:49.097204
-eu-central-1,embed_3_multilingual,Embed 3 Multilingual,Unknown,0.0001,0.0001,,,,,2025-07-29T12:05:49.097204
-eu-central-1,llama_3_2_instruct_1b,Llama 3.2 Instruct (1B),Meta,0.00013,0.00013,6.5e-05,6.5e-05,,,2025-07-29T12:05:49.097204
-eu-central-1,llama_3_2_instruct_3b,Llama 3.2 Instruct (3B),Meta,0.00019,0.00019,9.5e-05,9.5e-05,,,2025-07-29T12:05:49.097204
-eu-central-1,mistral.pixtral-large-2502-v1:0,Pixtral Large (25.02),Mistral AI,0.002,0.006,,,,,2025-07-29T12:05:49.097204
-ca-central-1,amazon_titan_text_lite,Amazon Titan Text Lite,Amazon,0.0002,0.0003,,,,,2025-07-29T12:05:49.097204
-ca-central-1,amazon_titan_text_express,Amazon Titan Text Express,Amazon,0.0003,0.0008,,,,,2025-07-29T12:05:49.097204
-ca-central-1,amazon.titan-embed-g1-text-02,Amazon  Titan Text Embeddings V2,Amazon,0.0001,5e-05,,,,,2025-07-29T12:05:49.097204
-ca-central-1,anthropic.claude-3-haiku-20240307-v1:0,Claude 3 Haiku,Anthropic,0.00025,0.00125,0.000125,0.000625,,,2025-07-29T12:05:49.097204
-ca-central-1,anthropic.claude-3-sonnet-20240229-v1:0,Claude 3 Sonnet,Anthropic,0.003,0.015,0.0015,0.0075,,,2025-07-29T12:05:49.097204
-ca-central-1,embed_3_english,Embed 3 English,Unknown,0.0001,0.0001,,,,,2025-07-29T12:05:49.097204
-ca-central-1,embed_3_multilingual,Embed 3 Multilingual,Unknown,0.0001,0.0001,,,,,2025-07-29T12:05:49.097204
-ca-central-1,llama_3_instruct_8b,Llama 3 Instruct (8B),Meta,0.00035,0.00069,,,,,2025-07-29T12:05:49.097204
-ca-central-1,llama_3_instruct_70b,Llama 3 Instruct (70B),Meta,0.00305,0.00403,,,,,2025-07-29T12:05:49.097204
-ca-central-1,mistral.mistral-7b-instruct-v0:2,Mistral 7B,Mistral AI,0.00017,0.00023,,,,,2025-07-29T12:05:49.097204
-ca-central-1,mixtral_8*7b,Mixtral 8*7B,Mistral AI,0.00052,0.00081,,,,,2025-07-29T12:05:49.097204
-ca-central-1,mistral.mistral-large-2402-v1:0,Mistral Large (24.02),Mistral AI,0.0046,0.0138,,,,,2025-07-29T12:05:49.097204
-ap-northeast-1,amazon.nova-micro-v1:0,Amazon Nova Micro,Amazon,4.2e-05,0.000168,,,,,2025-07-29T12:05:49.097204
-ap-northeast-1,amazon.nova-lite-v1:0,Amazon Nova Lite,Amazon,7.2e-05,0.000288,,,,,2025-07-29T12:05:49.097204
-ap-northeast-1,amazon.nova-pro-v1:0,Amazon Nova Pro,Amazon,0.00096,0.00384,,,,,2025-07-29T12:05:49.097204
-ap-northeast-1,amazon_titan_text_express,Amazon Titan Text Express,Amazon,0.000275,0.000825,,,,,2025-07-29T12:05:49.097204
-ap-northeast-1,anthropic.claude-sonnet-4-20250514-v1:0,Claude Sonnet 4,Anthropic,0.003,0.015,0.00375,0.0003,,,2025-07-29T12:05:49.097204
-ap-northeast-1,anthropic.claude-3-7-sonnet-20250219-v1:0,Claude 3.7 Sonnet,Anthropic,0.003,0.015,,,0.00375,0.0003,2025-07-29T12:05:49.097204
-ap-northeast-1,anthropic.claude-3-5-sonnet-20240620-v1:0,Claude 3.5 Sonnet,Anthropic,0.003,0.015,0.0015,0.0075,,,2025-07-29T12:05:49.097204
-ap-northeast-1,anthropic.claude-3-5-sonnet-20241022-v2:0,Claude 3.5 Sonnet v2,Anthropic,0.003,0.015,0.0015,0.0075,,,2025-07-29T12:05:49.097204
-ap-northeast-1,anthropic.claude-3-haiku-20240307-v1:0,Claude 3 Haiku,Anthropic,0.00025,0.00125,0.000125,0.000625,,,2025-07-29T12:05:49.097204
-ap-northeast-1,anthropic.claude-3-sonnet-20240229-v1:0,Claude 3 Sonnet,Anthropic,0.003,0.015,0.0015,0.0075,,,2025-07-29T12:05:49.097204
-ap-northeast-1,anthropic.claude-v2,Claude 2.1,Anthropic,0.008,0.024,,,,,2025-07-29T12:05:49.097204
-ap-northeast-1,anthropic.claude-v2,Claude 2.0,Anthropic,0.008,0.024,,,,,2025-07-29T12:05:49.097204
-ap-northeast-1,anthropic.claude-instant-v1,Claude Instant,Anthropic,0.0008,0.0024,,,,,2025-07-29T12:05:49.097204
-ap-northeast-1,embed_3_english,Embed 3 English,Unknown,0.0001,0.0001,,,,,2025-07-29T12:05:49.097204
-ap-northeast-1,embed_3_multilingual,Embed 3 Multilingual,Unknown,0.0001,0.0001,,,,,2025-07-29T12:05:49.097204
-us-east-2,amazon.nova-micro-v1:0,Amazon Nova Micro,Amazon,3.5e-05,0.00014,,,,,2025-07-29T12:05:49.097204
-us-east-2,amazon.nova-lite-v1:0,Amazon Nova Lite,Amazon,6e-05,0.00024,,,,,2025-07-29T12:05:49.097204
-us-east-2,amazon.nova-pro-v1:0,Amazon Nova Pro,Amazon,0.0008,0.0032,,,,,2025-07-29T12:05:49.097204
-us-east-2,amazon.nova-premier-v1:0,Amazon Nova Premier,Amazon,0.0025,0.0125,0.00125,0.00625,,0.000625,2025-07-29T12:05:49.097204
-us-east-2,anthropic.claude-opus-4-20250514-v1:0,Claude Opus 4,Anthropic,0.015,0.075,0.01875,0.0015,,,2025-07-29T12:05:49.097204
-us-east-2,anthropic.claude-sonnet-4-20250514-v1:0,Claude Sonnet 4,Anthropic,0.003,0.015,0.00375,0.0003,,,2025-07-29T12:05:49.097204
-us-east-2,anthropic.claude-3-7-sonnet-20250219-v1:0,Claude 3.7 Sonnet,Anthropic,0.003,0.015,,,0.00375,0.0003,2025-07-29T12:05:49.097204
-us-east-2,anthropic.claude-3-5-sonnet-20240620-v1:0,Claude 3.5 Sonnet,Anthropic,0.003,0.015,0.0015,0.0075,,,2025-07-29T12:05:49.097204
-us-east-2,anthropic.claude-3-5-haiku-20241022-v1:0,Claude 3.5 Haiku,Anthropic,0.005,0.001,,,,,2025-07-29T12:05:49.097204
-us-east-2,anthropic.claude-3-5-sonnet-20241022-v2:0,Claude 3.5 Sonnet v2,Anthropic,0.003,0.015,0.0015,0.0075,0.00375,0.0003,2025-07-29T12:05:49.097204
-us-east-2,anthropic.claude-3-haiku-20240307-v1:0,Claude 3 Haiku,Anthropic,0.00025,0.00125,0.000125,0.000625,,,2025-07-29T12:05:49.097204
-us-east-2,deepseek.r1-v1:0,DeepSeek-R1,DeepSeek,0.00135,0.0054,,,,,2025-07-29T12:05:49.097204
-us-east-2,meta.llama4-maverick-17b-instruct-v1:0,Llama 4 Maverick 17B,Meta,0.00024,0.00097,0.00012,0.000485,,,2025-07-29T12:05:49.097204
-us-east-2,meta.llama4-scout-17b-instruct-v1:0,Llama 4 Scout 17B,Meta,0.00017,0.00066,8.5e-05,0.00033,,,2025-07-29T12:05:49.097204
-us-east-2,llama_3_3_instruct_70b,Llama 3.3 Instruct (70B),Meta,0.00072,0.00072,0.00036,0.00036,,,2025-07-29T12:05:49.097204
-us-east-2,llama_3_2_instruct_1b,Llama 3.2 Instruct (1B),Meta,0.0001,0.0001,,,,,2025-07-29T12:05:49.097204
-us-east-2,llama_3_2_instruct_3b,Llama 3.2 Instruct (3B),Meta,0.00015,0.00015,,,,,2025-07-29T12:05:49.097204
-us-east-2,llama_3_2_instruct_11b,Llama 3.2 Instruct (11B),Meta,0.00016,0.00016,,,,,2025-07-29T12:05:49.097204
-us-east-2,llama_3_2_instruct_90b,Llama 3.2 Instruct (90B),Meta,0.00072,0.00072,,,,,2025-07-29T12:05:49.097204
-us-east-2,llama_3_1_instruct_8b,Llama 3.1 Instruct (8B),Meta,0.00022,0.00022,0.00011,0.00011,,,2025-07-29T12:05:49.097204
-us-east-2,llama_3_1_instruct_70b,Llama 3.1 Instruct (70B),Meta,0.00072,0.00072,0.00036,0.00036,,,2025-07-29T12:05:49.097204
-us-east-2,llama_3_1_instruct_405b,Llama 3.1 Instruct (405B),Meta,0.0024,0.0024,0.0012,0.0012,,,2025-07-29T12:05:49.097204
-us-east-2,llama_3_1_instruct_70b_w/_latency_optimized_inference,Llama 3.1 Instruct (70B) (w/ latency optimized inference),Meta,0.0009,0.0009,,,,,2025-07-29T12:05:49.097204
-us-east-2,llama_3_1_instruct_405b_w/_latency_optimized_inference,Llama 3.1 Instruct (405B) (w/ latency optimized inference),Meta,0.003,0.003,,,,,2025-07-29T12:05:49.097204
-us-east-2,mistral.pixtral-large-2502-v1:0,Pixtral Large (25.02),Mistral AI,0.002,0.006,,,,,2025-07-29T12:05:49.097204
-ap-northeast-3,anthropic.claude-sonnet-4-20250514-v1:0,Claude Sonnet 4,Anthropic,0.003,0.015,0.00375,0.0003,,,2025-07-29T12:05:49.097204
-ap-northeast-3,anthropic.claude-3-7-sonnet-20250219-v1:0,Claude 3.7 Sonnet,Anthropic,0.003,0.015,,,0.00375,0.0003,2025-07-29T12:05:49.097204
-ap-northeast-3,anthropic.claude-3-5-sonnet-20241022-v2:0,Claude 3.5 Sonnet v2,Anthropic,0.003,0.015,0.0015,0.0075,,,2025-07-29T12:05:49.097204
-eu-west-2,amazon.nova-micro-v1:0,Amazon Nova Micro,Amazon,4.9e-05,0.000196,,,,,2025-07-29T12:05:49.097204
-eu-west-2,amazon.nova-lite-v1:0,Amazon Nova Lite,Amazon,8.4e-05,0.000336,,,,,2025-07-29T12:05:49.097204
-eu-west-2,amazon.nova-pro-v1:0,Amazon Nova Pro,Amazon,0.00113,0.00452,,,,,2025-07-29T12:05:49.097204
-eu-west-2,amazon_titan_text_lite,Amazon Titan Text Lite,Amazon,0.0002,0.0003,,,,,2025-07-29T12:05:49.097204
-eu-west-2,amazon_titan_text_express,Amazon Titan Text Express,Amazon,0.0003,0.0009,,,,,2025-07-29T12:05:49.097204
-eu-west-2,amazon.titan-embed-g1-text-02,Amazon  Titan Text Embeddings V2,Amazon,0.0001,5e-05,,,,,2025-07-29T12:05:49.097204
-eu-west-2,anthropic.claude-3-7-sonnet-20250219-v1:0,Claude 3.7 Sonnet,Anthropic,0.003,0.015,,,0.00375,0.0003,2025-07-29T12:05:49.097204
-eu-west-2,anthropic.claude-3-haiku-20240307-v1:0,Claude 3 Haiku,Anthropic,0.00025,0.00125,0.000125,0.000625,,,2025-07-29T12:05:49.097204
-eu-west-2,anthropic.claude-3-sonnet-20240229-v1:0,Claude 3 Sonnet,Anthropic,0.003,0.015,0.0015,0.0075,,,2025-07-29T12:05:49.097204
-eu-west-2,embed_3_english,Embed 3 English,Unknown,0.0001,0.0001,,,,,2025-07-29T12:05:49.097204
-eu-west-2,embed_3_multilingual,Embed 3 Multilingual,Unknown,0.0001,0.0001,,,,,2025-07-29T12:05:49.097204
-eu-west-2,llama_3_instruct_8b,Llama 3 Instruct (8B),Meta,0.00039,0.00078,,,,,2025-07-29T12:05:49.097204
-eu-west-2,llama_3_instruct_70b,Llama 3 Instruct (70B),Meta,0.00345,0.00455,,,,,2025-07-29T12:05:49.097204
-eu-west-2,mistral.mistral-7b-instruct-v0:2,Mistral 7B,Mistral AI,0.0002,0.00026,,,,,2025-07-29T12:05:49.097204
-eu-west-2,mixtral_8*7b,Mixtral 8*7B,Mistral AI,0.00059,0.00091,,,,,2025-07-29T12:05:49.097204
-eu-west-2,mistral.mistral-large-2402-v1:0,Mistral Large (24.02),Mistral AI,0.0052,0.0156,,,,,2025-07-29T12:05:49.097204
-eu-central-2,anthropic.claude-3-5-sonnet-20240620-v1:0,Claude 3.5 Sonnet,Anthropic,0.003,0.015,0.0015,0.0075,,,2025-07-29T12:05:49.097204
-eu-central-2,anthropic.claude-3-haiku-20240307-v1:0,Claude 3 Haiku,Anthropic,0.00025,0.00125,0.000125,0.000625,,,2025-07-29T12:05:49.097204
-eu-west-3,amazon.nova-micro-v1:0,Amazon Nova Micro,Amazon,5.2e-05,0.000208,,,,,2025-07-29T12:05:49.097204
-eu-west-3,amazon.nova-lite-v1:0,Amazon Nova Lite,Amazon,8.8e-05,0.000352,,,,,2025-07-29T12:05:49.097204
-eu-west-3,amazon.nova-pro-v1:0,Amazon Nova Pro,Amazon,0.00118,0.00472,,,,,2025-07-29T12:05:49.097204
-eu-west-3,amazon_titan_text_lite,Amazon Titan Text Lite,Amazon,0.0002,0.00025,,,,,2025-07-29T12:05:49.097204
-eu-west-3,amazon_titan_text_express,Amazon Titan Text Express,Amazon,0.00025,0.000788,,,,,2025-07-29T12:05:49.097204
-eu-west-3,anthropic.claude-sonnet-4-20250514-v1:0,Claude Sonnet 4,Anthropic,0.003,0.015,0.00375,0.0003,,,2025-07-29T12:05:49.097204
-eu-west-3,anthropic.claude-3-7-sonnet-20250219-v1:0,Claude 3.7 Sonnet,Anthropic,0.003,0.015,,,0.00375,0.0003,2025-07-29T12:05:49.097204
-eu-west-3,anthropic.claude-3-5-sonnet-20240620-v1:0,Claude 3.5 Sonnet,Anthropic,0.003,0.015,,,,,2025-07-29T12:05:49.097204
-eu-west-3,anthropic.claude-3-5-sonnet-20241022-v2:0,Claude 3.5 Sonnet v2,Anthropic,0.003,0.015,0.0015,0.0075,,,2025-07-29T12:05:49.097204
-eu-west-3,anthropic.claude-3-haiku-20240307-v1:0,Claude 3 Haiku,Anthropic,0.00025,0.00125,0.000125,0.000625,,,2025-07-29T12:05:49.097204
-eu-west-3,anthropic.claude-3-sonnet-20240229-v1:0,Claude 3 Sonnet,Anthropic,0.003,0.015,0.0015,0.0075,,,2025-07-29T12:05:49.097204
-eu-west-3,embed_3_english,Embed 3 English,Unknown,0.0001,0.0001,,,,,2025-07-29T12:05:49.097204
-eu-west-3,embed_3_multilingual,Embed 3 Multilingual,Unknown,0.0001,0.0001,,,,,2025-07-29T12:05:49.097204
-eu-west-3,llama_3_2_instruct_1b,Llama 3.2 Instruct (1B),Meta,0.00013,0.00013,,,,,2025-07-29T12:05:49.097204
-eu-west-3,llama_3_2_instruct_3b,Llama 3.2 Instruct (3B),Meta,0.0002,0.0002,,,,,2025-07-29T12:05:49.097204
-eu-west-3,mistral.mistral-7b-instruct-v0:2,Mistral 7B,Mistral AI,0.0002,0.00026,,,,,2025-07-29T12:05:49.097204
-eu-west-3,mixtral_8*7b,Mixtral 8*7B,Mistral AI,0.00059,0.00091,,,,,2025-07-29T12:05:49.097204
-eu-west-3,mistral.mistral-large-2402-v1:0,Mistral Large (24.02),Mistral AI,0.0052,0.0156,,,,,2025-07-29T12:05:49.097204
-eu-west-3,mistral.pixtral-large-2502-v1:0,Pixtral Large (25.02),Mistral AI,0.002,0.006,,,,,2025-07-29T12:05:49.097204
-eu-west-1,amazon.nova-micro-v1:0,Amazon Nova Micro,Amazon,4e-05,0.00016,,,,,2025-07-29T12:05:49.097204
-eu-west-1,amazon.nova-lite-v1:0,Amazon Nova Lite,Amazon,6.9e-05,0.000276,,,,,2025-07-29T12:05:49.097204
-eu-west-1,amazon.nova-pro-v1:0,Amazon Nova Pro,Amazon,0.00092,0.00368,,,,,2025-07-29T12:05:49.097204
-eu-west-1,amazon_titan_text_lite,Amazon Titan Text Lite,Amazon,0.0003,0.0004,,,,,2025-07-29T12:05:49.097204
-eu-west-1,amazon_titan_text_express,Amazon Titan Text Express,Amazon,0.001,0.0017,,,,,2025-07-29T12:05:49.097204
-eu-west-1,anthropic.claude-sonnet-4-20250514-v1:0,Claude Sonnet 4,Anthropic,0.003,0.015,0.00375,0.0003,,,2025-07-29T12:05:49.097204
-eu-west-1,anthropic.claude-3-7-sonnet-20250219-v1:0,Claude 3.7 Sonnet,Anthropic,0.003,0.015,,,0.00375,0.0003,2025-07-29T12:05:49.097204
-eu-west-1,anthropic.claude-3-5-sonnet-20240620-v1:0,Claude 3.5 Sonnet,Anthropic,0.003,0.015,,,,,2025-07-29T12:05:49.097204
-eu-west-1,anthropic.claude-3-5-sonnet-20241022-v2:0,Claude 3.5 Sonnet v2,Anthropic,0.003,0.015,0.0015,0.0075,,,2025-07-29T12:05:49.097204
-eu-west-1,anthropic.claude-3-haiku-20240307-v1:0,Claude 3 Haiku,Anthropic,0.00025,0.00125,0.000125,0.000625,,,2025-07-29T12:05:49.097204
-eu-west-1,anthropic.claude-3-sonnet-20240229-v1:0,Claude 3 Sonnet,Anthropic,0.003,0.015,0.0015,0.0075,,,2025-07-29T12:05:49.097204
-eu-west-1,embed_3_english,Embed 3 English,Unknown,0.0001,0.0001,,,,,2025-07-29T12:05:49.097204
-eu-west-1,embed_3_multilingual,Embed 3 Multilingual,Unknown,0.0001,0.0001,,,,,2025-07-29T12:05:49.097204
-eu-west-1,llama_3_2_instruct_1b,Llama 3.2 Instruct (1B),Meta,0.00011,0.00011,,,,,2025-07-29T12:05:49.097204
-eu-west-1,llama_3_2_instruct_3b,Llama 3.2 Instruct (3B),Meta,0.00017,0.00017,,,,,2025-07-29T12:05:49.097204
-eu-west-1,mistral.mistral-7b-instruct-v0:2,Mistral 7B,Mistral AI,0.00016,0.00022,,,,,2025-07-29T12:05:49.097204
-eu-west-1,mixtral_8*7b,Mixtral 8*7B,Mistral AI,0.00049,0.00076,,,,,2025-07-29T12:05:49.097204
-eu-west-1,mistral.mistral-large-2402-v1:0,Mistral Large (24.02),Mistral AI,0.0043,0.013,,,,,2025-07-29T12:05:49.097204
-eu-west-1,mistral.pixtral-large-2502-v1:0,Pixtral Large (25.02),Mistral AI,0.002,0.006,,,,,2025-07-29T12:05:49.097204
-us-west-1,anthropic.claude-sonnet-4-20250514-v1:0,Claude Sonnet 4,Anthropic,0.003,0.015,0.00375,0.0003,,,2025-07-29T12:05:49.097204
-us-west-1,meta.llama4-maverick-17b-instruct-v1:0,Llama 4 Maverick 17B,Meta,0.00024,0.00097,0.00012,0.000485,,,2025-07-29T12:05:49.097204
-us-west-1,meta.llama4-scout-17b-instruct-v1:0,Llama 4 Scout 17B,Meta,0.00017,0.00066,8.5e-05,0.00033,,,2025-07-29T12:05:49.097204
-us-east-1,ai21.jamba-1-5-large-v1:0,Jamba 1.5 Large,AI21 Labs,0.002,0.008,,,,,2025-07-29T12:05:49.097204
-us-east-1,ai21.jamba-1-5-mini-v1:0,Jamba 1.5 Mini,AI21 Labs,0.0002,0.0004,,,,,2025-07-29T12:05:49.097204
-us-east-1,ai21.jamba-instruct-v1:0,Jamba-Instruct,AI21 Labs,0.0005,0.0007,,,,,2025-07-29T12:05:49.097204
-us-east-1,amazon.nova-micro-v1:0,Amazon Nova Micro,Amazon,3.5e-05,0.00014,,,,,2025-07-29T12:05:49.097204
-us-east-1,amazon.nova-lite-v1:0,Amazon Nova Lite,Amazon,6e-05,0.00024,,,,,2025-07-29T12:05:49.097204
-us-east-1,amazon.nova-pro-v1:0,Amazon Nova Pro,Amazon,0.0008,0.0032,,,,,2025-07-29T12:05:49.097204
-us-east-1,amazon.nova-premier-v1:0,Amazon Nova Premier,Amazon,0.0025,0.0125,0.00125,0.00625,,0.000625,2025-07-29T12:05:49.097204
-us-east-1,amazon_titan_text_premier,Amazon Titan Text Premier,Amazon,0.0005,0.0015,,,,,2025-07-29T12:05:49.097204
-us-east-1,amazon_titan_text_lite,Amazon Titan Text Lite,Amazon,0.00015,0.0002,,,,,2025-07-29T12:05:49.097204
-us-east-1,amazon_titan_text_express,Amazon Titan Text Express,Amazon,0.0002,0.0006,,,,,2025-07-29T12:05:49.097204
-us-east-1,amazon.titan-embed-g1-text-02,Amazon  Titan Text Embeddings V2,Amazon,2e-05,1e-05,,,,,2025-07-29T12:05:49.097204
-us-east-1,anthropic.claude-opus-4-20250514-v1:0,Claude Opus 4,Anthropic,0.015,0.075,0.01875,0.0015,,,2025-07-29T12:05:49.097204
-us-east-1,anthropic.claude-sonnet-4-20250514-v1:0,Claude Sonnet 4,Anthropic,0.003,0.015,0.00375,0.0003,,,2025-07-29T12:05:49.097204
-us-east-1,anthropic.claude-3-7-sonnet-20250219-v1:0,Claude 3.7 Sonnet,Anthropic,0.003,0.015,,,0.00375,0.0003,2025-07-29T12:05:49.097204
-us-east-1,anthropic.claude-3-5-sonnet-20240620-v1:0,Claude 3.5 Sonnet,Anthropic,0.003,0.015,0.0015,0.0075,,,2025-07-29T12:05:49.097204
-us-east-1,anthropic.claude-3-5-haiku-20241022-v1:0,Claude 3.5 Haiku,Anthropic,0.005,0.001,,,,,2025-07-29T12:05:49.097204
-us-east-1,anthropic.claude-3-5-sonnet-20241022-v2:0,Claude 3.5 Sonnet v2,Anthropic,0.003,0.015,0.0015,0.0075,0.00375,0.0003,2025-07-29T12:05:49.097204
-us-east-1,anthropic.claude-3-opus-20240229-v1:0,Claude 3 Opus,Anthropic,0.015,0.075,0.0075,0.0375,,,2025-07-29T12:05:49.097204
-us-east-1,anthropic.claude-3-haiku-20240307-v1:0,Claude 3 Haiku,Anthropic,0.00025,0.00125,0.000125,0.000625,,,2025-07-29T12:05:49.097204
-us-east-1,anthropic.claude-3-sonnet-20240229-v1:0,Claude 3 Sonnet,Anthropic,0.003,0.015,0.0015,0.0075,,,2025-07-29T12:05:49.097204
-us-east-1,anthropic.claude-v2,Claude 2.1,Anthropic,0.008,0.024,,,,,2025-07-29T12:05:49.097204
-us-east-1,anthropic.claude-v2,Claude 2.0,Anthropic,0.008,0.024,,,,,2025-07-29T12:05:49.097204
-us-east-1,anthropic.claude-instant-v1,Claude Instant,Anthropic,0.0008,0.0024,,,,,2025-07-29T12:05:49.097204
-us-east-1,cohere.command-text-v14,Command,Cohere,0.001,0.002,,,,,2025-07-29T12:05:49.097204
-us-east-1,cohere.command-text-v14,Command-Light,Cohere,0.0003,0.0006,,,,,2025-07-29T12:05:49.097204
-us-east-1,cohere.command-r-plus-v1:0,Command R+,Cohere,0.003,0.015,,,,,2025-07-29T12:05:49.097204
-us-east-1,cohere.command-r-v1:0,Command R,Cohere,0.0005,0.0015,,,,,2025-07-29T12:05:49.097204
-us-east-1,embed_3_english,Embed 3 English,Unknown,0.0001,0.0001,,,,,2025-07-29T12:05:49.097204
-us-east-1,embed_3_multilingual,Embed 3 Multilingual,Unknown,0.0001,0.0001,,,,,2025-07-29T12:05:49.097204
-us-east-1,deepseek.r1-v1:0,DeepSeek-R1,DeepSeek,0.00135,0.0054,,,,,2025-07-29T12:05:49.097204
-us-east-1,meta.llama4-maverick-17b-instruct-v1:0,Llama 4 Maverick 17B,Meta,0.00024,0.00097,0.00012,0.000485,,,2025-07-29T12:05:49.097204
-us-east-1,meta.llama4-scout-17b-instruct-v1:0,Llama 4 Scout 17B,Meta,0.00017,0.00066,8.5e-05,0.00033,,,2025-07-29T12:05:49.097204
-us-east-1,llama_3_3_instruct_70b,Llama 3.3 Instruct (70B),Meta,0.00072,0.00072,0.00036,0.00036,,,2025-07-29T12:05:49.097204
-us-east-1,llama_3_2_instruct_1b,Llama 3.2 Instruct (1B),Meta,0.0001,0.0001,,,,,2025-07-29T12:05:49.097204
-us-east-1,llama_3_2_instruct_3b,Llama 3.2 Instruct (3B),Meta,0.00015,0.00015,,,,,2025-07-29T12:05:49.097204
-us-east-1,llama_3_2_instruct_11b,Llama 3.2 Instruct (11B),Meta,0.00016,0.00016,,,,,2025-07-29T12:05:49.097204
-us-east-1,llama_3_2_instruct_90b,Llama 3.2 Instruct (90B),Meta,0.00072,0.00072,,,,,2025-07-29T12:05:49.097204
-us-east-1,llama_3_1_instruct_8b,Llama 3.1 Instruct (8B),Meta,0.00022,0.00022,0.00011,0.00011,,,2025-07-29T12:05:49.097204
-us-east-1,llama_3_1_instruct_70b,Llama 3.1 Instruct (70B),Meta,0.00072,0.00072,0.00036,0.00036,,,2025-07-29T12:05:49.097204
-us-east-1,llama_3_1_instruct_70b_w/_latency_optimized_inference,Llama 3.1 Instruct (70B) (w/ latency optimized inference),Meta,0.0009,0.0009,,,,,2025-07-29T12:05:49.097204
-us-east-1,llama_3_instruct_8b,Llama 3 Instruct (8B),Meta,0.0003,0.0006,,,,,2025-07-29T12:05:49.097204
-us-east-1,llama_3_instruct_70b,Llama 3 Instruct (70B),Meta,0.00265,0.0035,,,,,2025-07-29T12:05:49.097204
-us-east-1,mistral.mistral-7b-instruct-v0:2,Mistral 7B,Mistral AI,0.00015,0.0002,,,,,2025-07-29T12:05:49.097204
-us-east-1,mixtral_8*7b,Mixtral 8*7B,Mistral AI,0.00045,0.0007,,,,,2025-07-29T12:05:49.097204
-us-east-1,mistral.mistral-small-2402-v1:0,Mistral Small (24.02),Mistral AI,0.001,0.003,0.0005,0.0015,,,2025-07-29T12:05:49.097204
-us-east-1,mistral.mistral-large-2402-v1:0,Mistral Large (24.02),Mistral AI,0.004,0.012,,,,,2025-07-29T12:05:49.097204
-us-east-1,mistral.pixtral-large-2502-v1:0,Pixtral Large (25.02),Mistral AI,0.002,0.006,,,,,2025-07-29T12:05:49.097204
-eu-south-1,amazon.nova-micro-v1:0,Amazon Nova Micro,Amazon,5.6e-05,0.000224,,,,,2025-07-29T12:05:49.097204
-eu-south-1,amazon.nova-lite-v1:0,Amazon Nova Lite,Amazon,9.6e-05,0.000384,,,,,2025-07-29T12:05:49.097204
-eu-south-1,amazon.nova-pro-v1:0,Amazon Nova Pro,Amazon,0.00128,0.00521,,,,,2025-07-29T12:05:49.097204
-eu-south-1,amazon.titan-embed-g1-text-02,Amazon  Titan Text Embeddings V2,Amazon,2.3e-05,1.15e-05,,,,,2025-07-29T12:05:49.097204
-eu-south-1,anthropic.claude-sonnet-4-20250514-v1:0,Claude Sonnet 4,Anthropic,0.003,0.015,0.00375,0.0003,,,2025-07-29T12:05:49.097204
-eu-south-1,anthropic.claude-3-5-sonnet-20241022-v2:0,Claude 3.5 Sonnet v2,Anthropic,0.003,0.015,0.0015,0.0075,,,2025-07-29T12:05:49.097204
+ap-northeast-2,amazon.nova-micro-v1:0,Amazon Nova Micro,Amazon,4.1e-05,0.000164,,,,,2025-08-15T19:55:31.394493
+ap-northeast-2,amazon.nova-lite-v1:0,Amazon Nova Lite,Amazon,7.1e-05,0.000284,,,,,2025-08-15T19:55:31.394493
+ap-northeast-2,amazon.nova-pro-v1:0,Amazon Nova Pro,Amazon,0.00095,0.0038,,,,,2025-08-15T19:55:31.394493
+ap-northeast-2,amazon.titan-embed-g1-text-02,Amazon  Titan Text Embeddings V2,Amazon,2.4592e-05,1.2296e-05,,,,,2025-08-15T19:55:31.394493
+ap-northeast-2,anthropic.claude-sonnet-4-20250514-v1:0,Claude Sonnet 4,Anthropic,0.003,0.015,0.00375,0.0003,,,2025-08-15T19:55:31.394493
+ap-northeast-2,anthropic.claude-3-7-sonnet-20250219-v1:0,Claude 3.7 Sonnet,Anthropic,0.003,0.015,,,0.00375,0.0003,2025-08-15T19:55:31.394493
+ap-northeast-2,anthropic.claude-3-5-sonnet-20240620-v1:0,Claude 3.5 Sonnet,Anthropic,0.003,0.015,0.0015,0.0075,,,2025-08-15T19:55:31.394493
+ap-northeast-2,anthropic.claude-3-5-sonnet-20241022-v2:0,Claude 3.5 Sonnet v2,Anthropic,0.003,0.015,0.0015,0.0075,,,2025-08-15T19:55:31.394493
+ap-northeast-2,anthropic.claude-3-haiku-20240307-v1:0,Claude 3 Haiku,Anthropic,0.00025,0.00125,0.000125,0.000625,,,2025-08-15T19:55:31.394493
+ap-northeast-2,anthropic.claude-3-sonnet-20240229-v1:0,Claude 3 Sonnet,Anthropic,0.003,0.015,0.0015,0.0075,,,2025-08-15T19:55:31.394493
+us-gov-west-1,amazon.nova-micro-v1:0,Amazon Nova Micro,Amazon,4.2e-05,0.000168,,,,,2025-08-15T19:55:31.394493
+us-gov-west-1,amazon.nova-lite-v1:0,Amazon Nova Lite,Amazon,7.2e-05,0.000288,,,,,2025-08-15T19:55:31.394493
+us-gov-west-1,amazon.nova-pro-v1:0,Amazon Nova Pro,Amazon,0.00096,0.00384,,,,,2025-08-15T19:55:31.394493
+us-gov-west-1,amazon_titan_text_express,Amazon Titan Text Express,Amazon,0.0008,0.0016,,,,,2025-08-15T19:55:31.394493
+us-gov-west-1,anthropic.claude-3-7-sonnet-20250219-v1:0,Claude 3.7 Sonnet,Anthropic,0.0036000000000000003,0.018000000000000002,,,0.0045000000000000005,0.00035999999999999997,2025-08-15T19:55:31.394493
+us-gov-west-1,anthropic.claude-3-5-sonnet-20240620-v1:0,Claude 3.5 Sonnet,Anthropic,0.0036000000000000003,0.018000000000000002,,,,,2025-08-15T19:55:31.394493
+us-gov-west-1,anthropic.claude-3-haiku-20240307-v1:0,Claude 3 Haiku,Anthropic,0.0003,0.0015,,,,,2025-08-15T19:55:31.394493
+us-gov-west-1,llama_3_instruct_8b,Llama 3 Instruct (8B),Meta,0.0003,0.0006,,,,,2025-08-15T19:55:31.394493
+us-gov-west-1,llama_3_instruct_70b,Llama 3 Instruct (70B),Meta,0.00265,0.0035,,,,,2025-08-15T19:55:31.394493
+ap-northeast-1,amazon.nova-micro-v1:0,Amazon Nova Micro,Amazon,4.2e-05,0.000168,,,,,2025-08-15T19:55:31.394493
+ap-northeast-1,amazon.nova-lite-v1:0,Amazon Nova Lite,Amazon,7.2e-05,0.000288,,,,,2025-08-15T19:55:31.394493
+ap-northeast-1,amazon.nova-pro-v1:0,Amazon Nova Pro,Amazon,0.00096,0.00384,,,,,2025-08-15T19:55:31.394493
+ap-northeast-1,amazon_titan_text_express,Amazon Titan Text Express,Amazon,0.000275,0.000825,,,,,2025-08-15T19:55:31.394493
+ap-northeast-1,anthropic.claude-sonnet-4-20250514-v1:0,Claude Sonnet 4,Anthropic,0.003,0.015,0.00375,0.0003,,,2025-08-15T19:55:31.394493
+ap-northeast-1,anthropic.claude-3-7-sonnet-20250219-v1:0,Claude 3.7 Sonnet,Anthropic,0.003,0.015,,,0.00375,0.0003,2025-08-15T19:55:31.394493
+ap-northeast-1,anthropic.claude-3-5-sonnet-20240620-v1:0,Claude 3.5 Sonnet,Anthropic,0.003,0.015,0.0015,0.0075,,,2025-08-15T19:55:31.394493
+ap-northeast-1,anthropic.claude-3-5-sonnet-20241022-v2:0,Claude 3.5 Sonnet v2,Anthropic,0.003,0.015,0.0015,0.0075,,,2025-08-15T19:55:31.394493
+ap-northeast-1,anthropic.claude-3-haiku-20240307-v1:0,Claude 3 Haiku,Anthropic,0.00025,0.00125,0.000125,0.000625,,,2025-08-15T19:55:31.394493
+ap-northeast-1,anthropic.claude-3-sonnet-20240229-v1:0,Claude 3 Sonnet,Anthropic,0.003,0.015,0.0015,0.0075,,,2025-08-15T19:55:31.394493
+ap-northeast-1,anthropic.claude-v2,Claude 2.1,Anthropic,0.008,0.024,,,,,2025-08-15T19:55:31.394493
+ap-northeast-1,anthropic.claude-v2,Claude 2.0,Anthropic,0.008,0.024,,,,,2025-08-15T19:55:31.394493
+ap-northeast-1,anthropic.claude-instant-v1,Claude Instant,Anthropic,0.0008,0.0024,,,,,2025-08-15T19:55:31.394493
+ap-northeast-1,embed_3_english,Embed 3 English,Unknown,0.0001,0.0001,,,,,2025-08-15T19:55:31.394493
+ap-northeast-1,embed_3_multilingual,Embed 3 Multilingual,Unknown,0.0001,0.0001,,,,,2025-08-15T19:55:31.394493
+eu-north-1,amazon.nova-micro-v1:0,Amazon Nova Micro,Amazon,3.8e-05,0.000152,,,,,2025-08-15T19:55:31.394493
+eu-north-1,amazon.nova-lite-v1:0,Amazon Nova Lite,Amazon,6.5e-05,0.00026,,,,,2025-08-15T19:55:31.394493
+eu-north-1,amazon.nova-pro-v1:0,Amazon Nova Pro,Amazon,0.00087,0.00348,,,,,2025-08-15T19:55:31.394493
+eu-north-1,amazon.titan-embed-g1-text-02,Amazon  Titan Text Embeddings V2,Amazon,2.1e-05,1.05e-05,,,,,2025-08-15T19:55:31.394493
+eu-north-1,anthropic.claude-sonnet-4-20250514-v1:0,Claude Sonnet 4,Anthropic,0.003,0.015,0.00375,0.0003,,,2025-08-15T19:55:31.394493
+eu-north-1,anthropic.claude-3-7-sonnet-20250219-v1:0,Claude 3.7 Sonnet,Anthropic,0.003,0.015,,,0.00375,0.0003,2025-08-15T19:55:31.394493
+eu-north-1,anthropic.claude-3-5-sonnet-20241022-v2:0,Claude 3.5 Sonnet v2,Anthropic,0.003,0.015,0.0015,0.0075,,,2025-08-15T19:55:31.394493
+eu-north-1,mistral.pixtral-large-2502-v1:0,Pixtral Large (25.02),Mistral AI,0.002,0.006,,,,,2025-08-15T19:55:31.394493
+eu-west-1,amazon.nova-micro-v1:0,Amazon Nova Micro,Amazon,4e-05,0.00016,,,,,2025-08-15T19:55:31.394493
+eu-west-1,amazon.nova-lite-v1:0,Amazon Nova Lite,Amazon,6.9e-05,0.000276,,,,,2025-08-15T19:55:31.394493
+eu-west-1,amazon.nova-pro-v1:0,Amazon Nova Pro,Amazon,0.00092,0.00368,,,,,2025-08-15T19:55:31.394493
+eu-west-1,amazon_titan_text_lite,Amazon Titan Text Lite,Amazon,0.0003,0.0004,,,,,2025-08-15T19:55:31.394493
+eu-west-1,amazon_titan_text_express,Amazon Titan Text Express,Amazon,0.001,0.0017,,,,,2025-08-15T19:55:31.394493
+eu-west-1,anthropic.claude-sonnet-4-20250514-v1:0,Claude Sonnet 4,Anthropic,0.003,0.015,0.00375,0.0003,,,2025-08-15T19:55:31.394493
+eu-west-1,anthropic.claude-3-7-sonnet-20250219-v1:0,Claude 3.7 Sonnet,Anthropic,0.003,0.015,,,0.00375,0.0003,2025-08-15T19:55:31.394493
+eu-west-1,anthropic.claude-3-5-sonnet-20240620-v1:0,Claude 3.5 Sonnet,Anthropic,0.003,0.015,,,,,2025-08-15T19:55:31.394493
+eu-west-1,anthropic.claude-3-5-sonnet-20241022-v2:0,Claude 3.5 Sonnet v2,Anthropic,0.003,0.015,0.0015,0.0075,,,2025-08-15T19:55:31.394493
+eu-west-1,anthropic.claude-3-haiku-20240307-v1:0,Claude 3 Haiku,Anthropic,0.00025,0.00125,0.000125,0.000625,,,2025-08-15T19:55:31.394493
+eu-west-1,anthropic.claude-3-sonnet-20240229-v1:0,Claude 3 Sonnet,Anthropic,0.003,0.015,0.0015,0.0075,,,2025-08-15T19:55:31.394493
+eu-west-1,embed_3_english,Embed 3 English,Unknown,0.0001,0.0001,,,,,2025-08-15T19:55:31.394493
+eu-west-1,embed_3_multilingual,Embed 3 Multilingual,Unknown,0.0001,0.0001,,,,,2025-08-15T19:55:31.394493
+eu-west-1,llama_3_2_instruct_1b,Llama 3.2 Instruct (1B),Meta,0.00011,0.00011,,,,,2025-08-15T19:55:31.394493
+eu-west-1,llama_3_2_instruct_3b,Llama 3.2 Instruct (3B),Meta,0.00017,0.00017,,,,,2025-08-15T19:55:31.394493
+eu-west-1,mistral.mistral-7b-instruct-v0:2,Mistral 7B,Mistral AI,0.00016,0.00022,,,,,2025-08-15T19:55:31.394493
+eu-west-1,mixtral_8*7b,Mixtral 8*7B,Mistral AI,0.00049,0.00076,,,,,2025-08-15T19:55:31.394493
+eu-west-1,mistral.mistral-large-2402-v1:0,Mistral Large (24.02),Mistral AI,0.0043,0.013,,,,,2025-08-15T19:55:31.394493
+eu-west-1,mistral.pixtral-large-2502-v1:0,Pixtral Large (25.02),Mistral AI,0.002,0.006,,,,,2025-08-15T19:55:31.394493
+eu-west-2,amazon.nova-micro-v1:0,Amazon Nova Micro,Amazon,4.9e-05,0.000196,,,,,2025-08-15T19:55:31.394493
+eu-west-2,amazon.nova-lite-v1:0,Amazon Nova Lite,Amazon,8.4e-05,0.000336,,,,,2025-08-15T19:55:31.394493
+eu-west-2,amazon.nova-pro-v1:0,Amazon Nova Pro,Amazon,0.00113,0.00452,,,,,2025-08-15T19:55:31.394493
+eu-west-2,amazon_titan_text_lite,Amazon Titan Text Lite,Amazon,0.0002,0.0003,,,,,2025-08-15T19:55:31.394493
+eu-west-2,amazon_titan_text_express,Amazon Titan Text Express,Amazon,0.0003,0.0009,,,,,2025-08-15T19:55:31.394493
+eu-west-2,amazon.titan-embed-g1-text-02,Amazon  Titan Text Embeddings V2,Amazon,0.0001,5e-05,,,,,2025-08-15T19:55:31.394493
+eu-west-2,anthropic.claude-3-7-sonnet-20250219-v1:0,Claude 3.7 Sonnet,Anthropic,0.003,0.015,,,0.00375,0.0003,2025-08-15T19:55:31.394493
+eu-west-2,anthropic.claude-3-haiku-20240307-v1:0,Claude 3 Haiku,Anthropic,0.00025,0.00125,0.000125,0.000625,,,2025-08-15T19:55:31.394493
+eu-west-2,anthropic.claude-3-sonnet-20240229-v1:0,Claude 3 Sonnet,Anthropic,0.003,0.015,0.0015,0.0075,,,2025-08-15T19:55:31.394493
+eu-west-2,embed_3_english,Embed 3 English,Unknown,0.0001,0.0001,,,,,2025-08-15T19:55:31.394493
+eu-west-2,embed_3_multilingual,Embed 3 Multilingual,Unknown,0.0001,0.0001,,,,,2025-08-15T19:55:31.394493
+eu-west-2,llama_3_instruct_8b,Llama 3 Instruct (8B),Meta,0.00039,0.00078,,,,,2025-08-15T19:55:31.394493
+eu-west-2,llama_3_instruct_70b,Llama 3 Instruct (70B),Meta,0.00345,0.00455,,,,,2025-08-15T19:55:31.394493
+eu-west-2,mistral.mistral-7b-instruct-v0:2,Mistral 7B,Mistral AI,0.0002,0.00026,,,,,2025-08-15T19:55:31.394493
+eu-west-2,mixtral_8*7b,Mixtral 8*7B,Mistral AI,0.00059,0.00091,,,,,2025-08-15T19:55:31.394493
+eu-west-2,mistral.mistral-large-2402-v1:0,Mistral Large (24.02),Mistral AI,0.0052,0.0156,,,,,2025-08-15T19:55:31.394493
+eu-central-2,anthropic.claude-3-5-sonnet-20240620-v1:0,Claude 3.5 Sonnet,Anthropic,0.003,0.015,0.0015,0.0075,,,2025-08-15T19:55:31.394493
+eu-central-2,anthropic.claude-3-haiku-20240307-v1:0,Claude 3 Haiku,Anthropic,0.00025,0.00125,0.000125,0.000625,,,2025-08-15T19:55:31.394493
+us-west-2,amazon.nova-micro-v1:0,Amazon Nova Micro,Amazon,3.5e-05,0.00014,,,,,2025-08-15T19:55:31.394493
+us-west-2,amazon.nova-lite-v1:0,Amazon Nova Lite,Amazon,6e-05,0.00024,,,,,2025-08-15T19:55:31.394493
+us-west-2,amazon.nova-pro-v1:0,Amazon Nova Pro,Amazon,0.0008,0.0032,,,,,2025-08-15T19:55:31.394493
+us-west-2,amazon.nova-premier-v1:0,Amazon Nova Premier,Amazon,0.0025,0.0125,0.00125,0.00625,,0.000625,2025-08-15T19:55:31.394493
+us-west-2,amazon_titan_text_lite,Amazon Titan Text Lite,Amazon,0.00015,0.0002,,,,,2025-08-15T19:55:31.394493
+us-west-2,amazon_titan_text_express,Amazon Titan Text Express,Amazon,0.0002,0.0006,,,,,2025-08-15T19:55:31.394493
+us-west-2,amazon.titan-embed-g1-text-02,Amazon  Titan Text Embeddings V2,Amazon,2e-05,1e-05,,,,,2025-08-15T19:55:31.394493
+us-west-2,anthropic.claude-v2,Claude Opus 4.1,Anthropic,0.015,0.075,0.01875,0.0015,,,2025-08-15T19:55:31.394493
+us-west-2,anthropic.claude-opus-4-20250514-v1:0,Claude Opus 4,Anthropic,0.015,0.075,0.01875,0.0015,,,2025-08-15T19:55:31.394493
+us-west-2,anthropic.claude-sonnet-4-20250514-v1:0,Claude Sonnet 4,Anthropic,0.003,0.015,0.00375,0.0003,,,2025-08-15T19:55:31.394493
+us-west-2,anthropic.claude-v2,Claude Sonnet 4 - Long Context,Anthropic,0.006,0.0225,0.0075,0.0006,,,2025-08-15T19:55:31.394493
+us-west-2,anthropic.claude-3-7-sonnet-20250219-v1:0,Claude 3.7 Sonnet,Anthropic,0.003,0.015,,,0.00375,0.0003,2025-08-15T19:55:31.394493
+us-west-2,anthropic.claude-3-5-sonnet-20240620-v1:0,Claude 3.5 Sonnet,Anthropic,0.003,0.015,0.0015,0.0075,,,2025-08-15T19:55:31.394493
+us-west-2,anthropic.claude-3-5-haiku-20241022-v1:0,Claude 3.5 Haiku,Anthropic,0.005,0.001,,,,,2025-08-15T19:55:31.394493
+us-west-2,anthropic.claude-3-5-sonnet-20241022-v2:0,Claude 3.5 Sonnet v2,Anthropic,0.003,0.015,0.0015,0.0075,0.00375,0.0003,2025-08-15T19:55:31.394493
+us-west-2,anthropic.claude-3-opus-20240229-v1:0,Claude 3 Opus,Anthropic,0.015,0.075,0.0075,0.0375,,,2025-08-15T19:55:31.394493
+us-west-2,anthropic.claude-3-haiku-20240307-v1:0,Claude 3 Haiku,Anthropic,0.00025,0.00125,0.000125,0.000625,,,2025-08-15T19:55:31.394493
+us-west-2,anthropic.claude-3-sonnet-20240229-v1:0,Claude 3 Sonnet,Anthropic,0.003,0.015,0.0015,0.0075,,,2025-08-15T19:55:31.394493
+us-west-2,anthropic.claude-v2,Claude 2.1,Anthropic,0.008,0.024,,,,,2025-08-15T19:55:31.394493
+us-west-2,anthropic.claude-v2,Claude 2.0,Anthropic,0.008,0.024,,,,,2025-08-15T19:55:31.394493
+us-west-2,anthropic.claude-instant-v1,Claude Instant,Anthropic,0.0008,0.0024,,,,,2025-08-15T19:55:31.394493
+us-west-2,cohere.command-text-v14,Command,Cohere,0.001,0.002,,,,,2025-08-15T19:55:31.394493
+us-west-2,cohere.command-text-v14,Command-Light,Cohere,0.0003,0.0006,,,,,2025-08-15T19:55:31.394493
+us-west-2,cohere.command-r-plus-v1:0,Command R+,Cohere,0.003,0.015,,,,,2025-08-15T19:55:31.394493
+us-west-2,cohere.command-r-v1:0,Command R,Cohere,0.0005,0.0015,,,,,2025-08-15T19:55:31.394493
+us-west-2,embed_3_english,Embed 3 English,Unknown,0.0001,0.0001,,,,,2025-08-15T19:55:31.394493
+us-west-2,embed_3_multilingual,Embed 3 Multilingual,Unknown,0.0001,0.0001,,,,,2025-08-15T19:55:31.394493
+us-west-2,deepseek.r1-v1:0,DeepSeek-R1,DeepSeek,0.00135,0.0054,,,,,2025-08-15T19:55:31.394493
+us-west-2,meta.llama4-maverick-17b-instruct-v1:0,Llama 4 Maverick 17B,Meta,0.00024,0.00097,0.00012,0.000485,,,2025-08-15T19:55:31.394493
+us-west-2,meta.llama4-scout-17b-instruct-v1:0,Llama 4 Scout 17B,Meta,0.00017,0.00066,8.5e-05,0.00033,,,2025-08-15T19:55:31.394493
+us-west-2,llama_3_3_instruct_70b,Llama 3.3 Instruct (70B),Meta,0.00072,0.00072,0.00036,0.00036,,,2025-08-15T19:55:31.394493
+us-west-2,llama_3_2_instruct_1b,Llama 3.2 Instruct (1B),Meta,0.0001,0.0001,5e-05,5e-05,,,2025-08-15T19:55:31.394493
+us-west-2,llama_3_2_instruct_3b,Llama 3.2 Instruct (3B),Meta,0.00015,0.00015,7.5e-05,7.5e-05,,,2025-08-15T19:55:31.394493
+us-west-2,llama_3_2_instruct_11b,Llama 3.2 Instruct (11B),Meta,0.00016,0.00016,8e-05,8e-05,,,2025-08-15T19:55:31.394493
+us-west-2,llama_3_2_instruct_90b,Llama 3.2 Instruct (90B),Meta,0.00072,0.00072,0.00036,0.00036,,,2025-08-15T19:55:31.394493
+us-west-2,llama_3_1_instruct_8b,Llama 3.1 Instruct (8B),Meta,0.00022,0.00022,0.00011,0.00011,,,2025-08-15T19:55:31.394493
+us-west-2,llama_3_1_instruct_70b,Llama 3.1 Instruct (70B),Meta,0.00072,0.00072,0.00036,0.00036,,,2025-08-15T19:55:31.394493
+us-west-2,llama_3_1_instruct_405b,Llama 3.1 Instruct (405B),Meta,0.0024,0.0024,0.0012,0.0012,,,2025-08-15T19:55:31.394493
+us-west-2,llama_3_1_instruct_70b_w/_latency_optimized_inference,Llama 3.1 Instruct (70B) (w/ latency optimized inference),Meta,0.0009,0.0009,,,,,2025-08-15T19:55:31.394493
+us-west-2,llama_3_instruct_8b,Llama 3 Instruct (8B),Meta,0.0003,0.0006,,,,,2025-08-15T19:55:31.394493
+us-west-2,llama_3_instruct_70b,Llama 3 Instruct (70B),Meta,0.00265,0.0035,,,,,2025-08-15T19:55:31.394493
+us-west-2,mistral.mistral-7b-instruct-v0:2,Mistral 7B,Mistral AI,0.00015,0.0002,,,,,2025-08-15T19:55:31.394493
+us-west-2,mixtral_8*7b,Mixtral 8*7B,Mistral AI,0.00045,0.0007,,,,,2025-08-15T19:55:31.394493
+us-west-2,mistral.mistral-large-2402-v1:0,Mistral Large (24.02),Mistral AI,0.004,0.012,,,,,2025-08-15T19:55:31.394493
+us-west-2,mistral_large_2_24_07,Mistral Large 2 (24.07),Mistral AI,0.002,0.006,0.0015,0.0045,,,2025-08-15T19:55:31.394493
+us-west-2,mistral.pixtral-large-2502-v1:0,Pixtral Large (25.02),Mistral AI,0.002,0.006,,,,,2025-08-15T19:55:31.394493
+us-west-2,gpt_oss_20b,gpt-oss-20b,Unknown,7e-05,0.0003,3.5e-05,0.00015,,,2025-08-15T19:55:31.394493
+us-west-2,gpt_oss_120b,gpt-oss-120b,Unknown,0.00015,0.0006,7.5e-05,0.0003,,,2025-08-15T19:55:31.394493
+sa-east-1,amazon_titan_text_lite,Amazon Titan Text Lite,Amazon,0.0003,0.0004,,,,,2025-08-15T19:55:31.394493
+sa-east-1,amazon_titan_text_express,Amazon Titan Text Express,Amazon,0.0004,0.0011,,,,,2025-08-15T19:55:31.394493
+sa-east-1,amazon.titan-embed-g1-text-02,Amazon  Titan Text Embeddings V2,Amazon,0.0002,0.0001,,,,,2025-08-15T19:55:31.394493
+sa-east-1,anthropic.claude-3-haiku-20240307-v1:0,Claude 3 Haiku,Anthropic,0.00025,0.00125,0.000125,0.000625,,,2025-08-15T19:55:31.394493
+sa-east-1,anthropic.claude-3-sonnet-20240229-v1:0,Claude 3 Sonnet,Anthropic,0.003,0.015,0.0015,0.0075,,,2025-08-15T19:55:31.394493
+sa-east-1,embed_3_english,Embed 3 English,Unknown,0.0001,0.0001,,,,,2025-08-15T19:55:31.394493
+sa-east-1,embed_3_multilingual,Embed 3 Multilingual,Unknown,0.0001,0.0001,,,,,2025-08-15T19:55:31.394493
+sa-east-1,llama_3_instruct_8b,Llama 3 Instruct (8B),Meta,0.0005,0.00101,,,,,2025-08-15T19:55:31.394493
+sa-east-1,llama_3_instruct_70b,Llama 3 Instruct (70B),Meta,0.00445,0.00588,,,,,2025-08-15T19:55:31.394493
+sa-east-1,mistral.mistral-7b-instruct-v0:2,Mistral 7B,Mistral AI,0.00025,0.00034,,,,,2025-08-15T19:55:31.394493
+sa-east-1,mixtral_8*7b,Mixtral 8*7B,Mistral AI,0.00076,0.00118,,,,,2025-08-15T19:55:31.394493
+sa-east-1,mistral.mistral-large-2402-v1:0,Mistral Large (24.02),Mistral AI,0.0067,0.0202,,,,,2025-08-15T19:55:31.394493
+ca-central-1,amazon_titan_text_lite,Amazon Titan Text Lite,Amazon,0.0002,0.0003,,,,,2025-08-15T19:55:31.394493
+ca-central-1,amazon_titan_text_express,Amazon Titan Text Express,Amazon,0.0003,0.0008,,,,,2025-08-15T19:55:31.394493
+ca-central-1,amazon.titan-embed-g1-text-02,Amazon  Titan Text Embeddings V2,Amazon,0.0001,5e-05,,,,,2025-08-15T19:55:31.394493
+ca-central-1,anthropic.claude-3-haiku-20240307-v1:0,Claude 3 Haiku,Anthropic,0.00025,0.00125,0.000125,0.000625,,,2025-08-15T19:55:31.394493
+ca-central-1,anthropic.claude-3-sonnet-20240229-v1:0,Claude 3 Sonnet,Anthropic,0.003,0.015,0.0015,0.0075,,,2025-08-15T19:55:31.394493
+ca-central-1,embed_3_english,Embed 3 English,Unknown,0.0001,0.0001,,,,,2025-08-15T19:55:31.394493
+ca-central-1,embed_3_multilingual,Embed 3 Multilingual,Unknown,0.0001,0.0001,,,,,2025-08-15T19:55:31.394493
+ca-central-1,llama_3_instruct_8b,Llama 3 Instruct (8B),Meta,0.00035,0.00069,,,,,2025-08-15T19:55:31.394493
+ca-central-1,llama_3_instruct_70b,Llama 3 Instruct (70B),Meta,0.00305,0.00403,,,,,2025-08-15T19:55:31.394493
+ca-central-1,mistral.mistral-7b-instruct-v0:2,Mistral 7B,Mistral AI,0.00017,0.00023,,,,,2025-08-15T19:55:31.394493
+ca-central-1,mixtral_8*7b,Mixtral 8*7B,Mistral AI,0.00052,0.00081,,,,,2025-08-15T19:55:31.394493
+ca-central-1,mistral.mistral-large-2402-v1:0,Mistral Large (24.02),Mistral AI,0.0046,0.0138,,,,,2025-08-15T19:55:31.394493
+us-east-2,amazon.nova-micro-v1:0,Amazon Nova Micro,Amazon,3.5e-05,0.00014,,,,,2025-08-15T19:55:31.394493
+us-east-2,amazon.nova-lite-v1:0,Amazon Nova Lite,Amazon,6e-05,0.00024,,,,,2025-08-15T19:55:31.394493
+us-east-2,amazon.nova-pro-v1:0,Amazon Nova Pro,Amazon,0.0008,0.0032,,,,,2025-08-15T19:55:31.394493
+us-east-2,amazon.nova-premier-v1:0,Amazon Nova Premier,Amazon,0.0025,0.0125,0.00125,0.00625,,0.000625,2025-08-15T19:55:31.394493
+us-east-2,anthropic.claude-v2,Claude Opus 4.1,Anthropic,0.015,0.075,0.01875,0.0015,,,2025-08-15T19:55:31.394493
+us-east-2,anthropic.claude-opus-4-20250514-v1:0,Claude Opus 4,Anthropic,0.015,0.075,0.01875,0.0015,,,2025-08-15T19:55:31.394493
+us-east-2,anthropic.claude-sonnet-4-20250514-v1:0,Claude Sonnet 4,Anthropic,0.003,0.015,0.00375,0.0003,,,2025-08-15T19:55:31.394493
+us-east-2,anthropic.claude-v2,Claude Sonnet 4 - Long Context,Anthropic,0.006,0.0225,0.0075,0.0006,,,2025-08-15T19:55:31.394493
+us-east-2,anthropic.claude-3-7-sonnet-20250219-v1:0,Claude 3.7 Sonnet,Anthropic,0.003,0.015,,,0.00375,0.0003,2025-08-15T19:55:31.394493
+us-east-2,anthropic.claude-3-5-sonnet-20240620-v1:0,Claude 3.5 Sonnet,Anthropic,0.003,0.015,0.0015,0.0075,,,2025-08-15T19:55:31.394493
+us-east-2,anthropic.claude-3-5-haiku-20241022-v1:0,Claude 3.5 Haiku,Anthropic,0.005,0.001,,,,,2025-08-15T19:55:31.394493
+us-east-2,anthropic.claude-3-5-sonnet-20241022-v2:0,Claude 3.5 Sonnet v2,Anthropic,0.003,0.015,0.0015,0.0075,0.00375,0.0003,2025-08-15T19:55:31.394493
+us-east-2,anthropic.claude-3-haiku-20240307-v1:0,Claude 3 Haiku,Anthropic,0.00025,0.00125,0.000125,0.000625,,,2025-08-15T19:55:31.394493
+us-east-2,deepseek.r1-v1:0,DeepSeek-R1,DeepSeek,0.00135,0.0054,,,,,2025-08-15T19:55:31.394493
+us-east-2,meta.llama4-maverick-17b-instruct-v1:0,Llama 4 Maverick 17B,Meta,0.00024,0.00097,0.00012,0.000485,,,2025-08-15T19:55:31.394493
+us-east-2,meta.llama4-scout-17b-instruct-v1:0,Llama 4 Scout 17B,Meta,0.00017,0.00066,8.5e-05,0.00033,,,2025-08-15T19:55:31.394493
+us-east-2,llama_3_3_instruct_70b,Llama 3.3 Instruct (70B),Meta,0.00072,0.00072,0.00036,0.00036,,,2025-08-15T19:55:31.394493
+us-east-2,llama_3_2_instruct_1b,Llama 3.2 Instruct (1B),Meta,0.0001,0.0001,,,,,2025-08-15T19:55:31.394493
+us-east-2,llama_3_2_instruct_3b,Llama 3.2 Instruct (3B),Meta,0.00015,0.00015,,,,,2025-08-15T19:55:31.394493
+us-east-2,llama_3_2_instruct_11b,Llama 3.2 Instruct (11B),Meta,0.00016,0.00016,,,,,2025-08-15T19:55:31.394493
+us-east-2,llama_3_2_instruct_90b,Llama 3.2 Instruct (90B),Meta,0.00072,0.00072,,,,,2025-08-15T19:55:31.394493
+us-east-2,llama_3_1_instruct_8b,Llama 3.1 Instruct (8B),Meta,0.00022,0.00022,0.00011,0.00011,,,2025-08-15T19:55:31.394493
+us-east-2,llama_3_1_instruct_70b,Llama 3.1 Instruct (70B),Meta,0.00072,0.00072,0.00036,0.00036,,,2025-08-15T19:55:31.394493
+us-east-2,llama_3_1_instruct_405b,Llama 3.1 Instruct (405B),Meta,0.0024,0.0024,0.0012,0.0012,,,2025-08-15T19:55:31.394493
+us-east-2,llama_3_1_instruct_70b_w/_latency_optimized_inference,Llama 3.1 Instruct (70B) (w/ latency optimized inference),Meta,0.0009,0.0009,,,,,2025-08-15T19:55:31.394493
+us-east-2,llama_3_1_instruct_405b_w/_latency_optimized_inference,Llama 3.1 Instruct (405B) (w/ latency optimized inference),Meta,0.003,0.003,,,,,2025-08-15T19:55:31.394493
+us-east-2,mistral.pixtral-large-2502-v1:0,Pixtral Large (25.02),Mistral AI,0.002,0.006,,,,,2025-08-15T19:55:31.394493
+ap-south-2,anthropic.claude-sonnet-4-20250514-v1:0,Claude Sonnet 4,Anthropic,0.003,0.015,0.00375,0.0003,,,2025-08-15T19:55:31.394493
+ap-south-2,anthropic.claude-3-7-sonnet-20250219-v1:0,Claude 3.7 Sonnet,Anthropic,0.003,0.015,,,0.00375,0.0003,2025-08-15T19:55:31.394493
+ap-south-2,anthropic.claude-3-5-sonnet-20241022-v2:0,Claude 3.5 Sonnet v2,Anthropic,0.003,0.015,0.0015,0.0075,,,2025-08-15T19:55:31.394493
+ap-southeast-1,amazon.nova-micro-v1:0,Amazon Nova Micro,Amazon,4.7e-05,0.000188,,,,,2025-08-15T19:55:31.394493
+ap-southeast-1,amazon.nova-lite-v1:0,Amazon Nova Lite,Amazon,8.1e-05,0.000324,,,,,2025-08-15T19:55:31.394493
+ap-southeast-1,amazon.nova-pro-v1:0,Amazon Nova Pro,Amazon,0.00108,0.00432,,,,,2025-08-15T19:55:31.394493
+ap-southeast-1,anthropic.claude-sonnet-4-20250514-v1:0,Claude Sonnet 4,Anthropic,0.003,0.015,0.00375,0.0003,,,2025-08-15T19:55:31.394493
+ap-southeast-1,anthropic.claude-3-7-sonnet-20250219-v1:0,Claude 3.7 Sonnet,Anthropic,0.003,0.015,,,0.00375,0.0003,2025-08-15T19:55:31.394493
+ap-southeast-1,anthropic.claude-3-5-sonnet-20240620-v1:0,Claude 3.5 Sonnet,Anthropic,0.003,0.015,0.0015,0.0075,,,2025-08-15T19:55:31.394493
+ap-southeast-1,anthropic.claude-3-5-sonnet-20241022-v2:0,Claude 3.5 Sonnet v2,Anthropic,0.003,0.015,0.0015,0.0075,,,2025-08-15T19:55:31.394493
+ap-southeast-1,anthropic.claude-3-haiku-20240307-v1:0,Claude 3 Haiku,Anthropic,0.00025,0.00125,0.000125,0.000625,,,2025-08-15T19:55:31.394493
+ap-southeast-1,anthropic.claude-3-sonnet-20240229-v1:0,Claude 3 Sonnet,Anthropic,0.003,0.015,0.0015,0.0075,,,2025-08-15T19:55:31.394493
+ap-southeast-1,anthropic.claude-v2,Claude 2.1,Anthropic,0.008,0.024,,,,,2025-08-15T19:55:31.394493
+ap-southeast-1,anthropic.claude-v2,Claude 2.0,Anthropic,0.008,0.024,,,,,2025-08-15T19:55:31.394493
+ap-southeast-1,anthropic.claude-instant-v1,Claude Instant,Anthropic,0.0008,0.0024,,,,,2025-08-15T19:55:31.394493
+ap-southeast-1,embed_3_english,Embed 3 English,Unknown,0.0001,0.0001,,,,,2025-08-15T19:55:31.394493
+ap-southeast-1,embed_3_multilingual,Embed 3 Multilingual,Unknown,0.0001,0.0001,,,,,2025-08-15T19:55:31.394493
+ap-south-1,amazon.nova-micro-v1:0,Amazon Nova Micro,Amazon,4.1e-05,0.000164,,,,,2025-08-15T19:55:31.394493
+ap-south-1,amazon.nova-lite-v1:0,Amazon Nova Lite,Amazon,7.1e-05,0.000284,,,,,2025-08-15T19:55:31.394493
+ap-south-1,amazon.nova-pro-v1:0,Amazon Nova Pro,Amazon,0.00094,0.00376,,,,,2025-08-15T19:55:31.394493
+ap-south-1,amazon_titan_text_lite,Amazon Titan Text Lite,Amazon,0.0004,0.0005,,,,,2025-08-15T19:55:31.394493
+ap-south-1,amazon_titan_text_express,Amazon Titan Text Express,Amazon,0.001,0.0019,,,,,2025-08-15T19:55:31.394493
+ap-south-1,anthropic.claude-sonnet-4-20250514-v1:0,Claude Sonnet 4,Anthropic,0.003,0.015,0.00375,0.0003,,,2025-08-15T19:55:31.394493
+ap-south-1,anthropic.claude-3-7-sonnet-20250219-v1:0,Claude 3.7 Sonnet,Anthropic,0.003,0.015,,,0.00375,0.0003,2025-08-15T19:55:31.394493
+ap-south-1,anthropic.claude-3-5-sonnet-20240620-v1:0,Claude 3.5 Sonnet,Anthropic,0.003,0.015,0.0015,0.0075,,,2025-08-15T19:55:31.394493
+ap-south-1,anthropic.claude-3-5-sonnet-20241022-v2:0,Claude 3.5 Sonnet v2,Anthropic,0.003,0.015,0.0015,0.0075,,,2025-08-15T19:55:31.394493
+ap-south-1,anthropic.claude-3-haiku-20240307-v1:0,Claude 3 Haiku,Anthropic,0.00025,0.00125,0.000125,0.000625,,,2025-08-15T19:55:31.394493
+ap-south-1,anthropic.claude-3-sonnet-20240229-v1:0,Claude 3 Sonnet,Anthropic,0.003,0.015,0.0015,0.0075,,,2025-08-15T19:55:31.394493
+ap-south-1,embed_3_english,Embed 3 English,Unknown,0.0001,0.0001,,,,,2025-08-15T19:55:31.394493
+ap-south-1,embed_3_multilingual,Embed 3 Multilingual,Unknown,0.0001,0.0001,,,,,2025-08-15T19:55:31.394493
+ap-south-1,llama_3_instruct_8b,Llama 3 Instruct (8B),Meta,0.00036,0.00072,,,,,2025-08-15T19:55:31.394493
+ap-south-1,llama_3_instruct_70b,Llama 3 Instruct (70B),Meta,0.00318,0.0042,,,,,2025-08-15T19:55:31.394493
+ap-south-1,mistral.mistral-7b-instruct-v0:2,Mistral 7B,Mistral AI,0.00018,0.00024,,,,,2025-08-15T19:55:31.394493
+ap-south-1,mixtral_8*7b,Mixtral 8*7B,Mistral AI,0.00054,0.00084,,,,,2025-08-15T19:55:31.394493
+ap-south-1,mistral.mistral-large-2402-v1:0,Mistral Large (24.02),Mistral AI,0.0048,0.0144,,,,,2025-08-15T19:55:31.394493
+eu-central-1,ai21.jamba-1-5-large-v1:0,Jamba 1.5 Large,AI21 Labs,0.002,0.008,,,,,2025-08-15T19:55:31.394493
+eu-central-1,ai21.jamba-1-5-mini-v1:0,Jamba 1.5 Mini,AI21 Labs,0.0002,0.0004,,,,,2025-08-15T19:55:31.394493
+eu-central-1,amazon.nova-micro-v1:0,Amazon Nova Micro,Amazon,4.6e-05,0.000184,,,,,2025-08-15T19:55:31.394493
+eu-central-1,amazon.nova-lite-v1:0,Amazon Nova Lite,Amazon,7.8e-05,0.000312,,,,,2025-08-15T19:55:31.394493
+eu-central-1,amazon.nova-pro-v1:0,Amazon Nova Pro,Amazon,0.00105,0.0042,,,,,2025-08-15T19:55:31.394493
+eu-central-1,amazon_titan_text_express,Amazon Titan Text Express,Amazon,0.0003,0.000863,,,,,2025-08-15T19:55:31.394493
+eu-central-1,amazon.titan-embed-g1-text-02,Amazon  Titan Text Embeddings V2,Amazon,0.0002,0.0001,,,,,2025-08-15T19:55:31.394493
+eu-central-1,anthropic.claude-sonnet-4-20250514-v1:0,Claude Sonnet 4,Anthropic,0.003,0.015,0.00375,0.0003,,,2025-08-15T19:55:31.394493
+eu-central-1,anthropic.claude-3-7-sonnet-20250219-v1:0,Claude 3.7 Sonnet,Anthropic,0.003,0.015,,,0.00375,0.0003,2025-08-15T19:55:31.394493
+eu-central-1,anthropic.claude-3-5-sonnet-20240620-v1:0,Claude 3.5 Sonnet,Anthropic,0.003,0.015,0.0015,0.0075,,,2025-08-15T19:55:31.394493
+eu-central-1,anthropic.claude-3-haiku-20240307-v1:0,Claude 3 Haiku,Anthropic,0.00025,0.00125,0.000125,0.000625,,,2025-08-15T19:55:31.394493
+eu-central-1,anthropic.claude-3-sonnet-20240229-v1:0,Claude 3 Sonnet,Anthropic,0.003,0.015,0.0015,0.0075,,,2025-08-15T19:55:31.394493
+eu-central-1,anthropic.claude-v2,Claude 2.1,Anthropic,0.008,0.024,,,,,2025-08-15T19:55:31.394493
+eu-central-1,anthropic.claude-v2,Claude 2.0,Anthropic,0.008,0.024,,,,,2025-08-15T19:55:31.394493
+eu-central-1,anthropic.claude-instant-v1,Claude Instant,Anthropic,0.0008,0.0024,,,,,2025-08-15T19:55:31.394493
+eu-central-1,embed_3_english,Embed 3 English,Unknown,0.0001,0.0001,,,,,2025-08-15T19:55:31.394493
+eu-central-1,embed_3_multilingual,Embed 3 Multilingual,Unknown,0.0001,0.0001,,,,,2025-08-15T19:55:31.394493
+eu-central-1,llama_3_2_instruct_1b,Llama 3.2 Instruct (1B),Meta,0.00013,0.00013,6.5e-05,6.5e-05,,,2025-08-15T19:55:31.394493
+eu-central-1,llama_3_2_instruct_3b,Llama 3.2 Instruct (3B),Meta,0.00019,0.00019,9.5e-05,9.5e-05,,,2025-08-15T19:55:31.394493
+eu-central-1,mistral.pixtral-large-2502-v1:0,Pixtral Large (25.02),Mistral AI,0.002,0.006,,,,,2025-08-15T19:55:31.394493
+us-gov-east-1,anthropic.claude-3-5-sonnet-20240620-v1:0,Claude 3.5 Sonnet,Anthropic,0.0036000000000000003,0.018000000000000002,,,,,2025-08-15T19:55:31.394493
+us-gov-east-1,anthropic.claude-3-haiku-20240307-v1:0,Claude 3 Haiku,Anthropic,0.0003,0.0015,,,,,2025-08-15T19:55:31.394493
+eu-south-2,amazon.nova-micro-v1:0,Amazon Nova Micro,Amazon,3.9e-05,0.000156,,,,,2025-08-15T19:55:31.394493
+eu-south-2,amazon.nova-lite-v1:0,Amazon Nova Lite,Amazon,6.6e-05,0.000264,,,,,2025-08-15T19:55:31.394493
+eu-south-2,amazon.nova-pro-v1:0,Amazon Nova Pro,Amazon,0.00088,0.00352,,,,,2025-08-15T19:55:31.394493
+eu-south-2,amazon.titan-embed-g1-text-02,Amazon  Titan Text Embeddings V2,Amazon,2.1e-05,1.05e-05,,,,,2025-08-15T19:55:31.394493
+eu-south-2,anthropic.claude-sonnet-4-20250514-v1:0,Claude Sonnet 4,Anthropic,0.003,0.015,0.00375,0.0003,,,2025-08-15T19:55:31.394493
+eu-south-2,anthropic.claude-3-5-sonnet-20241022-v2:0,Claude 3.5 Sonnet v2,Anthropic,0.003,0.015,0.0015,0.0075,,,2025-08-15T19:55:31.394493
+ap-southeast-4,amazon.nova-lite-v1:0,Amazon Nova Lite,Amazon,6.5e-05,0.00026,,,,,2025-08-15T19:55:31.394493
+ap-southeast-4,amazon.nova-pro-v1:0,Amazon Nova Pro,Amazon,0.00087,0.00348,,,,,2025-08-15T19:55:31.394493
+us-west-1,amazon.nova-lite-v1:0,Amazon Nova Lite,Amazon,7.7e-05,0.000308,,,,,2025-08-15T19:55:31.394493
+us-west-1,amazon.nova-pro-v1:0,Amazon Nova Pro,Amazon,0.00103,0.00412,,,,,2025-08-15T19:55:31.394493
+us-west-1,anthropic.claude-sonnet-4-20250514-v1:0,Claude Sonnet 4,Anthropic,0.003,0.015,0.00375,0.0003,,,2025-08-15T19:55:31.394493
+us-west-1,meta.llama4-maverick-17b-instruct-v1:0,Llama 4 Maverick 17B,Meta,0.00024,0.00097,0.00012,0.000485,,,2025-08-15T19:55:31.394493
+us-west-1,meta.llama4-scout-17b-instruct-v1:0,Llama 4 Scout 17B,Meta,0.00017,0.00066,8.5e-05,0.00033,,,2025-08-15T19:55:31.394493
+ap-southeast-2,amazon.nova-micro-v1:0,Amazon Nova Micro,Amazon,3.7e-05,0.000148,,,,,2025-08-15T19:55:31.394493
+ap-southeast-2,amazon.nova-lite-v1:0,Amazon Nova Lite,Amazon,6.3e-05,0.000252,,,,,2025-08-15T19:55:31.394493
+ap-southeast-2,amazon.nova-pro-v1:0,Amazon Nova Pro,Amazon,0.00084,0.00336,,,,,2025-08-15T19:55:31.394493
+ap-southeast-2,amazon_titan_text_lite,Amazon Titan Text Lite,Amazon,0.0002,0.00025,,,,,2025-08-15T19:55:31.394493
+ap-southeast-2,amazon_titan_text_express,Amazon Titan Text Express,Amazon,0.00025,0.000788,,,,,2025-08-15T19:55:31.394493
+ap-southeast-2,anthropic.claude-sonnet-4-20250514-v1:0,Claude Sonnet 4,Anthropic,0.003,0.015,0.00375,0.0003,,,2025-08-15T19:55:31.394493
+ap-southeast-2,anthropic.claude-3-7-sonnet-20250219-v1:0,Claude 3.7 Sonnet,Anthropic,0.003,0.015,,,0.00375,0.0003,2025-08-15T19:55:31.394493
+ap-southeast-2,anthropic.claude-3-5-sonnet-20240620-v1:0,Claude 3.5 Sonnet,Anthropic,0.003,0.015,0.0015,0.0075,,,2025-08-15T19:55:31.394493
+ap-southeast-2,anthropic.claude-3-5-sonnet-20241022-v2:0,Claude 3.5 Sonnet v2,Anthropic,0.003,0.015,0.0015,0.0075,,,2025-08-15T19:55:31.394493
+ap-southeast-2,anthropic.claude-3-haiku-20240307-v1:0,Claude 3 Haiku,Anthropic,0.00025,0.00125,0.000125,0.000625,,,2025-08-15T19:55:31.394493
+ap-southeast-2,anthropic.claude-3-sonnet-20240229-v1:0,Claude 3 Sonnet,Anthropic,0.003,0.015,0.0015,0.0075,,,2025-08-15T19:55:31.394493
+ap-southeast-2,embed_3_english,Embed 3 English,Unknown,0.0001,0.0001,,,,,2025-08-15T19:55:31.394493
+ap-southeast-2,embed_3_multilingual,Embed 3 Multilingual,Unknown,0.0001,0.0001,,,,,2025-08-15T19:55:31.394493
+ap-southeast-2,mistral.mistral-7b-instruct-v0:2,Mistral 7B,Mistral AI,0.0002,0.00026,,,,,2025-08-15T19:55:31.394493
+ap-southeast-2,mixtral_8*7b,Mixtral 8*7B,Mistral AI,0.00059,0.00091,,,,,2025-08-15T19:55:31.394493
+ap-southeast-2,mistral.mistral-large-2402-v1:0,Mistral Large (24.02),Mistral AI,0.0052,0.0156,,,,,2025-08-15T19:55:31.394493
+eu-west-3,amazon.nova-micro-v1:0,Amazon Nova Micro,Amazon,5.2e-05,0.000208,,,,,2025-08-15T19:55:31.394493
+eu-west-3,amazon.nova-lite-v1:0,Amazon Nova Lite,Amazon,8.8e-05,0.000352,,,,,2025-08-15T19:55:31.394493
+eu-west-3,amazon.nova-pro-v1:0,Amazon Nova Pro,Amazon,0.00118,0.00472,,,,,2025-08-15T19:55:31.394493
+eu-west-3,amazon_titan_text_lite,Amazon Titan Text Lite,Amazon,0.0002,0.00025,,,,,2025-08-15T19:55:31.394493
+eu-west-3,amazon_titan_text_express,Amazon Titan Text Express,Amazon,0.00025,0.000788,,,,,2025-08-15T19:55:31.394493
+eu-west-3,anthropic.claude-sonnet-4-20250514-v1:0,Claude Sonnet 4,Anthropic,0.003,0.015,0.00375,0.0003,,,2025-08-15T19:55:31.394493
+eu-west-3,anthropic.claude-3-7-sonnet-20250219-v1:0,Claude 3.7 Sonnet,Anthropic,0.003,0.015,,,0.00375,0.0003,2025-08-15T19:55:31.394493
+eu-west-3,anthropic.claude-3-5-sonnet-20240620-v1:0,Claude 3.5 Sonnet,Anthropic,0.003,0.015,,,,,2025-08-15T19:55:31.394493
+eu-west-3,anthropic.claude-3-5-sonnet-20241022-v2:0,Claude 3.5 Sonnet v2,Anthropic,0.003,0.015,0.0015,0.0075,,,2025-08-15T19:55:31.394493
+eu-west-3,anthropic.claude-3-haiku-20240307-v1:0,Claude 3 Haiku,Anthropic,0.00025,0.00125,0.000125,0.000625,,,2025-08-15T19:55:31.394493
+eu-west-3,anthropic.claude-3-sonnet-20240229-v1:0,Claude 3 Sonnet,Anthropic,0.003,0.015,0.0015,0.0075,,,2025-08-15T19:55:31.394493
+eu-west-3,embed_3_english,Embed 3 English,Unknown,0.0001,0.0001,,,,,2025-08-15T19:55:31.394493
+eu-west-3,embed_3_multilingual,Embed 3 Multilingual,Unknown,0.0001,0.0001,,,,,2025-08-15T19:55:31.394493
+eu-west-3,llama_3_2_instruct_1b,Llama 3.2 Instruct (1B),Meta,0.00013,0.00013,,,,,2025-08-15T19:55:31.394493
+eu-west-3,llama_3_2_instruct_3b,Llama 3.2 Instruct (3B),Meta,0.0002,0.0002,,,,,2025-08-15T19:55:31.394493
+eu-west-3,mistral.mistral-7b-instruct-v0:2,Mistral 7B,Mistral AI,0.0002,0.00026,,,,,2025-08-15T19:55:31.394493
+eu-west-3,mixtral_8*7b,Mixtral 8*7B,Mistral AI,0.00059,0.00091,,,,,2025-08-15T19:55:31.394493
+eu-west-3,mistral.mistral-large-2402-v1:0,Mistral Large (24.02),Mistral AI,0.0052,0.0156,,,,,2025-08-15T19:55:31.394493
+eu-west-3,mistral.pixtral-large-2502-v1:0,Pixtral Large (25.02),Mistral AI,0.002,0.006,,,,,2025-08-15T19:55:31.394493
+us-east-1,ai21.jamba-1-5-large-v1:0,Jamba 1.5 Large,AI21 Labs,0.002,0.008,,,,,2025-08-15T19:55:31.394493
+us-east-1,ai21.jamba-1-5-mini-v1:0,Jamba 1.5 Mini,AI21 Labs,0.0002,0.0004,,,,,2025-08-15T19:55:31.394493
+us-east-1,ai21.jamba-instruct-v1:0,Jamba-Instruct,AI21 Labs,0.0005,0.0007,,,,,2025-08-15T19:55:31.394493
+us-east-1,amazon.nova-micro-v1:0,Amazon Nova Micro,Amazon,3.5e-05,0.00014,,,,,2025-08-15T19:55:31.394493
+us-east-1,amazon.nova-lite-v1:0,Amazon Nova Lite,Amazon,6e-05,0.00024,,,,,2025-08-15T19:55:31.394493
+us-east-1,amazon.nova-pro-v1:0,Amazon Nova Pro,Amazon,0.0008,0.0032,,,,,2025-08-15T19:55:31.394493
+us-east-1,amazon.nova-premier-v1:0,Amazon Nova Premier,Amazon,0.0025,0.0125,0.00125,0.00625,,0.000625,2025-08-15T19:55:31.394493
+us-east-1,amazon_titan_text_premier,Amazon Titan Text Premier,Amazon,0.0005,0.0015,,,,,2025-08-15T19:55:31.394493
+us-east-1,amazon_titan_text_lite,Amazon Titan Text Lite,Amazon,0.00015,0.0002,,,,,2025-08-15T19:55:31.394493
+us-east-1,amazon_titan_text_express,Amazon Titan Text Express,Amazon,0.0002,0.0006,,,,,2025-08-15T19:55:31.394493
+us-east-1,amazon.titan-embed-g1-text-02,Amazon  Titan Text Embeddings V2,Amazon,2e-05,1e-05,,,,,2025-08-15T19:55:31.394493
+us-east-1,anthropic.claude-v2,Claude Opus 4.1,Anthropic,0.015,0.075,0.01875,0.0015,,,2025-08-15T19:55:31.394493
+us-east-1,anthropic.claude-opus-4-20250514-v1:0,Claude Opus 4,Anthropic,0.015,0.075,0.01875,0.0015,,,2025-08-15T19:55:31.394493
+us-east-1,anthropic.claude-sonnet-4-20250514-v1:0,Claude Sonnet 4,Anthropic,0.003,0.015,0.00375,0.0003,,,2025-08-15T19:55:31.394493
+us-east-1,anthropic.claude-v2,Claude Sonnet 4 - Long Context,Anthropic,0.006,0.0225,0.0075,0.0006,,,2025-08-15T19:55:31.394493
+us-east-1,anthropic.claude-3-7-sonnet-20250219-v1:0,Claude 3.7 Sonnet,Anthropic,0.003,0.015,,,0.00375,0.0003,2025-08-15T19:55:31.394493
+us-east-1,anthropic.claude-3-5-sonnet-20240620-v1:0,Claude 3.5 Sonnet,Anthropic,0.003,0.015,0.0015,0.0075,,,2025-08-15T19:55:31.394493
+us-east-1,anthropic.claude-3-5-haiku-20241022-v1:0,Claude 3.5 Haiku,Anthropic,0.005,0.001,,,,,2025-08-15T19:55:31.394493
+us-east-1,anthropic.claude-3-5-sonnet-20241022-v2:0,Claude 3.5 Sonnet v2,Anthropic,0.003,0.015,0.0015,0.0075,0.00375,0.0003,2025-08-15T19:55:31.394493
+us-east-1,anthropic.claude-3-opus-20240229-v1:0,Claude 3 Opus,Anthropic,0.015,0.075,0.0075,0.0375,,,2025-08-15T19:55:31.394493
+us-east-1,anthropic.claude-3-haiku-20240307-v1:0,Claude 3 Haiku,Anthropic,0.00025,0.00125,0.000125,0.000625,,,2025-08-15T19:55:31.394493
+us-east-1,anthropic.claude-3-sonnet-20240229-v1:0,Claude 3 Sonnet,Anthropic,0.003,0.015,0.0015,0.0075,,,2025-08-15T19:55:31.394493
+us-east-1,anthropic.claude-v2,Claude 2.1,Anthropic,0.008,0.024,,,,,2025-08-15T19:55:31.394493
+us-east-1,anthropic.claude-v2,Claude 2.0,Anthropic,0.008,0.024,,,,,2025-08-15T19:55:31.394493
+us-east-1,anthropic.claude-instant-v1,Claude Instant,Anthropic,0.0008,0.0024,,,,,2025-08-15T19:55:31.394493
+us-east-1,cohere.command-text-v14,Command,Cohere,0.001,0.002,,,,,2025-08-15T19:55:31.394493
+us-east-1,cohere.command-text-v14,Command-Light,Cohere,0.0003,0.0006,,,,,2025-08-15T19:55:31.394493
+us-east-1,cohere.command-r-plus-v1:0,Command R+,Cohere,0.003,0.015,,,,,2025-08-15T19:55:31.394493
+us-east-1,cohere.command-r-v1:0,Command R,Cohere,0.0005,0.0015,,,,,2025-08-15T19:55:31.394493
+us-east-1,embed_3_english,Embed 3 English,Unknown,0.0001,0.0001,,,,,2025-08-15T19:55:31.394493
+us-east-1,embed_3_multilingual,Embed 3 Multilingual,Unknown,0.0001,0.0001,,,,,2025-08-15T19:55:31.394493
+us-east-1,deepseek.r1-v1:0,DeepSeek-R1,DeepSeek,0.00135,0.0054,,,,,2025-08-15T19:55:31.394493
+us-east-1,meta.llama4-maverick-17b-instruct-v1:0,Llama 4 Maverick 17B,Meta,0.00024,0.00097,0.00012,0.000485,,,2025-08-15T19:55:31.394493
+us-east-1,meta.llama4-scout-17b-instruct-v1:0,Llama 4 Scout 17B,Meta,0.00017,0.00066,8.5e-05,0.00033,,,2025-08-15T19:55:31.394493
+us-east-1,llama_3_3_instruct_70b,Llama 3.3 Instruct (70B),Meta,0.00072,0.00072,0.00036,0.00036,,,2025-08-15T19:55:31.394493
+us-east-1,llama_3_2_instruct_1b,Llama 3.2 Instruct (1B),Meta,0.0001,0.0001,,,,,2025-08-15T19:55:31.394493
+us-east-1,llama_3_2_instruct_3b,Llama 3.2 Instruct (3B),Meta,0.00015,0.00015,,,,,2025-08-15T19:55:31.394493
+us-east-1,llama_3_2_instruct_11b,Llama 3.2 Instruct (11B),Meta,0.00016,0.00016,,,,,2025-08-15T19:55:31.394493
+us-east-1,llama_3_2_instruct_90b,Llama 3.2 Instruct (90B),Meta,0.00072,0.00072,,,,,2025-08-15T19:55:31.394493
+us-east-1,llama_3_1_instruct_8b,Llama 3.1 Instruct (8B),Meta,0.00022,0.00022,0.00011,0.00011,,,2025-08-15T19:55:31.394493
+us-east-1,llama_3_1_instruct_70b,Llama 3.1 Instruct (70B),Meta,0.00072,0.00072,0.00036,0.00036,,,2025-08-15T19:55:31.394493
+us-east-1,llama_3_1_instruct_70b_w/_latency_optimized_inference,Llama 3.1 Instruct (70B) (w/ latency optimized inference),Meta,0.0009,0.0009,,,,,2025-08-15T19:55:31.394493
+us-east-1,llama_3_instruct_8b,Llama 3 Instruct (8B),Meta,0.0003,0.0006,,,,,2025-08-15T19:55:31.394493
+us-east-1,llama_3_instruct_70b,Llama 3 Instruct (70B),Meta,0.00265,0.0035,,,,,2025-08-15T19:55:31.394493
+us-east-1,mistral.mistral-7b-instruct-v0:2,Mistral 7B,Mistral AI,0.00015,0.0002,,,,,2025-08-15T19:55:31.394493
+us-east-1,mixtral_8*7b,Mixtral 8*7B,Mistral AI,0.00045,0.0007,,,,,2025-08-15T19:55:31.394493
+us-east-1,mistral.mistral-small-2402-v1:0,Mistral Small (24.02),Mistral AI,0.001,0.003,0.0005,0.0015,,,2025-08-15T19:55:31.394493
+us-east-1,mistral.mistral-large-2402-v1:0,Mistral Large (24.02),Mistral AI,0.004,0.012,,,,,2025-08-15T19:55:31.394493
+us-east-1,mistral.pixtral-large-2502-v1:0,Pixtral Large (25.02),Mistral AI,0.002,0.006,,,,,2025-08-15T19:55:31.394493
+ap-northeast-3,anthropic.claude-sonnet-4-20250514-v1:0,Claude Sonnet 4,Anthropic,0.003,0.015,0.00375,0.0003,,,2025-08-15T19:55:31.394493
+ap-northeast-3,anthropic.claude-3-7-sonnet-20250219-v1:0,Claude 3.7 Sonnet,Anthropic,0.003,0.015,,,0.00375,0.0003,2025-08-15T19:55:31.394493
+ap-northeast-3,anthropic.claude-3-5-sonnet-20241022-v2:0,Claude 3.5 Sonnet v2,Anthropic,0.003,0.015,0.0015,0.0075,,,2025-08-15T19:55:31.394493
+eu-south-1,amazon.nova-micro-v1:0,Amazon Nova Micro,Amazon,5.6e-05,0.000224,,,,,2025-08-15T19:55:31.394493
+eu-south-1,amazon.nova-lite-v1:0,Amazon Nova Lite,Amazon,9.6e-05,0.000384,,,,,2025-08-15T19:55:31.394493
+eu-south-1,amazon.nova-pro-v1:0,Amazon Nova Pro,Amazon,0.00128,0.00521,,,,,2025-08-15T19:55:31.394493
+eu-south-1,amazon.titan-embed-g1-text-02,Amazon  Titan Text Embeddings V2,Amazon,2.3e-05,1.15e-05,,,,,2025-08-15T19:55:31.394493
+eu-south-1,anthropic.claude-sonnet-4-20250514-v1:0,Claude Sonnet 4,Anthropic,0.003,0.015,0.00375,0.0003,,,2025-08-15T19:55:31.394493
+eu-south-1,anthropic.claude-3-5-sonnet-20241022-v2:0,Claude 3.5 Sonnet v2,Anthropic,0.003,0.015,0.0015,0.0075,,,2025-08-15T19:55:31.394493

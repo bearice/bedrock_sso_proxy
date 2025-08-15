@@ -7,6 +7,13 @@ use std::sync::LazyLock;
 static DEFAULT_MODEL_MAPPING: LazyLock<HashMap<&'static str, &'static str>> = LazyLock::new(|| {
     let mut map = HashMap::new();
 
+    // Opus 4.1
+    map.insert(
+        "claude-opus-4-1-20250805",
+        "anthropic.claude-opus-4-1-20250805-v1:0",
+    );
+    map.insert("claude-opus-4-1", "anthropic.claude-opus-4-1-20250805-v1:0");
+
     // Claude 4 Models (Latest)
     map.insert(
         "claude-opus-4-20250514",
